@@ -1,0 +1,769 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <title>CCOP Cyber Intelligence (Dark Mode)</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.23.0/cytoscape.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        /* [전체 테마] 다크 모드 (Cyber Investigation Theme) */
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif;
+            overflow: hidden;
+            background: #121212;
+            color: #e0e0e0;
+        }
+
+        /* 헤더: 전문적인 다크 그레이 */
+        header {
+            background: #1e1e1e;
+            border-bottom: 1px solid #333;
+            padding: 0 25px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            height: 64px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+            z-index: 10;
+        }
+
+        .logo {
+            font-size: 20px;
+            font-weight: 700;
+            color: #00cec9;
+            text-shadow: 0 0 10px rgba(0, 206, 201, 0.4);
+            letter-spacing: -0.5px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        /* 입력창 디자인 */
+        .search-bar {
+            display: flex;
+            gap: 8px;
+            background: #2d3436;
+            padding: 6px 10px;
+            border-radius: 8px;
+            border: 1px solid #444;
+            align-items: center;
+        }
+
+        input {
+            background: transparent;
+            border: none;
+            outline: none;
+            color: white;
+            font-size: 14px;
+            width: 100%;
+        }
+
+        input::placeholder {
+            color: #888;
+        }
+
+        /* 버튼: 네온 스타일 & 인터랙션 */
+        button {
+            padding: 8px 16px;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 13px;
+            transition: 0.3s;
+            color: #121212;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .btn-search {
+            background: #74b9ff;
+            box-shadow: 0 0 8px rgba(116, 185, 255, 0.4);
+        }
+
+        .btn-ai {
+            background: #55efc4;
+            box-shadow: 0 0 8px rgba(85, 239, 196, 0.4);
+        }
+
+        .btn-rag {
+            background: #ff7675;
+            color: white;
+            box-shadow: 0 0 8px rgba(255, 118, 117, 0.4);
+        }
+
+        button:hover {
+            filter: brightness(1.2);
+            transform: translateY(-1px);
+        }
+
+        .container {
+            display: flex;
+            height: calc(100vh - 64px);
+        }
+
+        #cy {
+            flex: 1;
+            background: #121212;
+            position: relative;
+        }
+
+        /* 사이드바 */
+        #sidebar {
+            width: 400px;
+            background: #1e1e1e;
+            border-left: 1px solid #333;
+            box-shadow: -5px 0 15px rgba(0, 0, 0, 0.3);
+            display: flex;
+            flex-direction: column;
+            z-index: 5;
+        }
+
+        .panel {
+            padding: 25px;
+            border-bottom: 1px solid #333;
+        }
+
+        h3 {
+            color: #dfe6e9;
+            font-size: 16px;
+            margin: 0 0 15px 0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        #ai-message {
+            background: #2d3436;
+            color: #dfe6e9;
+            border: 1px solid #444;
+            padding: 15px;
+            border-radius: 6px;
+            font-size: 13px;
+            line-height: 1.6;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        /* 테이블 (다크 모드) */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+
+        th {
+            background: #2d3436;
+            color: #b2bec3;
+            border-bottom: 1px solid #444;
+            padding: 8px;
+            text-align: left;
+            width: 80px;
+        }
+
+        td {
+            border-bottom: 1px solid #444;
+            color: #dfe6e9;
+            padding: 8px;
+            word-break: break-all;
+        }
+
+        /* 컨텍스트 메뉴 (Dark) */
+        #context-menu {
+            display: none;
+            position: absolute;
+            z-index: 2000;
+            background: #2d3436;
+            border: 1px solid #555;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.6);
+            color: #fff;
+            border-radius: 6px;
+            padding: 5px 0;
+            min-width: 160px;
+        }
+
+        .ctx-item {
+            padding: 10px 15px;
+            font-size: 13px;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        .ctx-item:hover {
+            background: #0984e3;
+            color: white;
+        }
+
+        hr {
+            border: 0;
+            border-top: 1px solid #555;
+            margin: 5px 0;
+        }
+
+        /* CSV 업로드 모달 스타일 */
+        .modal-content {
+            background: #2d3436;
+            width: 600px;
+            padding: 25px;
+            border-radius: 10px;
+            border: 1px solid #444;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8);
+            color: white;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="csv-modal"
+        style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 9999; align-items: center; justify-content: center; backdrop-filter: blur(3px);">
+        <div class="modal-content">
+            <h3 style="margin-top:0; color: #74b9ff; border-bottom: 1px solid #444; padding-bottom: 10px;">
+                <i class="fas fa-file-csv"></i> 데이터 적재 마법사
+            </h3>
+
+            <div id="ai-status" style="font-size:13px; margin: 10px 0; height:20px; color:#00cec9; font-weight: bold;">
+            </div>
+
+            <div
+                style="margin-bottom: 15px; background: #1e1e1e; padding: 15px; border-radius: 6px; border: 1px dashed #555;">
+                <label style="display:block; color:#dfe6e9; margin-bottom:8px; font-size:13px; font-weight: bold;">📁 1.
+                    CSV 파일 선택 (자동 AI 분석)</label>
+                <input type="file" id="csvFile" accept=".csv"
+                    style="width:95%; background:#2d3436; color:white; padding:8px; border:1px solid #444; border-radius:4px;"
+                    onchange="previewCsv()">
+
+                <div id="csvPreview"
+                    style="background:#000; padding:10px; border-radius:4px; font-size:11px; color:#00cec9; margin-top: 10px; min-height:40px; white-space: pre-wrap; font-family: monospace; border: 1px solid #333;">
+                    파일을 선택하면 내용이 표시됩니다.</div>
+            </div>
+
+            <div
+                style="background:#1e1e1e; padding:15px; border-radius:6px; margin-bottom:15px; border:1px solid #333;">
+                <label style="display:block; color:#74b9ff; margin-bottom:10px; font-size:13px; font-weight:bold;">
+                    <i class="fas fa-project-diagram"></i> 2. 핵심 관계 매핑
+                </label>
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;">
+                    <div>
+                        <label style="font-size:11px; color:#aaa; display:block; margin-bottom:5px;">Source (누가)</label>
+                        <select id="srcCol"
+                            style="width:100%; background:#2d3436; color:white; padding:8px; border:1px solid #555; border-radius:4px;"></select>
+                        <label style="font-size:10px; color:#888; display:block; margin-top:5px;">속성 키 이름:</label>
+                        <input type="text" id="srcKey" value="flnm" placeholder="예: flnm, telno, actno"
+                            style="width:100%; background:#1e1e1e; color:#00cec9; padding:6px; border:1px solid #444; border-radius:4px; font-size:11px;">
+                        <label style="font-size:10px; color:#888; display:block; margin-top:5px;">노드 라벨:</label>
+                        <select id="srcLabel"
+                            style="width:100%; background:#1e1e1e; color:#00cec9; padding:6px; border:1px solid #444; border-radius:4px; font-size:11px;">
+                            <option value="auto">자동 결정</option>
+                            <option value="vt_psn">👤 사람 (vt_psn)</option>
+                            <option value="vt_flnm">🟠 접수번호 (vt_flnm)</option>
+                            <option value="vt_bacnt">💰 계좌번호 (vt_bacnt)</option>
+                            <option value="vt_site">🌐 사이트 (vt_site)</option>
+                            <option value="vt_telno">📱 전화번호 (vt_telno)</option>
+                            <option value="vt_ip">🟣 IP (vt_ip)</option>
+                            <option value="vt_atm">🏧 ATM (vt_atm)</option>
+                            <option value="vt_file">📄 파일 (vt_file)</option>
+                            <option value="vt_id">🆔 ID (vt_id)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="font-size:11px; color:#aaa; display:block; margin-bottom:5px;">Edge (무엇을)</label>
+                        <input type="text" id="edgeType" value="TRANSFER"
+                            style="width:100%; background:#2d3436; color:#ffeaa7; font-weight:bold; padding:8px; border:1px solid #555; border-radius:4px; text-align:center;">
+                    </div>
+                    <div>
+                        <label style="font-size:11px; color:#aaa; display:block; margin-bottom:5px;">Target
+                            (누구에게)</label>
+                        <select id="tgtCol"
+                            style="width:100%; background:#2d3436; color:white; padding:8px; border:1px solid #555; border-radius:4px;"></select>
+                        <label style="font-size:10px; color:#888; display:block; margin-top:5px;">속성 키 이름:</label>
+                        <input type="text" id="tgtKey" value="flnm" placeholder="예: flnm, telno, actno"
+                            style="width:100%; background:#1e1e1e; color:#00cec9; padding:6px; border:1px solid #444; border-radius:4px; font-size:11px;">
+                        <label style="font-size:10px; color:#888; display:block; margin-top:5px;">노드 라벨:</label>
+                        <select id="tgtLabel"
+                            style="width:100%; background:#1e1e1e; color:#00cec9; padding:6px; border:1px solid #444; border-radius:4px; font-size:11px;">
+                            <option value="auto">자동 결정</option>
+                            <option value="vt_psn">👤 사람 (vt_psn)</option>
+                            <option value="vt_flnm">🟠 접수번호 (vt_flnm)</option>
+                            <option value="vt_bacnt">💰 계좌번호 (vt_bacnt)</option>
+                            <option value="vt_site">🌐 사이트 (vt_site)</option>
+                            <option value="vt_telno">📱 전화번호 (vt_telno)</option>
+                            <option value="vt_ip">🟣 IP (vt_ip)</option>
+                            <option value="vt_atm">🏧 ATM (vt_atm)</option>
+                            <option value="vt_file">📄 파일 (vt_file)</option>
+                            <option value="vt_id">🆔 ID (vt_id)</option>
+                        </select>
+                    </div>
+                </div>
+                <div
+                    style="margin-top:10px; padding:8px; background:#2d3436; border-radius:4px; font-size:11px; color:#888;">
+                    💡 <b>속성 키 가이드:</b> flnm(이름), telno(전화), actno(계좌), bank(은행), email(이메일)
+                </div>
+            </div>
+
+            <div
+                style="background:#1e1e1e; padding:15px; border-radius:6px; margin-bottom:20px; border:1px solid #333;">
+                <label style="display:block; color:#74b9ff; margin-bottom:10px; font-size:13px; font-weight:bold;">
+                    <i class="fas fa-list"></i> 3. 추가 속성 매핑 (나머지 컬럼)
+                </label>
+                <div style="max-height: 120px; overflow-y: auto; border: 1px solid #333;">
+                    <table style="width:100%; font-size:12px; border-collapse: collapse;">
+                        <thead style="position: sticky; top: 0; background: #2d3436;">
+                            <tr style="color:#b2bec3; border-bottom:1px solid #444;">
+                                <th style="padding:5px;">CSV 컬럼명</th>
+                                <th style="padding:5px;">저장 위치</th>
+                                <th style="padding:5px;">속성 이름(Key)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="propTableBody">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div
+                style="text-align: right; display: flex; justify-content: flex-end; gap: 10px; border-top: 1px solid #444; padding-top: 15px;">
+                <button onclick="closeCsvModal()"
+                    style="background:#636e72; color:white; padding:10px 20px;">취소</button>
+                <button onclick="uploadCsv()"
+                    style="background:#00b894; color:white; padding:10px 20px; box-shadow: 0 0 10px rgba(0, 184, 148, 0.4);">
+                    <i class="fas fa-upload"></i> 변환 및 적재 시작
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <header>
+        <div class="logo"><i class="fas fa-network-wired"></i> CCOP INTEL SYSTEM</div>
+
+        <div style="display:flex; gap: 15px; align-items: center;">
+
+            <div class="search-bar" style="border: 1px solid #00cec9;">
+                <label style="color:#00cec9; font-size:12px; margin-right:5px; font-weight:bold;"><i
+                        class="fas fa-database"></i> GRAPH:</label>
+                <input type="text" id="targetGraphInfo" value="demo_tst1"
+                    style="width: 80px; text-align:center; font-weight:bold; color: white;">
+                <button onclick="clearGraphDatabase()"
+                    style="background:#d63031; color:white; padding:6px 10px; font-size:11px; box-shadow: 0 0 8px rgba(214, 48, 49, 0.4);"
+                    title="그래프 데이터베이스 초기화 (모든 노드/엣지 삭제)">
+                    <i class="fas fa-trash-alt"></i> 초기화
+                </button>
+            </div>
+
+            <div class="search-bar">
+                <input type="text" id="manualInput" placeholder="이름 / 전화번호 / 계좌" style="width: 140px;">
+                <button class="btn-search" onclick="manualSearch()"><i class="fas fa-search"></i> 조회</button>
+            </div>
+            <div class="search-bar">
+                <input type="text" id="aiInput" placeholder="자연어 분석 요청..." style="width: 250px;">
+                <button class="btn-ai" onclick="askAI()"><i class="fas fa-robot"></i> 쿼리생성</button>
+                <button class="btn-rag" onclick="askGraphRAG()"><i class="fas fa-file-contract"></i> 보고서</button>
+                <button class="btn-import" onclick="openCsvModal()"
+                    style="background:#a29bfe; color:white; box-shadow:0 0 8px rgba(162,155,254,0.4);">
+                    <i class="fas fa-file-csv"></i> 데이터 적재
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <div class="container">
+        <div id="cy"></div>
+
+        <div id="context-menu">
+            <div class="ctx-item" onclick="setPathSource()"><i class="fas fa-flag"></i> 출발점 설정 (Start)</div>
+            <div class="ctx-item" onclick="findPathToTarget()"><i class="fas fa-route"></i> 경로 분석 (Path)</div>
+            <hr>
+            <div class="ctx-item" onclick="expandNodeFromMenu()"><i class="fas fa-project-diagram"></i> 관계 확장 (Expand)
+            </div>
+            <div class="ctx-item" onclick="copyNodeInfo()"><i class="fas fa-copy"></i> 정보 복사</div>
+            <div class="ctx-item" onclick="hideNode()"><i class="fas fa-trash-alt"></i> 노드 숨기기</div>
+        </div>
+
+        <div id="sidebar">
+            <div class="panel" style="flex: 0 0 auto;">
+                <h3 style="color: #ff7675;"><i class="fas fa-clipboard-list"></i> 분석 리포트</h3>
+                <div id="ai-message">
+                    시스템 대기 중...<br>
+                    <span style="color:#888; font-size:12px;">검색어를 입력하거나 노드를 탐색하세요.</span>
+                </div>
+            </div>
+            <div class="panel" style="flex: 1; overflow-y:auto;">
+                <h3 style="color: #74b9ff;"><i class="fas fa-database"></i> 객체 상세 정보</h3>
+                <div id="node-info">
+                    <p style="color:#666; text-align:center; padding: 20px;">
+                        노드를 클릭하면 상세 속성이 표시됩니다.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = "http://127.0.0.1:5001/api";
+
+        // ======================================================
+        // 1. Cytoscape 그래프 초기화 및 스타일
+        // ======================================================
+        var cy = cytoscape({
+            container: document.getElementById('cy'),
+            minZoom: 0.2, maxZoom: 3, wheelSensitivity: 0.2,
+            style: [
+                { selector: 'node', style: { 'width': '60px', 'height': '60px', 'background-color': '#fff', 'border-width': 2, 'border-color': '#b2bec3', 'label': 'data(id)', 'color': '#fff', 'text-valign': 'bottom', 'text-halign': 'center', 'text-margin-y': 8, 'font-size': '12px' } },
+                { selector: 'node[label="vt_psn"]', style: { 'width': '85px', 'height': '85px', 'background-image': '/static/images/person.png', 'background-fit': 'cover', 'border-color': '#6c5ce7', 'border-width': 6, 'shadow-blur': 25, 'shadow-color': '#6c5ce7', 'z-index': 9999, 'label': function (ele) { const p = ele.data('props') || {}; return p.flnm || ele.data('id'); } } },
+                { selector: 'node[label="vt_telno"]', style: { 'background-image': '/static/images/phone.png', 'background-fit': 'cover', 'border-color': '#0984e3', 'label': function (ele) { const p = ele.data('props') || {}; return p.telno || '번호없음'; } } },
+                { selector: 'node[label="vt_bacnt"]', style: { 'background-image': '/static/images/account.png', 'background-fit': 'cover', 'border-color': '#f1c40f', 'label': function (ele) { const p = ele.data('props') || {}; return (p.bank || '') + '\n' + (p.actno || ''); }, 'text-wrap': 'wrap' } },
+                { selector: 'node[label="vt_site"]', style: { 'background-image': '/static/images/site.png', 'background-fit': 'cover', 'border-color': '#00b894', 'label': function (ele) { const p = ele.data('props') || {}; return p.site || p.url || p.domain || 'Site'; } } },
+                { selector: 'node[label="vt_flnm"]', style: { 'background-image': '/static/images/person.png', 'background-fit': 'cover', 'border-color': '#e17055', 'label': function (ele) { const p = ele.data('props') || {}; return p.flnm || '접수번호'; } } },
+                { selector: 'node[label="vt_ip"]', style: { 'background-image': '/static/images/ip.png', 'background-fit': 'cover', 'border-color': '#fd79a8', 'label': function (ele) { const p = ele.data('props') || {}; return p.ip || p.ip_addr || p.ipaddr || 'IP'; } } },
+                { selector: 'node[label="vt_atm"]', style: { 'background-image': '/static/images/atm.png', 'background-fit': 'cover', 'border-color': '#fdcb6e', 'label': function (ele) { const p = ele.data('props') || {}; return p.atm || p.atm_id || 'ATM'; } } },
+                { selector: 'node[label="vt_file"]', style: { 'background-image': '/static/images/person.png', 'background-fit': 'cover', 'border-color': '#a29bfe', 'label': function (ele) { const p = ele.data('props') || {}; return p.file || p.filename || 'File'; } } },
+                { selector: 'node[label="vt_id"]', style: { 'background-image': '/static/images/person.png', 'background-fit': 'cover', 'border-color': '#fab1a0', 'label': function (ele) { const p = ele.data('props') || {}; return p.id || p.user_id || 'ID'; } } },
+                { selector: 'edge[label="used_account"]', style: { 'line-color': '#fdcb6e', 'target-arrow-color': '#fdcb6e', 'label': 'used_account' } },
+                { selector: 'edge[label="digital_trace"]', style: { 'line-color': '#74b9ff', 'target-arrow-color': '#74b9ff', 'label': 'digital_trace' } },
+                { selector: 'edge[label="used_phone"]', style: { 'line-color': '#a29bfe', 'target-arrow-color': '#a29bfe', 'label': 'used_phone' } },
+                { selector: 'edge[label="related_to"]', style: { 'line-color': '#55efc4', 'target-arrow-color': '#55efc4', 'label': 'related_to', 'width': 2 } },
+                { selector: 'edge', style: { 'width': 2, 'curve-style': 'bezier', 'target-arrow-shape': 'triangle', 'label': 'data(label)', 'color': '#dfe6e9', 'font-size': '10px', 'text-rotation': 'autorotate', 'text-background-opacity': 1, 'text-background-color': '#2d3436' } },
+                { selector: ':selected', style: { 'border-width': 4, 'border-color': '#ff7675', 'line-color': '#ff7675', 'target-arrow-color': '#ff7675', 'shadow-blur': 20, 'shadow-color': '#ff7675' } },
+                { selector: 'edge.highlight', style: { 'width': 4, 'line-color': '#ff005c', 'target-arrow-color': '#ff005c', 'z-index': 999 } },
+                { selector: 'node.highlight', style: { 'border-color': '#ff005c', 'border-width': 4, 'shadow-blur': 25, 'shadow-color': '#ff005c', 'z-index': 999 } }
+            ],
+            layout: { name: 'cose', animate: false, padding: 50 }
+        });
+
+        // ======================================================
+        // 2. 검색 및 AI 기능
+        // ======================================================
+        function manualSearch() {
+            const keyword = document.getElementById('manualInput').value.trim();
+            const graphName = document.getElementById('targetGraphInfo').value; // 그래프 이름 추가
+            if (!keyword) return alert("검색어를 입력하세요");
+
+            fetch(`${API_URL}/search?keyword=${encodeURIComponent(keyword)}&graph_path=${graphName}`)
+                .then(r => r.json()).then(d => {
+                    cy.elements().remove(); cy.add(d);
+                    cy.layout({ name: 'cose', animate: true }).run();
+                })
+                .catch(err => alert("검색 실패: 서버 연결 확인 필요"));
+        };
+
+        function askAI() {
+            const q = document.getElementById('aiInput').value.trim();
+            const graphName = document.getElementById('targetGraphInfo').value;
+            if (!q) return alert("질문 입력!");
+            const msg = document.getElementById('ai-message');
+            msg.innerHTML = "<span style='color:#00cec9'>🔍 그래프 조회 중...</span>";
+
+            fetch(`${API_URL}/query/ai`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ question: q, graph_path: graphName })
+            })
+                .then(r => r.json()).then(d => {
+                    if (d.error) { msg.innerHTML = "❌ 오류: " + d.error; return; }
+                    msg.innerHTML = "<b style='color:#00b894'>✅ 그래프 조회 완료</b>";
+                    if (d.elements && d.elements.length > 0) {
+                        cy.elements().remove(); cy.add(d.elements);
+                        cy.layout({ name: 'cose', animate: true, fit: true }).run();
+                    } else { msg.innerHTML = "<b style='color:#fdcb6e'>⚠️ 관련 데이터가 없습니다</b>"; }
+                });
+        }
+
+        function askGraphRAG() {
+            const q = document.getElementById('aiInput').value.trim();
+            if (!q) return alert("질문 입력!");
+            const msg = document.getElementById('ai-message');
+            msg.innerHTML = "<span style='color:#ff7675'>⏳ 심층 분석 중...</span>";
+
+            fetch(`${API_URL}/query/rag`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ question: q })
+            })
+                .then(res => res.json()).then(data => {
+                    if (data.error) { msg.innerHTML = "❌ 오류: " + data.error; return; }
+                    let reportText = (data.explanation || "내용 없음").replace(/\n/g, "<br>");
+                    msg.innerHTML = `<div style="border-bottom:1px solid #555; padding-bottom:10px;"><b style="color:#ff7675;">[AI 심층 보고서]</b></div><div style="line-height:1.6;">${reportText}</div>`;
+                    if (data.elements && data.elements.length > 0) {
+                        cy.elements().remove(); cy.add(data.elements);
+                        cy.layout({ name: 'cose', animate: true }).run();
+                    }
+                });
+        }
+
+        // ======================================================
+        // 3. 인터랙션 (클릭, 더블클릭, 메뉴)
+        // ======================================================
+        cy.on('tap', 'node', function (evt) {
+            const p = evt.target.data('props');
+            let h = "<table>";
+            for (k in p) h += `<tr><th>${k}</th><td>${p[k]}</td></tr>`;
+            h += "</table>";
+            document.getElementById('node-info').innerHTML = h;
+            document.getElementById('context-menu').style.display = 'none';
+        });
+
+        cy.on('tap', 'edge', function (evt) {
+            const d = evt.target.data();
+            let h = `
+            <div style="padding:10px; border-bottom:1px solid #444; color:#ff7675; font-weight:bold;">${d.label}</div>
+            <table><tr><th>FROM</th><td>${d.source}</td></tr><tr><th>TO</th><td>${d.target}</td></tr>`;
+            if (d.props) { for (k in d.props) h += `<tr><th>${k}</th><td>${d.props[k]}</td></tr>`; }
+            h += "</table>";
+            document.getElementById('node-info').innerHTML = h;
+        });
+
+        cy.on('dbltap', 'node', function (evt) {
+            const node = evt.target;
+            const graphName = document.getElementById('targetGraphInfo').value;
+            fetch(`${API_URL}/expand?id=${node.id()}&graph_path=${graphName}`).then(r => r.json()).then(data => {
+                if (!data || data.length === 0) return alert("추가 연결 정보 없음");
+                cy.add(data);
+                cy.layout({ name: 'cose', animate: true }).run();
+            });
+        });
+
+        // 우클릭 메뉴
+        let selectedNode = null;
+        const cm = document.getElementById('context-menu');
+        cy.on('cxttap', 'node', function (e) {
+            selectedNode = e.target;
+            cm.style.display = 'block';
+            cm.style.left = e.originalEvent.clientX + 'px';
+            cm.style.top = e.originalEvent.clientY + 'px';
+        });
+        cy.on('tap', function (e) { if (e.target === cy) cm.style.display = 'none'; });
+
+        // 경로 분석 관련
+        let pathSourceId = null;
+        function setPathSource() { if (selectedNode) { pathSourceId = selectedNode.id(); cm.style.display = 'none'; alert(`출발점 설정: ${pathSourceId}`); } }
+        function findPathToTarget() {
+            if (!selectedNode || !pathSourceId) return alert("출발점 설정 필요");
+            fetch(`${API_URL}/path`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ source: pathSourceId, target: selectedNode.id() })
+            }).then(r => r.json()).then(d => {
+                if (!d.found) return alert("경로 없음");
+                cy.add(d.elements).addClass('highlight');
+                cy.layout({ name: 'cose', animate: true }).run();
+                cm.style.display = 'none';
+            });
+        }
+        function expandNodeFromMenu() { if (selectedNode) { cy.trigger('dbltap', selectedNode); cm.style.display = 'none'; } }
+        function copyNodeInfo() { if (selectedNode) { navigator.clipboard.writeText(JSON.stringify(selectedNode.data('props'))); cm.style.display = 'none'; } }
+        function hideNode() { if (selectedNode) { selectedNode.remove(); cm.style.display = 'none'; } }
+
+        // ======================================================
+        // 그래프 데이터베이스 초기화 기능
+        // ======================================================
+        function clearGraphDatabase() {
+            const graphName = document.getElementById('targetGraphInfo').value;
+            const confirmMsg = `⚠️ 위험: "${graphName}" 그래프의 모든 데이터가 삭제됩니다.\n\n정말 초기화하시겠습니까?`;
+
+            if (!confirm(confirmMsg)) return;
+            if (!confirm('다시 한번 확인합니다. 정말로 삭제하시겠습니까?')) return;
+
+            const msg = document.getElementById('ai-message');
+            msg.innerHTML = '<span style="color:#d63031">🗑️ 데이터베이스 초기화 중...</span>';
+
+            fetch(`${API_URL}/graph/clear`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ graph_path: graphName })
+            })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        alert('✅ 초기화 완료: ' + data.message);
+                        cy.elements().remove(); // 화면 클리어
+                        msg.innerHTML = '시스템 대기 중...<br><span style="color:#888; font-size:12px;">검색어를 입력하거나 노드를 탐색하세요.</span>';
+                    } else {
+                        alert('❌ 초기화 실패: ' + data.message);
+                        msg.innerHTML = '<span style="color:#d63031">❌ 초기화 실패</span>';
+                    }
+                })
+                .catch(err => {
+                    alert('서버 연결 오류');
+                    msg.innerHTML = '<span style="color:#d63031">❌ 서버 오류</span>';
+                });
+        }
+
+
+        // ======================================================
+        // 4. [통합된] CSV 적재 로직 (중복 제거 및 기능 수정 완료)
+        // ======================================================
+        const modal = document.getElementById('csv-modal');
+        let csvHeaders = [];
+
+        function openCsvModal() { modal.style.display = 'flex'; }
+        function closeCsvModal() { modal.style.display = 'none'; }
+
+        // [핵심] 파일 선택 및 AI 분석 시작
+        function previewCsv() {
+            const file = document.getElementById('csvFile').files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                const text = e.target.result;
+                const lines = text.trim().split('\n');
+                if (lines.length < 1) return alert("빈 파일입니다.");
+
+                csvHeaders = lines[0].split(',').map(h => h.trim());
+                document.getElementById('csvPreview').textContent = lines.slice(0, 3).join('\n');
+
+                // 셀렉트박스 옵션 채우기
+                updateSelectOptions('srcCol');
+                updateSelectOptions('tgtCol');
+
+                // AI 매핑 자동 실행
+                runAiMapping(file);
+            };
+            reader.readAsText(file);
+        }
+
+        function updateSelectOptions(id) {
+            const select = document.getElementById(id);
+            select.innerHTML = '';
+            csvHeaders.forEach(h => {
+                const opt = document.createElement('option');
+                opt.value = h; opt.text = h;
+                select.appendChild(opt);
+            });
+        }
+
+        function setSelectValue(id, val) {
+            const select = document.getElementById(id);
+            for (let i = 0; i < select.options.length; i++) {
+                if (select.options[i].value === val) { select.selectedIndex = i; break; }
+            }
+        }
+
+        // AI 매핑 요청
+        function runAiMapping(file) {
+            const statusDiv = document.getElementById('ai-status');
+            statusDiv.innerHTML = "🤖 AI 분석 중...";
+            const formData = new FormData();
+            formData.append('file', file);
+
+            fetch(`${API_URL}/etl/ai-suggest`, { method: 'POST', body: formData })
+                .then(r => r.json()).then(data => {
+                    if (data.status === 'success') {
+                        const m = data.mapping;
+                        setSelectValue('srcCol', m.sourceCol);
+                        setSelectValue('tgtCol', m.targetCol);
+                        document.getElementById('edgeType').value = m.edgeType;
+
+                        // 속성 테이블 업데이트
+                        updatePropertyTable();
+                        setTimeout(() => {
+                            const rows = document.querySelectorAll('#propTableBody tr');
+                            if (m.properties) {
+                                m.properties.forEach(p => {
+                                    rows.forEach(tr => {
+                                        if (tr.querySelector('.prop-key').getAttribute('data-origin') === p.col) {
+                                            tr.querySelector('.prop-target').value = p.target;
+                                            tr.querySelector('.prop-key').value = p.key;
+                                            tr.style.background = 'rgba(0, 184, 148, 0.2)';
+                                        }
+                                    });
+                                });
+                            }
+                        }, 100);
+                        statusDiv.innerHTML = `✅ AI 분석 완료 (${m.edgeType})`;
+                    }
+                }).catch(e => statusDiv.innerHTML = "⚠️ 분석 실패");
+        }
+
+        // 속성 테이블 생성
+        function updatePropertyTable() {
+            const src = document.getElementById('srcCol').value;
+            const tgt = document.getElementById('tgtCol').value;
+            const tbody = document.getElementById('propTableBody');
+            tbody.innerHTML = "";
+
+            csvHeaders.forEach(col => {
+                if (col === src || col === tgt) return;
+                const tr = document.createElement('tr');
+                tr.style.borderBottom = "1px solid #333";
+                tr.innerHTML = `
+                    <td style="padding:8px; color:white;">${col}</td>
+                    <td style="padding:8px;">
+                        <select class="prop-target" style="background:#2d3436; color:white; border:1px solid #555; padding:4px;">
+                            <option value="edge">Edge 속성</option>
+                            <option value="source">Source 속성</option>
+                            <option value="target">Target 속성</option>
+                            <option value="ignore">저장 안 함</option>
+                        </select>
+                    </td>
+                    <td style="padding:8px;">
+                        <input type="text" class="prop-key" data-origin="${col}" value="${col}" style="background:#2d3436; color:#aaa; border:1px solid #555; width:90%;">
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+        document.getElementById('srcCol').onchange = updatePropertyTable;
+        document.getElementById('tgtCol').onchange = updatePropertyTable;
+
+        // [최종] 적재 실행 (버그 수정됨)
+        function uploadCsv() {
+            const file = document.getElementById('csvFile').files[0];
+            if (!file) return alert("파일을 선택하세요.");
+
+            // [중요] 헤더에서 그래프 이름 가져오기
+            const graphInput = document.getElementById('targetGraphInfo');
+            if (!graphInput) return alert("오류: 그래프 이름 입력창이 없습니다.");
+            const graphName = graphInput.value;
+
+            // 매핑 정보 수집 (srcKey, tgtKey, srcLabel, tgtLabel 추가)
+            const mapping = {
+                sourceCol: document.getElementById('srcCol').value,
+                targetCol: document.getElementById('tgtCol').value,
+                srcKey: document.getElementById('srcKey').value,      // Source 속성 키
+                tgtKey: document.getElementById('tgtKey').value,      // Target 속성 키
+                srcLabel: document.getElementById('srcLabel').value,  // Source 노드 라벨
+                tgtLabel: document.getElementById('tgtLabel').value,  // Target 노드 라벨
+                edgeType: document.getElementById('edgeType').value,
+                properties: []
+            };
+
+            document.querySelectorAll('#propTableBody tr').forEach(tr => {
+                const target = tr.querySelector('.prop-target').value;
+                const col = tr.querySelector('.prop-key').getAttribute('data-origin');
+                const key = tr.querySelector('.prop-key').value;
+                if (target !== 'ignore') mapping.properties.push({ col, target, key });
+            });
+
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('mapping', JSON.stringify(mapping));
+            formData.append('graph_path', graphName); // 그래프 경로 추가!
+
+            if (!confirm(`[${graphName}] 그래프에 데이터를 적재하시겠습니까?`)) return;
+
+            // 버튼 로딩 상태
+            const btn = event.target;
+            const orgText = btn.innerHTML;
+            btn.innerHTML = "⏳ 처리 중...";
+            btn.disabled = true;
+
+            fetch(`${API_URL}/etl/import`, { method: 'POST', body: formData })
+                .then(r => r.json()).then(data => {
+                    if (data.status === 'success') {
+                        alert(`✅ 적재 성공!\n노드: ${data.nodes_created}\n엣지: ${data.edges_created}`);
+                        closeCsvModal();
+                    } else {
+                        alert("실패: " + data.message);
+                    }
+                })
+                .catch(e => alert("서버 통신 오류"))
+                .finally(() => {
+                    btn.innerHTML = orgText;
+                    btn.disabled = false;
+                });
+        }
+    </script>
+</body>
+
+</html>
