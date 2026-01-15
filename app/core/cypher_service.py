@@ -1,9 +1,9 @@
 import re
 import json
 from typing import List, Dict, Any
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import text
-from fastapi import HTTPException
+import psycopg2
+import psycopg2.extras
+from config import Config
 
 class CypherService:
     """

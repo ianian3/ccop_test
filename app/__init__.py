@@ -42,5 +42,9 @@ def create_app():
     # 라우트 등록
     from app.routes import bp
     app.register_blueprint(bp)
+    
+    # API v1 라우트 등록
+    from app.routes_api import api_v1
+    app.register_blueprint(api_v1)
 
     return app
