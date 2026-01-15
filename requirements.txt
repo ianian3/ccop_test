@@ -1,0 +1,24 @@
+# Web Framework
+Flask==3.0.0
+Werkzeug==3.0.1
+
+# Database
+psycopg2-binary==2.9.9
+
+# Data Processing
+pandas==2.1.4
+
+# Environment Management
+python-dotenv==1.0.0
+
+# AI/ML
+openai==1.6.1
+
+# Production WSGI Server
+gunicorn==21.2.0
+
+# Security & CORS
+flask-cors==4.0.0
+
+# HTTP Requests (for health checks)
+requests==2.31.0

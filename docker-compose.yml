@@ -1,0 +1,74 @@
+version: '3.8'
+
+services:
+  # AgensGraph Database
+  agensgraph:
+    image: bitnine/agensgraph:v2.13
+    container_name: ccop_agensgraph
+    environment:
+      POSTGRES_DB: ${DB_NAME:-ccopdb}
+      POSTGRES_USER: ${DB_USER:-ccop}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "5432:5432"
+    volumes:
+      - agensgraph_data:/var/lib/postgresql/data
+      - ./scripts/init_db.sh:/docker-entrypoint-initdb.d/init_db.sh
+    networks:
+      - ccop_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-ccop}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Flask Application
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ccop_app
+    environment:
+      DB_NAME: ${DB_NAME:-ccopdb}
+      DB_USER: ${DB_USER:-ccop}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_HOST: agensgraph
+      DB_PORT: 5432
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      FLASK_ENV: production
+    ports:
+      - "5001:5001"
+    volumes:
+      - ./app:/app/app
+      - ./logs:/app/logs
+    depends_on:
+      agensgraph:
+        condition: service_healthy
+    networks:
+      - ccop_network
+    restart: unless-stopped
+
+  # Nginx Reverse Proxy (optional, for production)
+  nginx:
+    image: nginx:alpine
+    container_name: ccop_nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./deploy/ssl:/etc/nginx/ssl:ro
+      - ./app/static:/usr/share/nginx/html/static:ro
+    depends_on:
+      - app
+    networks:
+      - ccop_network
+    restart: unless-stopped
+
+volumes:
+  agensgraph_data:
+    driver: local
+
+networks:
+  ccop_network:
+    driver: bridge
