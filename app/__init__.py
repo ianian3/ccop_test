@@ -46,5 +46,9 @@ def create_app():
     # API v1 라우트 등록
     from app.routes_api import api_v1
     app.register_blueprint(api_v1)
+    
+    # Admin 라우트 등록
+    from app.routes_admin import admin
+    app.register_blueprint(admin)
 
     return app

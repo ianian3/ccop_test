@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API Key Management - CCOP Admin</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f7fa;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .header-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        h1 {
+            font-size: 24px;
+        }
+
+        .logout-btn {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            padding: 8px 16px;
+            border: 1px solid white;
+            border-radius: 5px;
+            text-decoration: none;
+            transition: background 0.3s;
+        }
+
+        .logout-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 30px 20px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 10px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+        }
+
+        .card h2 {
+            margin-bottom: 20px;
+            color: #333;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: #555;
+            font-weight: 500;
+        }
+
+        input,
+        select {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+
+        input:focus,
+        select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+        }
+
+        .partners-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        .partners-table th {
+            background: #f8f9fa;
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+            color: #333;
+            border-bottom: 2px solid #dee2e6;
+        }
+
+        .partners-table td {
+            padding: 12px;
+            border-bottom: 1px solid #dee2e6;
+        }
+
+        .badge {
+            padding: 4px 8px;
+            border-radius: 3px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .badge-free {
+            background: #e3f2fd;
+            color: #1976d2;
+        }
+
+        .badge-startup {
+            background: #fff3e0;
+            color: #f57c00;
+        }
+
+        .badge-enterprise {
+            background: #f3e5f5;
+            color: #7b1fa2;
+        }
+
+        .badge-active {
+            background: #e8f5e9;
+            color: #388e3c;
+        }
+
+        .badge-inactive {
+            background: #ffebee;
+            color: #d32f2f;
+        }
+
+        .api-key-display {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 15px;
+            font-family: 'Courier New', monospace;
+            word-break: break-all;
+            display: none;
+        }
+
+        .api-key-display.show {
+            display: block;
+        }
+
+        .warning {
+            background: #fff3cd;
+            color: #856404;
+            padding: 12px;
+            border-radius: 5px;
+            margin-bottom: 15px;
+            border-left: 4px solid #ffc107;
+        }
+
+        .success {
+            background: #d4edda;
+            color: #155724;
+            padding: 12px;
+            border-radius: 5px;
+            margin-bottom: 15px;
+            border-left: 4px solid #28a745;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="header">
+        <div class="header-content">
+            <h1>🔑 CCOP API Key Management</h1>
+            <a href="/admin/logout" class="logout-btn">로그아웃</a>
+        </div>
+    </div>
+
+    <div class="container">
+        <!-- 새 파트너 생성 -->
+        <div class="card">
+            <h2>새 파트너 생성</h2>
+            <div class="warning">
+                ⚠️ API 키는 생성 시 단 한 번만 표시됩니다. 반드시 안전한 곳에 저장하세요.
+            </div>
+
+            <div id="successMessage" class="success" style="display:none;"></div>
+
+            <div class="form-group">
+                <label for="partnerName">파트너 이름 *</label>
+                <input type="text" id="partnerName" placeholder="예: company_name" required>
+            </div>
+
+            <div class="form-group">
+                <label for="tier">티어 *</label>
+                <select id="tier">
+                    <option value="free">Free (1,000 req/hour)</option>
+                    <option value="startup">Startup (10,000 req/hour)</option>
+                    <option value="enterprise">Enterprise (무제한)</option>
+                </select>
+            </div>
+
+            <button class="btn btn-primary" onclick="createPartner()">
+                API 키 생성
+            </button>
+
+            <div id="apiKeyDisplay" class="api-key-display">
+                <strong>🔑 생성된 API 키:</strong><br>
+                <span id="generatedKey"></span>
+            </div>
+        </div>
+
+        <!-- 파트너 목록 -->
+        <div class="card">
+            <h2>파트너 목록</h2>
+            <button class="btn btn-primary" onclick="loadPartners()" style="margin-bottom: 15px;">
+                🔄 새로고침
+            </button>
+
+            <table class="partners-table">
+                <thead>
+                    <tr>
+                        <th>파트너명</th>
+                        <th>API 키</th>
+                        <th>티어</th>
+                        <th>Rate Limit</th>
+                        <th>생성일</th>
+                        <th>상태</th>
+                        <th>작업</th>
+                    </tr>
+                </thead>
+                <tbody id="partnersTableBody">
+                    <tr>
+                        <td colspan="7" style="text-align:center; padding: 40px; color: #999;">
+                            로딩 중...
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        // 페이지 로드 시 파트너 목록 불러오기
+        window.onload = function () {
+            loadPartners();
+        };
+
+        // 새 파트너 생성
+        async function createPartner() {
+            const partnerName = document.getElementById('partnerName').value.trim();
+            const tier = document.getElementById('tier').value;
+
+            if (!partnerName) {
+                alert('파트너 이름을 입력하세요.');
+                return;
+            }
+
+            try {
+                const response = await fetch('/admin/api/partners/create', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        partner_name: partnerName,
+                        tier: tier
+                    })
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    // 성공 메시지
+                    const successMsg = document.getElementById('successMessage');
+                    successMsg.textContent = `✅ API 키가 생성되었습니다! 파트너: ${partnerName}`;
+                    successMsg.style.display = 'block';
+
+                    // API 키 표시
+                    const keyDisplay = document.getElementById('apiKeyDisplay');
+                    document.getElementById('generatedKey').textContent = result.api_key;
+                    keyDisplay.classList.add('show');
+
+                    // 폼 초기화
+                    document.getElementById('partnerName').value = '';
+
+                    // 파트너 목록 새로고침
+                    loadPartners();
+
+                    // 5초 후 성공 메시지 숨기기
+                    setTimeout(() => {
+                        successMsg.style.display = 'none';
+                    }, 5000);
+                } else {
+                    alert('오류: ' + result.error);
+                }
+            } catch (error) {
+                alert('네트워크 오류: ' + error.message);
+            }
+        }
+
+        // 파트너 목록 불러오기
+        async function loadPartners() {
+            try {
+                const response = await fetch('/admin/api/partners/list');
+                const result = await response.json();
+
+                const tbody = document.getElementById('partnersTableBody');
+
+                if (result.partners.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding: 40px; color: #999;">파트너가 없습니다.</td></tr>';
+                    return;
+                }
+
+                tbody.innerHTML = result.partners.map((partner, index) => {
+                    const apiKeyDisplay = partner.api_key
+                        ? `<span id="key_${index}" style="font-family: monospace; font-size: 12px;">••••••••••••••••</span>
+                           <button class="btn btn-primary" style="padding: 4px 8px; font-size: 11px; margin-left: 5px;" 
+                                   onclick="toggleKey('${partner.api_key}', ${index})">보기</button>`
+                        : '<span style="color: #999;">미제공</span>';
+
+                    return `
+                        <tr>
+                            <td><strong>${partner.partner_name}</strong></td>
+                            <td>${apiKeyDisplay}</td>
+                            <td><span class="badge badge-${partner.tier}">${partner.tier.toUpperCase()}</span></td>
+                            <td>${partner.rate_limit ? partner.rate_limit + ' req/hr' : '무제한'}</td>
+                            <td>${new Date(partner.created_at).toLocaleString('ko-KR')}</td>
+                            <td><span class="badge badge-${partner.is_active ? 'active' : 'inactive'}">${partner.is_active ? '활성' : '비활성'}</span></td>
+                            <td>
+                                ${partner.is_active ?
+                            `<button class="btn btn-danger" style="padding: 6px 12px; font-size: 12px;" 
+                                             onclick="deactivatePartner('${partner.key_hash}')">비활성화</button>` :
+                            '<span style="color: #999;">-</span>'
+                        }
+                                <button class="btn btn-danger" style="padding: 6px 12px; font-size: 12px; margin-left: 5px;" 
+                                        onclick="deletePartner('${partner.key_hash}', '${partner.partner_name}')">삭제</button>
+                            </td>
+                        </tr>
+                    `;
+                }).join('');
+            } catch (error) {
+                console.error('파트너 목록 로드 실패:', error);
+            }
+        }
+
+        // API 키 보기/숨기기 토글
+        function toggleKey(key, index) {
+            const keyElement = document.getElementById(`key_${index}`);
+            if (keyElement.textContent.includes('••')) {
+                keyElement.textContent = key;
+            } else {
+                keyElement.textContent = '••••••••••••••••';
+            }
+        }
+
+        // 파트너 비활성화
+        async function deactivatePartner(keyHash) {
+            if (!confirm('이 파트너를 비활성화하시겠습니까?')) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/admin/api/partners/deactivate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        key_hash: keyHash
+                    })
+                });
+
+                if (response.ok) {
+                    alert('파트너가 비활성화되었습니다.');
+                    loadPartners();
+                } else {
+                    const result = await response.json();
+                    alert('오류: ' + result.error);
+                }
+            } catch (error) {
+                alert('네트워크 오류: ' + error.message);
+            }
+        }
+
+        // 파트너 삭제
+        async function deletePartner(keyHash, partnerName) {
+            if (!confirm(`파트너 "${partnerName}"를 완전히 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/admin/api/partners/delete', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        key_hash: keyHash
+                    })
+                });
+
+                if (response.ok) {
+                    alert('파트너가 삭제되었습니다.');
+                    loadPartners();
+                } else {
+                    const result = await response.json();
+                    alert('오류: ' + result.error);
+                }
+            } catch (error) {
+                alert('네트워크 오류: ' + error.message);
+            }
+        }
+    </script>
+</body>
+
+</html>
