@@ -17,17 +17,63 @@
             color: #e0e0e0;
         }
 
-        /* 헤더: 전문적인 다크 그레이 */
-        header {
+        /* 헤더: 2행 레이아웃 */
+        .header-container {
             background: #1e1e1e;
             border-bottom: 1px solid #333;
-            padding: 0 25px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+            z-index: 10;
+        }
+
+        .header-top {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            height: 64px;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
-            z-index: 10;
+            padding: 0 25px;
+            height: 50px;
+            border-bottom: 1px solid #333;
+        }
+
+        .header-tabs {
+            display: flex;
+            align-items: center;
+            padding: 0 25px;
+            height: 44px;
+            gap: 5px;
+            background: #161616;
+        }
+
+        /* 탭 스타일 */
+        .nav-tab {
+            padding: 10px 20px;
+            border-radius: 8px 8px 0 0;
+            border: none;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 13px;
+            transition: 0.3s;
+            color: #888;
+            background: transparent;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            border-bottom: 3px solid transparent;
+            margin-bottom: -1px;
+        }
+
+        .nav-tab:hover {
+            color: #dfe6e9;
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .nav-tab.active {
+            color: #00cec9;
+            background: #1e1e1e;
+            border-bottom: 3px solid #00cec9;
+        }
+
+        .nav-tab i {
+            font-size: 14px;
         }
 
         .logo {
@@ -103,7 +149,7 @@
 
         .container {
             display: flex;
-            height: calc(100vh - 64px);
+            height: calc(100vh - 94px);
         }
 
         #cy {
@@ -213,6 +259,92 @@
             border: 1px solid #444;
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8);
             color: white;
+        }
+
+        /* 범례 아이템 스타일 */
+        .legend-item {
+            display: inline-flex;
+            align-items: center;
+            padding: 4px 8px;
+            background: #2d3436;
+            border: 2px solid;
+            border-radius: 12px;
+            font-size: 11px;
+            color: #dfe6e9;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        .legend-item:hover {
+            filter: brightness(1.3);
+            transform: scale(1.05);
+        }
+
+        .legend-item.active {
+            box-shadow: 0 0 10px currentColor;
+        }
+
+        /* 엣지 범례 스타일 */
+        .edge-legend {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #b2bec3;
+            padding: 2px 0;
+        }
+
+        .edge-legend span {
+            width: 20px;
+            height: 3px;
+            border-radius: 2px;
+        }
+
+        /* 좌측 필터 태그 바 */
+        .filter-bar {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 100;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            padding: 10px;
+            background: rgba(30, 30, 30, 0.9);
+            border-radius: 8px;
+            border: 1px solid #333;
+            max-width: calc(100% - 440px);
+        }
+
+        .filter-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            background: #2d3436;
+            border: 2px solid;
+            border-radius: 16px;
+            font-size: 12px;
+            font-weight: 600;
+            color: #dfe6e9;
+            cursor: pointer;
+            transition: 0.2s;
+            user-select: none;
+        }
+
+        .filter-tag:hover {
+            filter: brightness(1.2);
+        }
+
+        .filter-tag.hidden {
+            opacity: 0.4;
+            text-decoration: line-through;
+        }
+
+        .filter-tag .count {
+            background: rgba(255, 255, 255, 0.2);
+            padding: 2px 6px;
+            border-radius: 10px;
+            font-size: 10px;
         }
     </style>
 </head>
@@ -417,45 +549,99 @@
         </div>
     </div>
 
-    <header>
-        <div class="logo"><i class="fas fa-network-wired"></i> CCOP INTEL SYSTEM</div>
+    <div class="header-container">
+        <!-- 상단: 로고 + 검색 -->
+        <div class="header-top">
+            <div class="logo"><i class="fas fa-network-wired"></i> CCOP INTEL SYSTEM</div>
 
-        <div style="display:flex; gap: 15px; align-items: center;">
+            <div style="display:flex; gap: 15px; align-items: center;">
+                <div class="search-bar" style="border: 1px solid #00cec9;">
+                    <label style="color:#00cec9; font-size:12px; margin-right:5px; font-weight:bold;"><i
+                            class="fas fa-database"></i> GRAPH:</label>
+                    <input type="text" id="targetGraphInfo" value="demo_tst1"
+                        style="width: 80px; text-align:center; font-weight:bold; color: white;">
+                    <button onclick="clearGraphDatabase()"
+                        style="background:#d63031; color:white; padding:6px 10px; font-size:11px; box-shadow: 0 0 8px rgba(214, 48, 49, 0.4);"
+                        title="그래프 데이터베이스 초기화 (모든 노드/엣지 삭제)">
+                        <i class="fas fa-trash-alt"></i> 초기화
+                    </button>
+                </div>
 
-            <div class="search-bar" style="border: 1px solid #00cec9;">
-                <label style="color:#00cec9; font-size:12px; margin-right:5px; font-weight:bold;"><i
-                        class="fas fa-database"></i> GRAPH:</label>
-                <input type="text" id="targetGraphInfo" value="demo_tst1"
-                    style="width: 80px; text-align:center; font-weight:bold; color: white;">
-                <button onclick="clearGraphDatabase()"
-                    style="background:#d63031; color:white; padding:6px 10px; font-size:11px; box-shadow: 0 0 8px rgba(214, 48, 49, 0.4);"
-                    title="그래프 데이터베이스 초기화 (모든 노드/엣지 삭제)">
-                    <i class="fas fa-trash-alt"></i> 초기화
-                </button>
+                <div class="search-bar">
+                    <input type="text" id="manualInput" placeholder="이름 / 전화번호 / 계좌" style="width: 200px;">
+                    <button class="btn-search" onclick="manualSearch()"><i class="fas fa-search"></i> 검색</button>
+                </div>
             </div>
+        </div>
 
-            <div class="search-bar">
-                <input type="text" id="manualInput" placeholder="이름 / 전화번호 / 계좌" style="width: 140px;">
-                <button class="btn-search" onclick="manualSearch()"><i class="fas fa-search"></i> 조회</button>
+        <!-- 하단: 탭 네비게이션 -->
+        <div class="header-tabs">
+            <button class="nav-tab active" onclick="switchTab('graph')" id="tab-graph">
+                <i class="fas fa-project-diagram"></i> 지식그래프 탐색
+            </button>
+            <button class="nav-tab" onclick="switchTab('etl')" id="tab-etl">
+                <i class="fas fa-file-import"></i> 데이터 적재
+            </button>
+            <button class="nav-tab" onclick="switchTab('ai')" id="tab-ai">
+                <i class="fas fa-robot"></i> AI 분석
+            </button>
+            <button class="nav-tab" onclick="switchTab('legal')" id="tab-legal">
+                <i class="fas fa-balance-scale"></i> 법률 자문
+            </button>
+
+            <!-- 우측 도구 (현재 탭에 따라 변경) -->
+            <div style="margin-left: auto; display: flex; gap: 10px;" id="tab-tools">
+                <div class="search-bar" id="ai-tools">
+                    <input type="text" id="aiInput" placeholder="자연어 분석 요청..." style="width: 300px;">
+                    <button class="btn-ai" onclick="askAI()"><i class="fas fa-robot"></i> 쿼리생성</button>
+                    <button class="btn-rag" onclick="askGraphRAG()"><i class="fas fa-file-contract"></i> 보고서</button>
+                </div>
             </div>
-            <div class="search-bar">
-                <input type="text" id="aiInput" placeholder="자연어 분석 요청..." style="width: 250px;">
-                <button class="btn-ai" onclick="askAI()"><i class="fas fa-robot"></i> 쿼리생성</button>
-                <button class="btn-rag" onclick="askGraphRAG()"><i class="fas fa-file-contract"></i> 보고서</button>
-                <button class="btn-import" onclick="openCsvModal()"
-                    style="background:#a29bfe; color:white; box-shadow:0 0 8px rgba(162,155,254,0.4);">
-                    <i class="fas fa-file-csv"></i> 데이터 적재
-                </button>
-                <button class="btn-legal" onclick="openLegalModal()"
-                    style="background:#ff7675; color:white; box-shadow:0 0 8px rgba(255,118,117,0.4);">
-                    <i class="fas fa-balance-scale"></i> 법률 자문
+        </div>
+    </div>
+
+    <div class="container">
+        <div id="cy">
+            <!-- 좌측 필터 태그 바 -->
+            <div class="filter-bar" id="filter-bar">
+                <span class="filter-tag" data-type="vt_psn" style="border-color: #6c5ce7;"
+                    onclick="toggleFilter('vt_psn')">
+                    👤 사람 <span class="count" id="count-vt_psn">0</span>
+                </span>
+                <span class="filter-tag" data-type="vt_flnm" style="border-color: #e17055;"
+                    onclick="toggleFilter('vt_flnm')">
+                    📄 접수번호 <span class="count" id="count-vt_flnm">0</span>
+                </span>
+                <span class="filter-tag" data-type="vt_bacnt" style="border-color: #f1c40f;"
+                    onclick="toggleFilter('vt_bacnt')">
+                    💰 계좌 <span class="count" id="count-vt_bacnt">0</span>
+                </span>
+                <span class="filter-tag" data-type="vt_telno" style="border-color: #0984e3;"
+                    onclick="toggleFilter('vt_telno')">
+                    📱 전화 <span class="count" id="count-vt_telno">0</span>
+                </span>
+                <span class="filter-tag" data-type="vt_site" style="border-color: #00b894;"
+                    onclick="toggleFilter('vt_site')">
+                    🌐 사이트 <span class="count" id="count-vt_site">0</span>
+                </span>
+                <span class="filter-tag" data-type="vt_ip" style="border-color: #fd79a8;"
+                    onclick="toggleFilter('vt_ip')">
+                    🖥️ IP <span class="count" id="count-vt_ip">0</span>
+                </span>
+                <span class="filter-tag" data-type="vt_id" style="border-color: #fab1a0;"
+                    onclick="toggleFilter('vt_id')">
+                    🆔 ID <span class="count" id="count-vt_id">0</span>
+                </span>
+                <span class="filter-tag" data-type="vt_atm" style="border-color: #fdcb6e;"
+                    onclick="toggleFilter('vt_atm')">
+                    🏧 ATM <span class="count" id="count-vt_atm">0</span>
+                </span>
+                <button onclick="resetFilters()"
+                    style="background: #636e72; color: white; border: none; padding: 6px 12px; border-radius: 16px; font-size: 11px; cursor: pointer;">
+                    <i class="fas fa-redo"></i> 초기화
                 </button>
             </div>
         </div>
-    </header>
-
-    <div class="container">
-        <div id="cy"></div>
 
         <div id="context-menu">
             <div class="ctx-item" onclick="setPathSource()"><i class="fas fa-flag"></i> 출발점 설정 (Start)</div>
@@ -468,6 +654,46 @@
         </div>
 
         <div id="sidebar">
+            <!-- 범례 패널 -->
+            <div class="panel" style="flex: 0 0 auto; padding: 15px;">
+                <h3 style="color: #00cec9; font-size: 14px;"><i class="fas fa-palette"></i> 범례</h3>
+
+                <!-- 노드 타입 -->
+                <div style="margin-bottom: 12px;">
+                    <div style="color: #888; font-size: 11px; margin-bottom: 8px; font-weight: bold;">노드 타입</div>
+                    <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+                        <span class="legend-item" onclick="filterByType('vt_psn')" style="border-color: #6c5ce7;">👤
+                            사람</span>
+                        <span class="legend-item" onclick="filterByType('vt_flnm')" style="border-color: #e17055;">📄
+                            접수번호</span>
+                        <span class="legend-item" onclick="filterByType('vt_bacnt')" style="border-color: #f1c40f;">💰
+                            계좌</span>
+                        <span class="legend-item" onclick="filterByType('vt_telno')" style="border-color: #0984e3;">📱
+                            전화</span>
+                        <span class="legend-item" onclick="filterByType('vt_site')" style="border-color: #00b894;">🌐
+                            사이트</span>
+                        <span class="legend-item" onclick="filterByType('vt_ip')" style="border-color: #fd79a8;">🖥️
+                            IP</span>
+                        <span class="legend-item" onclick="filterByType('vt_id')" style="border-color: #fab1a0;">🆔
+                            ID</span>
+                        <span class="legend-item" onclick="filterByType('vt_atm')" style="border-color: #fdcb6e;">🏧
+                            ATM</span>
+                    </div>
+                </div>
+
+                <!-- 엣지 타입 -->
+                <div>
+                    <div style="color: #888; font-size: 11px; margin-bottom: 8px; font-weight: bold;">관계 타입</div>
+                    <div style="display: flex; flex-direction: column; gap: 4px; font-size: 11px;">
+                        <div class="edge-legend"><span style="background: #fdcb6e;"></span> used_account</div>
+                        <div class="edge-legend"><span style="background: #74b9ff;"></span> digital_trace</div>
+                        <div class="edge-legend"><span style="background: #a29bfe;"></span> used_phone</div>
+                        <div class="edge-legend"><span style="background: #55efc4;"></span> related_to</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 분석 리포트 -->
             <div class="panel" style="flex: 0 0 auto;">
                 <h3 style="color: #ff7675;"><i class="fas fa-clipboard-list"></i> 분석 리포트</h3>
                 <div id="ai-message">
@@ -517,6 +743,144 @@
             ],
             layout: { name: 'cose', animate: false, padding: 50 }
         });
+
+        // ======================================================
+        // 0. 탭 네비게이션
+        // ======================================================
+        let currentTab = 'graph';
+
+        function switchTab(tabName) {
+            // 모든 탭 비활성화
+            document.querySelectorAll('.nav-tab').forEach(tab => tab.classList.remove('active'));
+            // 선택된 탭 활성화
+            document.getElementById('tab-' + tabName).classList.add('active');
+
+            currentTab = tabName;
+
+            // 탭별 동작
+            switch (tabName) {
+                case 'graph':
+                    // 그래프 탐색 - 기본 상태
+                    document.getElementById('ai-tools').style.display = 'flex';
+                    break;
+                case 'etl':
+                    // 데이터 적재 모달 열기
+                    openCsvModal();
+                    break;
+                case 'ai':
+                    // AI 분석 - 우측 도구 표시
+                    document.getElementById('ai-tools').style.display = 'flex';
+                    document.getElementById('aiInput').focus();
+                    break;
+                case 'legal':
+                    // 법률 자문 모달 열기
+                    openLegalModal();
+                    break;
+            }
+        }
+
+        // ======================================================
+        // 1. 범례 필터 기능
+        // ======================================================
+        let activeFilter = null;
+
+        function filterByType(nodeType) {
+            const legendItems = document.querySelectorAll('.legend-item');
+
+            // 같은 타입 다시 클릭하면 필터 해제
+            if (activeFilter === nodeType) {
+                activeFilter = null;
+                legendItems.forEach(item => item.classList.remove('active'));
+                cy.nodes().style('opacity', 1);
+                cy.edges().style('opacity', 1);
+                return;
+            }
+
+            // 새 필터 적용
+            activeFilter = nodeType;
+
+            // 범례 아이템 활성화 상태 업데이트
+            legendItems.forEach(item => {
+                if (item.onclick.toString().includes(nodeType)) {
+                    item.classList.add('active');
+                } else {
+                    item.classList.remove('active');
+                }
+            });
+
+            // 그래프 필터링 (선택된 타입만 강조)
+            cy.nodes().forEach(node => {
+                if (node.data('label') === nodeType) {
+                    node.style('opacity', 1);
+                    node.connectedEdges().style('opacity', 1);
+                } else {
+                    node.style('opacity', 0.2);
+                }
+            });
+
+            cy.edges().forEach(edge => {
+                const src = cy.getElementById(edge.data('source'));
+                const tgt = cy.getElementById(edge.data('target'));
+                if (src.data('label') !== nodeType && tgt.data('label') !== nodeType) {
+                    edge.style('opacity', 0.1);
+                }
+            });
+        }
+
+        // ======================================================
+        // 1.5 좌측 필터 태그 기능
+        // ======================================================
+        let hiddenTypes = new Set();
+
+        function toggleFilter(nodeType) {
+            const tag = document.querySelector(`.filter-tag[data-type="${nodeType}"]`);
+
+            if (hiddenTypes.has(nodeType)) {
+                // 표시하기
+                hiddenTypes.delete(nodeType);
+                tag.classList.remove('hidden');
+                cy.nodes(`[label="${nodeType}"]`).style('display', 'element');
+            } else {
+                // 숨기기
+                hiddenTypes.add(nodeType);
+                tag.classList.add('hidden');
+                cy.nodes(`[label="${nodeType}"]`).style('display', 'none');
+            }
+
+            // 연결된 엣지 업데이트
+            cy.edges().forEach(edge => {
+                const src = cy.getElementById(edge.data('source'));
+                const tgt = cy.getElementById(edge.data('target'));
+                if (src.style('display') === 'none' || tgt.style('display') === 'none') {
+                    edge.style('display', 'none');
+                } else {
+                    edge.style('display', 'element');
+                }
+            });
+        }
+
+        function resetFilters() {
+            hiddenTypes.clear();
+            document.querySelectorAll('.filter-tag').forEach(tag => tag.classList.remove('hidden'));
+            cy.nodes().style('display', 'element');
+            cy.edges().style('display', 'element');
+            cy.nodes().style('opacity', 1);
+            cy.edges().style('opacity', 1);
+            activeFilter = null;
+            document.querySelectorAll('.legend-item').forEach(item => item.classList.remove('active'));
+        }
+
+        function updateFilterCounts() {
+            const types = ['vt_psn', 'vt_flnm', 'vt_bacnt', 'vt_telno', 'vt_site', 'vt_ip', 'vt_id', 'vt_atm'];
+            types.forEach(type => {
+                const count = cy.nodes(`[label="${type}"]`).length;
+                const countEl = document.getElementById(`count-${type}`);
+                if (countEl) countEl.textContent = count;
+            });
+        }
+
+        // 그래프 변경 시 카운트 업데이트
+        cy.on('add remove', 'node', updateFilterCounts);
 
         // ======================================================
         // 2. 검색 및 AI 기능
