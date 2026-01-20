@@ -22,3 +22,8 @@ flask-cors==4.0.0
 
 # HTTP Requests (for health checks)
 requests==2.31.0
+
+# Legal RAG System
+chromadb==0.4.22
+pypdf==3.17.4
+sentence-transformers==2.2.2

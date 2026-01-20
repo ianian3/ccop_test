@@ -452,7 +452,7 @@ class GraphService:
     # ---------------------------------------------------------
     @staticmethod
     def quick_query(question, graph_path):
-        """빠른 그래프 조회 (보고서 없이 elements만 반환)"""
+        """빠른 그래프 조회 (온톨로지 인식 강화 - 노드 + 엣지 속성)"""
         target_kw = AIService.extract_keywords(question)
         print(f"▶ [Quick Query] 키워드 추출: '{target_kw}'")
         
@@ -462,7 +462,7 @@ class GraphService:
             conn.autocommit = False 
             cur.execute(f"SET graph_path = {graph_path}")
             
-            # CONTAINS 사용 (regex 이스케이프 문제 방지)
+            # 🎯 온톨로지 인식: 노드 + 엣지 속성 모두 검색
             q = f"""
             MATCH (v)-[r]-(n) 
             WHERE v.flnm CONTAINS '{target_kw}'
@@ -475,6 +475,12 @@ class GraphService:
                OR v.url CONTAINS '{target_kw}'
                OR v.ip CONTAINS '{target_kw}'
                OR v.file CONTAINS '{target_kw}'
+               OR v.crime_type CONTAINS '{target_kw}'
+               OR v.ontology_type CONTAINS '{target_kw}'
+               OR v.entity_subtype CONTAINS '{target_kw}'
+               OR v.domain_concept CONTAINS '{target_kw}'
+               OR r.crime_type CONTAINS '{target_kw}'
+               OR r.crime_name CONTAINS '{target_kw}'
             RETURN id(v), labels(v), properties(v), 
                    id(r), type(r), properties(r), 
                    id(n), labels(n), properties(n) 
@@ -508,7 +514,7 @@ class GraphService:
     
     @staticmethod
     def rag_query(question, graph_path):
-        """그래프 조회 + AI 보고서 생성"""
+        """그래프 조회 + AI 보고서 생성 (온톨로지 인식 강화 - 노드 + 엣지)"""
         target_kw = AIService.extract_keywords(question)
         print(f"▶ [RAG] 키워드 추출: '{target_kw}'")
         
@@ -518,7 +524,7 @@ class GraphService:
             conn.autocommit = False 
             cur.execute(f"SET graph_path = {graph_path}")
             
-            # CONTAINS 사용 (regex 이스케이프 문제 방지)
+            # 🎯 온톨로지 인식: 노드 + 엣지 속성 모두 검색
             q = f"""
             MATCH (v)-[r]-(n) 
             WHERE v.flnm CONTAINS '{target_kw}'
@@ -531,6 +537,12 @@ class GraphService:
                OR v.url CONTAINS '{target_kw}'
                OR v.ip CONTAINS '{target_kw}'
                OR v.file CONTAINS '{target_kw}'
+               OR v.crime_type CONTAINS '{target_kw}'
+               OR v.ontology_type CONTAINS '{target_kw}'
+               OR v.entity_subtype CONTAINS '{target_kw}'
+               OR v.domain_concept CONTAINS '{target_kw}'
+               OR r.crime_type CONTAINS '{target_kw}'
+               OR r.crime_name CONTAINS '{target_kw}'
             RETURN id(v), labels(v), properties(v), 
                    id(r), type(r), properties(r), 
                    id(n), labels(n), properties(n) 

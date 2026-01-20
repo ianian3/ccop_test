@@ -7,6 +7,7 @@ from app.services.ai_service import AIService
 from app.services.etl_service import ETLService
 from app.services.graph_service import GraphService
 from app.services.subgraph_service import SubGraphService
+from app.services.legal_rag_service import LegalRAGService
 
 bp = Blueprint('main', __name__)
 
@@ -122,5 +123,86 @@ def etl_import():
             return jsonify({"status": "success", "nodes_created": nodes, "edges_created": edges, "target_graph": graph_path})
         else:
             return jsonify({"status": "error", "message": msg}), 500
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+# ------------------------------
+# 5. 법률 RAG 관련 기능 -> LegalRAGService 사용
+# ------------------------------
+@bp.route('/api/legal/upload', methods=['POST'])
+def legal_upload():
+    """법률 PDF 업로드 및 벡터화"""
+    try:
+        if 'file' not in request.files:
+            return jsonify({"status": "error", "message": "파일이 없습니다."}), 400
+        
+        file = request.files['file']
+        if not file.filename.endswith('.pdf'):
+            return jsonify({"status": "error", "message": "PDF 파일만 지원합니다."}), 400
+        
+        success, message, chunk_count = LegalRAGService.add_pdf(file, file.filename)
+        
+        if success:
+            return jsonify({
+                "status": "success",
+                "message": message,
+                "chunks": chunk_count
+            })
+        else:
+            return jsonify({"status": "error", "message": message}), 500
+            
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@bp.route('/api/legal/query', methods=['POST'])
+def legal_query():
+    """법률 질의응답"""
+    try:
+        data = request.get_json()
+        question = data.get('question', '').strip()
+        
+        if not question:
+            return jsonify({"status": "error", "message": "질문을 입력해주세요."}), 400
+        
+        result = LegalRAGService.query(question)
+        
+        return jsonify({
+            "status": "success" if result['success'] else "error",
+            "answer": result['answer'],
+            "sources": result['sources']
+        })
+        
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@bp.route('/api/legal/documents', methods=['GET'])
+def legal_documents():
+    """업로드된 법률 문서 목록"""
+    try:
+        documents = LegalRAGService.get_documents()
+        return jsonify({
+            "status": "success",
+            "documents": documents
+        })
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@bp.route('/api/legal/delete', methods=['POST'])
+def legal_delete():
+    """문서 삭제"""
+    try:
+        data = request.get_json()
+        filename = data.get('filename', '')
+        
+        if not filename:
+            return jsonify({"status": "error", "message": "파일명이 필요합니다."}), 400
+        
+        success, message = LegalRAGService.delete_document(filename)
+        
+        if success:
+            return jsonify({"status": "success", "message": message})
+        else:
+            return jsonify({"status": "error", "message": message}), 404
+            
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500

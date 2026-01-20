@@ -336,6 +336,87 @@
         </div>
     </div>
 
+    <!-- 법률 자문 모달 -->
+    <div id="legal-modal"
+        style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 9999; align-items: center; justify-content: center; backdrop-filter: blur(3px);">
+        <div class="modal-content" style="width: 700px; max-height: 80vh; overflow-y: auto;">
+            <h3 style="margin-top:0; color: #ff7675; border-bottom: 1px solid #444; padding-bottom: 10px;">
+                <i class="fas fa-balance-scale"></i> 법률 자문 시스템 (RAG)
+            </h3>
+
+            <!-- 탭 버튼 -->
+            <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+                <button onclick="showLegalTab('upload')" id="tab-upload" class="legal-tab-btn"
+                    style="background:#00b894; color:white; padding:8px 16px;">
+                    <i class="fas fa-upload"></i> PDF 업로드
+                </button>
+                <button onclick="showLegalTab('query')" id="tab-query" class="legal-tab-btn"
+                    style="background:#636e72; color:white; padding:8px 16px;">
+                    <i class="fas fa-question-circle"></i> 법률 질의
+                </button>
+                <button onclick="showLegalTab('docs')" id="tab-docs" class="legal-tab-btn"
+                    style="background:#636e72; color:white; padding:8px 16px;">
+                    <i class="fas fa-folder"></i> 문서 목록
+                </button>
+            </div>
+
+            <!-- 업로드 탭 -->
+            <div id="legal-tab-upload" class="legal-tab-content">
+                <div style="background: #1e1e1e; padding: 20px; border-radius: 6px; border: 1px dashed #555;">
+                    <label style="display:block; color:#dfe6e9; margin-bottom:10px; font-size:14px; font-weight: bold;">
+                        📁 법률 PDF 파일 선택
+                    </label>
+                    <input type="file" id="legalPdfFile" accept=".pdf"
+                        style="width:95%; background:#2d3436; color:white; padding:10px; border:1px solid #444; border-radius:4px;">
+                    <p style="color:#888; font-size:12px; margin-top:10px;">
+                        형법, 특경법, 판례 등 법률 관련 PDF를 업로드하면 벡터화되어 검색 가능해집니다.
+                    </p>
+                    <button onclick="uploadLegalPdf()"
+                        style="background:#00b894; color:white; padding:10px 20px; margin-top:10px;">
+                        <i class="fas fa-cloud-upload-alt"></i> 업로드 및 벡터화
+                    </button>
+                    <div id="legal-upload-status" style="margin-top:10px; color:#00cec9; font-size:13px;"></div>
+                </div>
+            </div>
+
+            <!-- 질의 탭 -->
+            <div id="legal-tab-query" class="legal-tab-content" style="display:none;">
+                <div style="background: #1e1e1e; padding: 20px; border-radius: 6px;">
+                    <label style="display:block; color:#dfe6e9; margin-bottom:10px; font-size:14px; font-weight: bold;">
+                        ⚖️ 법률 질문 입력
+                    </label>
+                    <textarea id="legalQuestion" rows="3" placeholder="예: 보이스피싱 피해자가 300만원 송금했을 때 적용 가능한 법조항은?"
+                        style="width:95%; background:#2d3436; color:white; padding:10px; border:1px solid #444; border-radius:4px; font-size:14px; resize:vertical;"></textarea>
+                    <button onclick="askLegalQuestion()"
+                        style="background:#ff7675; color:white; padding:10px 20px; margin-top:10px;">
+                        <i class="fas fa-gavel"></i> 법률 자문 요청
+                    </button>
+                </div>
+                <div id="legal-answer"
+                    style="background:#2d3436; padding:15px; border-radius:6px; margin-top:15px; min-height:100px; display:none;">
+                    <h4 style="color:#ff7675; margin-top:0;"><i class="fas fa-balance-scale"></i> AI 법률 자문</h4>
+                    <div id="legal-answer-content" style="color:#dfe6e9; line-height:1.7; white-space:pre-wrap;"></div>
+                    <div id="legal-sources" style="margin-top:15px; padding-top:10px; border-top:1px solid #444;"></div>
+                </div>
+            </div>
+
+            <!-- 문서 목록 탭 -->
+            <div id="legal-tab-docs" class="legal-tab-content" style="display:none;">
+                <div style="background: #1e1e1e; padding: 20px; border-radius: 6px;">
+                    <h4 style="color:#74b9ff; margin-top:0;"><i class="fas fa-folder-open"></i> 업로드된 법률 문서</h4>
+                    <div id="legal-docs-list" style="min-height:100px;">
+                        <p style="color:#888;">로딩 중...</p>
+                    </div>
+                </div>
+            </div>
+
+            <div style="text-align: right; margin-top: 20px; border-top: 1px solid #444; padding-top: 15px;">
+                <button onclick="closeLegalModal()"
+                    style="background:#636e72; color:white; padding:10px 20px;">닫기</button>
+            </div>
+        </div>
+    </div>
+
     <header>
         <div class="logo"><i class="fas fa-network-wired"></i> CCOP INTEL SYSTEM</div>
 
@@ -364,6 +445,10 @@
                 <button class="btn-import" onclick="openCsvModal()"
                     style="background:#a29bfe; color:white; box-shadow:0 0 8px rgba(162,155,254,0.4);">
                     <i class="fas fa-file-csv"></i> 데이터 적재
+                </button>
+                <button class="btn-legal" onclick="openLegalModal()"
+                    style="background:#ff7675; color:white; box-shadow:0 0 8px rgba(255,118,117,0.4);">
+                    <i class="fas fa-balance-scale"></i> 법률 자문
                 </button>
             </div>
         </div>
@@ -761,6 +846,145 @@
                 .finally(() => {
                     btn.innerHTML = orgText;
                     btn.disabled = false;
+                });
+        }
+
+        // ======================================================
+        // 5. 법률 RAG 기능
+        // ======================================================
+        const legalModal = document.getElementById('legal-modal');
+
+        function openLegalModal() {
+            legalModal.style.display = 'flex';
+            showLegalTab('upload');
+            loadLegalDocuments();
+        }
+
+        function closeLegalModal() {
+            legalModal.style.display = 'none';
+        }
+
+        function showLegalTab(tabName) {
+            // 모든 탭 내용 숨기기
+            document.querySelectorAll('.legal-tab-content').forEach(el => el.style.display = 'none');
+            // 모든 탭 버튼 비활성화 스타일
+            document.querySelectorAll('.legal-tab-btn').forEach(el => el.style.background = '#636e72');
+
+            // 선택된 탭 표시
+            document.getElementById('legal-tab-' + tabName).style.display = 'block';
+            document.getElementById('tab-' + tabName).style.background = tabName === 'upload' ? '#00b894' : tabName === 'query' ? '#ff7675' : '#74b9ff';
+
+            if (tabName === 'docs') loadLegalDocuments();
+        }
+
+        function uploadLegalPdf() {
+            const file = document.getElementById('legalPdfFile').files[0];
+            const status = document.getElementById('legal-upload-status');
+
+            if (!file) return alert('PDF 파일을 선택하세요.');
+            if (!file.name.endsWith('.pdf')) return alert('PDF 파일만 업로드 가능합니다.');
+
+            status.innerHTML = '<span style="color:#00cec9">⏳ 업로드 및 벡터화 중...</span>';
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            fetch(`${API_URL}/legal/upload`, { method: 'POST', body: formData })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        status.innerHTML = `<span style="color:#00b894">✅ ${data.message} (${data.chunks}개 청크)</span>`;
+                        document.getElementById('legalPdfFile').value = '';
+                        loadLegalDocuments();
+                    } else {
+                        status.innerHTML = `<span style="color:#d63031">❌ ${data.message}</span>`;
+                    }
+                })
+                .catch(e => status.innerHTML = '<span style="color:#d63031">❌ 서버 오류</span>');
+        }
+
+        function askLegalQuestion() {
+            const question = document.getElementById('legalQuestion').value.trim();
+            const answerDiv = document.getElementById('legal-answer');
+            const contentDiv = document.getElementById('legal-answer-content');
+            const sourcesDiv = document.getElementById('legal-sources');
+
+            if (!question) return alert('질문을 입력하세요.');
+
+            answerDiv.style.display = 'block';
+            contentDiv.innerHTML = '<span style="color:#00cec9">⏳ AI가 법률 문서를 검색하고 답변을 생성 중...</span>';
+            sourcesDiv.innerHTML = '';
+
+            fetch(`${API_URL}/legal/query`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ question: question })
+            })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.status === 'success' || data.answer) {
+                        contentDiv.innerHTML = data.answer.replace(/\n/g, '<br>');
+
+                        if (data.sources && data.sources.length > 0) {
+                            let srcHtml = '<h5 style="color:#74b9ff; margin-bottom:10px;">📚 참고 문서</h5>';
+                            data.sources.forEach((src, i) => {
+                                srcHtml += `<div style="background:#1e1e1e; padding:8px; margin-bottom:5px; border-radius:4px; font-size:12px;">
+                                    <strong style="color:#fdcb6e;">[${src.source}]</strong><br>
+                                    <span style="color:#888;">${src.content}</span>
+                                </div>`;
+                            });
+                            sourcesDiv.innerHTML = srcHtml;
+                        }
+                    } else {
+                        contentDiv.innerHTML = `<span style="color:#d63031">❌ ${data.message || '오류 발생'}</span>`;
+                    }
+                })
+                .catch(e => contentDiv.innerHTML = '<span style="color:#d63031">❌ 서버 오류</span>');
+        }
+
+        function loadLegalDocuments() {
+            const listDiv = document.getElementById('legal-docs-list');
+
+            fetch(`${API_URL}/legal/documents`)
+                .then(r => r.json())
+                .then(data => {
+                    if (data.documents && data.documents.length > 0) {
+                        let html = '<table style="width:100%; font-size:13px;">';
+                        html += '<tr style="color:#b2bec3; border-bottom:1px solid #444;"><th style="padding:8px; text-align:left;">문서명</th><th style="padding:8px;">청크 수</th><th style="padding:8px;">작업</th></tr>';
+                        data.documents.forEach(doc => {
+                            html += `<tr style="border-bottom:1px solid #333;">
+                                <td style="padding:8px; color:#dfe6e9;">${doc.name}</td>
+                                <td style="padding:8px; color:#74b9ff; text-align:center;">${doc.chunks}</td>
+                                <td style="padding:8px; text-align:center;">
+                                    <button onclick="deleteLegalDoc('${doc.name}')" style="background:#d63031; color:white; padding:4px 8px; font-size:11px;">삭제</button>
+                                </td>
+                            </tr>`;
+                        });
+                        html += '</table>';
+                        listDiv.innerHTML = html;
+                    } else {
+                        listDiv.innerHTML = '<p style="color:#888; text-align:center;">업로드된 문서가 없습니다.</p>';
+                    }
+                })
+                .catch(e => listDiv.innerHTML = '<p style="color:#d63031;">문서 목록 로드 실패</p>');
+        }
+
+        function deleteLegalDoc(filename) {
+            if (!confirm(`"${filename}" 문서를 삭제하시겠습니까?`)) return;
+
+            fetch(`${API_URL}/legal/delete`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ filename: filename })
+            })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        alert('✅ 삭제 완료');
+                        loadLegalDocuments();
+                    } else {
+                        alert('❌ ' + data.message);
+                    }
                 });
         }
     </script>

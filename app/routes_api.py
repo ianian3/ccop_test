@@ -273,3 +273,184 @@ def health_check():
         "version": "1.0.0",
         "service": "CCOP Partner API"
     }), 200
+
+
+# ============================================
+# 6. 범죄 패턴 분석 API (Phase 2)
+# ============================================
+
+@api_v1.route('/analyze-pattern', methods=['POST'])
+@require_api_key
+def analyze_pattern():
+    """
+    사건의 범죄 패턴 자동 인식
+    
+    Request:
+        {
+            "case_id": "2019-000392",
+            "graph_path": "demo_tst1"  // 선택사항
+        }
+    
+    Response:
+        {
+            "success": true,
+            "case_id": "2019-000392",
+            "matched_patterns": [
+                {
+                    "pattern_name": "몸캠피싱",
+                    "confidence": 0.95,
+                    "missing_elements": ["IP주소"]
+                }
+            ],
+            "primary_pattern": "몸캠피싱",
+            "analysis_summary": "..."
+        }
+    """
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({"error": "Request body required"}), 400
+        
+        case_id = data.get('case_id')
+        if not case_id:
+            return jsonify({"error": "case_id field is required"}), 400
+        
+        graph_path = data.get('graph_path', current_app.config.get('DEFAULT_GRAPH_PATH', 'demo_tst1'))
+        
+        # 패턴 분석 실행
+        from app.services.pattern_analyzer import PatternAnalyzer
+        
+        result = PatternAnalyzer.analyze_case(case_id, graph_path)
+        
+        if not result.get('matched_patterns'):
+            return jsonify({
+                "success": false,
+                "case_id": case_id,
+                "message": "No pattern matched. Evidence may be insufficient."
+            }), 200
+        
+        return jsonify({
+            "success": True,
+            "case_id": result["case_id"],
+            "matched_patterns": result["matched_patterns"],
+            "primary_pattern": result["primary_pattern"],
+            "confidence": result["confidence"],
+            "analysis_summary": result["analysis_summary"]
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            "error": "Pattern analysis failed",
+            "details": str(e)
+        }), 500
+
+
+@api_v1.route('/evidence-completeness/<case_id>', methods=['GET'])
+@require_api_key
+def evidence_completeness(case_id):
+    """
+    사건의 증거 완성도 평가
+    
+    Query Parameters:
+        - graph_path: 그래프 경로 (선택)
+    
+    Response:
+        {
+            "success": true,
+            "case_id": "2019-000392",
+            "pattern": "몸캠피싱",
+            "completeness_score": 0.75,
+            "missing_evidence": [...],
+            "next_steps": [...]
+        }
+    """
+    try:
+        graph_path = request.args.get('graph_path', current_app.config.get('DEFAULT_GRAPH_PATH', 'demo_tst1'))
+        
+        # 1. 패턴 분석
+        from app.services.pattern_analyzer import PatternAnalyzer
+        from app.services.evidence_analyzer import EvidenceAnalyzer
+        
+        pattern_result = PatternAnalyzer.analyze_case(case_id, graph_path)
+        
+        if not pattern_result.get('matched_patterns'):
+            return jsonify({
+                "success": False,
+                "case_id": case_id,
+                "message": "No pattern matched. Cannot evaluate completeness."
+            }), 200
+        
+        # 2. 서브그래프 추출
+        subgraph = PatternAnalyzer._extract_case_subgraph(case_id, graph_path)
+        
+        if not subgraph:
+            return jsonify({
+                "success": False,
+                "case_id": case_id,
+                "message": "Case not found"
+            }), 404
+        
+        # 3. 증거 완성도 분석
+        matched_pattern = pattern_result['matched_patterns'][0]  # 최고 점수 패턴
+        completeness_result = EvidenceAnalyzer.evaluate_completeness(
+            case_id,
+            matched_pattern,
+            subgraph
+        )
+        
+        return jsonify({
+            "success": True,
+            **completeness_result
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            "error": "Evidence evaluation failed",
+            "details": str(e)
+        }), 500
+
+
+@api_v1.route('/patterns', methods=['GET'])
+@require_api_key
+def list_patterns():
+    """
+    지원하는 범죄 패턴 목록 조회
+    
+    Response:
+        {
+            "patterns": [
+                {
+                    "pattern_id": "bodycamp_phishing_v1",
+                    "name": "몸캠피싱",
+                    "description": "..."
+                }
+            ]
+        }
+    """
+    try:
+        from app.services.pattern_library import PatternLibrary
+        
+        patterns = PatternLibrary.get_all_patterns()
+        pattern_list = []
+        
+        for pattern_id, pattern in patterns.items():
+            pattern_list.append({
+                "pattern_id": pattern.pattern_id,
+                "name": pattern.name,
+                "description": pattern.description,
+                "required_nodes": len(pattern.required_nodes),
+                "required_edges": len(pattern.required_edges),
+                "min_threshold": pattern.scoring["min_threshold"]
+            })
+        
+        return jsonify({
+            "patterns": pattern_list,
+            "total": len(pattern_list)
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            "error": "Failed to retrieve patterns",
+            "details": str(e)
+        }), 500

@@ -13,46 +13,89 @@ class AIService:
 
     @staticmethod
     def generate_cypher(question):
-        """자연어 질문을 Cypher 쿼리로 변환"""
+        """자연어 질문을 Cypher 쿼리로 변환 (온톨로지 인식 강화)"""
         client = AIService.get_client()
         
-        system_instruction = "You are a Cypher query generator. Output ONLY the raw Cypher query string. Do not use Markdown formatting. Do not provide any explanation."
+        system_instruction = "You are a Cypher query generator for KICS-compliant cybercrime investigation graph database. Output ONLY the raw Cypher query string. Do not use Markdown formatting. Do not provide any explanation."
         
+        # 🎯 온톨로지 인식 프롬프트
         prompt = f"""
-        [Schema Info - Cybercrime Investigation Graph]
-        Node Labels & Properties:
-        - vt_flnm: 접수번호 (flnm, police_station, investigator_department)
-        - vt_telno: 전화번호 (telno, phone)
-        - vt_bacnt: 계좌번호 (bacnt, actno, bank, account)
-        - vt_site: 사이트/URL (site, url, domain)
-        - vt_ip: IP주소 (ip, ip_addr, ipaddr)
-        - vt_atm: ATM (atm, atm_id)
-        - vt_file: 파일명 (file, filename, filepath)
-        - vt_id: ID (id, user_id, userid)
-        - vt_psn: 사람/기타 (name, dpstr)
+[KICS 온톨로지 구조]
 
-        Edge Types:
-        - digital_trace: 디지털 흔적 (접수→사이트)
-        - used_account: 계좌 사용 (접수→계좌)
-        - used_phone: 전화 사용 (접수→전화)
+=== 엔티티 계층 (Entity Hierarchy) ===
 
-        [Query Rules]
-        1. Use 'MATCH (v)' for generic node search
-        2. Use CONTAINS for substring matching (NOT regex =~)
-        3. **CRITICAL**: Use SINGLE QUOTES (') for ALL string literals
-        4. Search across multiple properties with OR
-        5. Return: id(v), labels(v), properties(v)
-        6. LIMIT 30
-        7. No PostgreSQL casting (::text, ::graphid)
+1. Case (사건) - vt_flnm
+   속성: flnm (접수번호), police_station (관서), crime_type (범죄유형: 몸캠피싱, 보이스피싱 등)
+   
+2. FinancialEvidence (금융증거)
+   - BankAccount (계좌) - vt_bacnt
+     속성: actno, bacnt (계좌번호), bank (은행), account (계좌)
+   
+3. DigitalEvidence (디지털증거)
+   - WebTrace (사이트) - vt_site
+     속성: site, url, domain (사이트/URL)
+   - FileTrace (파일) - vt_file
+     속성: file, filename, filepath (파일명/경로)
+   - NetworkTrace (IP) - vt_ip
+     속성: ip, ip_addr, ipaddr (IP주소)
 
-        [Examples]
-        ✅ Good: WHERE v.flnm CONTAINS '2019-001' OR v.telno CONTAINS '2019-001'
-        ❌ Bad:  WHERE v.flnm CONTAINS "2019-001"
-        ✅ Good: WHERE v.site CONTAINS 'example.com'
-        ❌ Bad:  WHERE v.telno =~ '.*pattern.*'
+4. Suspect (용의자)
+   - DigitalIdentity (ID) - vt_id
+     속성: id, user_id, userid (사용자ID)
+   - ContactInfo (전화) - vt_telno
+     속성: telno, phone (전화번호)
+   - Person (인물) - vt_psn
+     속성: name (이름)
 
-        Question: "{question}"
-        """
+5. PhysicalEvidence (물리증거)
+   - ATM - vt_atm
+     속성: atm, atm_id (ATM ID)
+
+=== 의미론적 관계 (Semantic Relationships) ===
+
+- used_account: 사건 → 계좌 (계좌 사용)
+- digital_trace: 사건 → 디지털증거 (디지털 흔적)
+- used_phone: 사건 → 전화 (전화 사용)
+- related_to: 일반 관계
+
+=== 범죄 패턴 (Crime Patterns) ===
+
+몸캠피싱: (vt_flnm)-[:digital_trace]->(vt_site)-[:related_to]->(vt_file)
+보이스피싱: (vt_flnm)-[:used_phone]->(vt_telno)-[:used_account]->(vt_bacnt)
+
+=== 개념 매핑 (Concept Mapping) ===
+
+"금융증거" → (n:vt_bacnt) 또는 WHERE n.ontology_type = 'FinancialEvidence'
+"디지털증거" → (n:vt_site) OR (n:vt_file) OR (n:vt_ip) 또는 WHERE n.ontology_type = 'DigitalEvidence'
+"계좌" → (n:vt_bacnt)
+"사이트", "URL" → (n:vt_site)
+"IP", "IP주소" → (n:vt_ip)
+"전화", "전화번호" → (n:vt_telno)
+"파일" → (n:vt_file)
+"사건" → (n:vt_flnm)
+"몸캠피싱" → WHERE n.crime_type CONTAINS '몸캠'
+"보이스피싱" → WHERE n.crime_type CONTAINS '보이스'
+
+=== 쿼리 규칙 (Query Rules) ===
+
+1. 노드 레이블은 vt_* 형식 사용 (vt_flnm, vt_bacnt, vt_site 등)
+2. 문자열은 반드시 단일 따옴표 (') 사용
+3. 부분 일치는 CONTAINS 사용 (NOT regex =~)
+4. 속성 검색은 OR로 여러 속성 검색 가능
+5. 결과 반환: id(v), labels(v), properties(v)
+6. 기본 제한: LIMIT 30
+7. PostgreSQL 캐스팅 사용 금지 (::text, ::graphid 등)
+
+[Examples]
+✅ Good: WHERE v.flnm CONTAINS '2019-001' OR v.bacnt CONTAINS '2019-001'
+❌ Bad:  WHERE v.flnm CONTAINS "2019-001"
+✅ Good: MATCH (n:vt_bacnt) RETURN id(n), labels(n), properties(n) LIMIT 30
+✅ Good: MATCH (case:vt_flnm)-[:used_account]->(account:vt_bacnt) RETURN case, account
+
+질문: "{question}"
+
+Cypher 쿼리:
+"""
         
         try:
             resp = client.chat.completions.create(
@@ -80,149 +123,151 @@ class AIService:
 
     @staticmethod
     def extract_keywords(question):
-        """질문에서 핵심 키워드 추출 - 전체 식별자 유지"""
-        import re
-        
-        # 패턴 매칭: 접수번호, 전화번호, 계좌번호 등
-        patterns = [
-            r'\d{4}-\d{6,}',        # 접수번호: 2019-000138
-            r'\d{3}-\d{4}-\d{4}',   # 전화번호: 010-1234-5678
-            r'\d{10,}',              # 계좌번호: 1002757733275
-            r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}',  # IP
-        ]
-        
-        for pattern in patterns:
-            match = re.search(pattern, question)
-            if match:
-                return match.group()
-        
-        # 패턴 매칭 실패 시 전체 질문에서 공백 제거한 것 사용
-        keywords = question.strip().split()
-        if keywords:
-            # 가장 긴 단어 반환 (일반적으로 식별자가 긴 편)
-            return max(keywords, key=len)
-        
-        return question.strip()
-
-    @staticmethod
-    def generate_rag_report(question, context_texts, semantic_analysis=None):
-        """수사 보고서 생성"""
+        """질문에서 키워드 추출 - 단일 문자열 반환"""
         client = AIService.get_client()
         
-        # 온톨로지 분석 추가
-        ontology_info = ""
-        if semantic_analysis:
-            ontology_info = "\n\n[온톨로지 분석]\n" + semantic_analysis.get('summary', '')
-        
-        # 컨텍스트 길이 제한 (토큰 절약 및 에러 방지)
-        safe_context = str(context_texts[:80]) + ontology_info 
-        
-        try:
-            resp = client.chat.completions.create(
-                model="gpt-4o", 
-                messages=[
-                    {"role": "system", "content": "당신은 지능형 수사관입니다. 데이터를 분석하여 '한국어'로 수사 보고서를 작성하세요."},
-                    {"role": "user", "content": f"질문: {question}\n데이터:\n{safe_context}\n\n분석 보고서 작성:"}
-                ],
-                temperature=0.3
-            )
-            return resp.choices[0].message.content
-        except Exception as e:
-            return f"보고서 생성 중 오류 발생: {str(e)}"
-
-    @staticmethod
-    def suggest_mapping(headers, sample_row):
-        """
-        CSV 헤더 매핑 추천 (JSON Object 반환) - 사이버 범죄 수사 데이터 특화
-        KICS 데이터(접수번호, 계좌, IP, 코인주소 등)의 연관 관계 분석을 위한 스키마 추천
-        """
-        client = AIService.get_client()
-            
-        # 이전에 추출한 KICS 데이터셋의 핵심 컬럼 키워드 정의
-        kics_context = """
-        [Domain Context: Cyber Financial Crime Investigation]
-        The data involves phishing, smishing, and investment fraud.
-        Key entities are 'Case'(Receipt No), 'Suspect Info'(Phone, Account, IP), and 'Trace'(URL, ID).
-    
-        [Standard Column Reference]
-        - Case Info: 경찰서, 접수번호, 수사관, 범죄종류, 피해금액, 사건개요
-        - Financial: 은행, 계좌번호, 투자자산종류, 거래소구분
-        - Digital: IP 주소, URL, ID, 닉네임, 통신사, 휴대전화
-        """
-
         prompt = f"""
-        You are a Cybercrime Investigation Data Architect.
-        Analyze the CSV headers and sample row to suggest the best Graph Database Schema mapping (Source -> Edge -> Target).
-
-        {kics_context}
-
-        [Input Data]
-        Headers: {headers}
-        Sample Row: {sample_row}
-
-        [Mapping Logic Priorities]
-        1. **Source Node (The Anchor)**:
-       - **Priority 1**: Case Identifier ('접수번호', '사건번호'). This is usually the central node.
-       - **Priority 2**: If analyzing suspect networks, Suspect Identifier ('용의자', '피의자') could be source.
-       - **Default**: Set to '접수번호' (Case No) if present.
-
-        2. **Target Node (The Link)**:
-       - Identify the *strongest* connector entity in the row.
-       - **Priority 1 (Financial)**: '계좌번호' (Account No), '지갑주소' (Wallet Addr).
-       - **Priority 2 (Comms)**: '휴대전화' (Phone No), 'IP 주소' (IP Address).
-       - **Priority 3 (Digital)**: 'URL', 'ID', '닉네임'.
-       - **Strategy**: If multiple exist, prioritize '계좌번호' or '휴대전화' as they provide strong pivots for cross-case correlation.
-
-        3. **Edge Type**:
-       - If Target is Account/Finance -> "MONEY_FLOW" or "USED_ACCOUNT"
-       - If Target is Phone/Comms -> "USED_PHONE" or "COMMUNICATION"
-       - If Target is IP/URL -> "DIGITAL_TRACE"
-       - Default -> "RELATED_TO"
-
-        4. **Properties (Attributes)**:
-       - Assign remaining columns as properties.
-       - **Edge Properties**: Contextual info like '피해금액' (Amount), '범죄일' (Date), '범죄수법' (Method), '내용' (Content).
-       - **Node Properties**: Static info like '은행' (Bank Name) belongs to the Account node context (or Edge if generic).
-
-        [Task]
-        Return a JSON object with the best guess mapping based on the provided headers.
-    
-        [Output JSON Format]
-        {{
-            "sourceCol": "EXACT_HEADER_NAME",
-            "targetCol": "EXACT_HEADER_NAME",
-        "edgeType": "SUGGESTED_EDGE_TYPE",
-        "properties": [
-            {{ "col": "EXACT_HEADER_NAME", "target": "edge", "key": "amount_krw" }}, 
-            {{ "col": "EXACT_HEADER_NAME", "target": "source", "key": "investigator_name" }},
-            {{ "col": "EXACT_HEADER_NAME", "target": "edge", "key": "crime_date" }}
-        ]
-    }}
-    
-    Constraint: Output RAW JSON ONLY. No markdown blocks. Use English keys for 'key' field if possible, but keep 'col' exactly as in headers.
-    """
-    
+        다음 범죄 수사 질문에서 검색에 필요한 핵심 키워드 1개만 추출하세요.
+        가장 중요한 단어 하나만 반환하세요.
+        
+        질문: {question}
+        
+        키워드:
+        """
+        
         try:
             resp = client.chat.completions.create(
-                model="gpt-4o", 
-                messages=[
-                    {"role": "system", "content": "You are a JSON generator. Output raw JSON only. Do not include markdown formatting like ```json."}, 
-                    {"role": "user", "content": prompt}
-                ],
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": prompt}],
                 temperature=0
             )
             
             content = resp.choices[0].message.content.strip()
-            # 마크다운 방어 코드
-            cleaned_json = content.replace("```json", "").replace("```", "").strip()
+            # 첫 번째 단어만 반환 (리스트가 아닌 문자열)
+            if ',' in content:
+                keyword = content.split(',')[0].strip()
+            else:
+                keyword = content
             
-            return json.loads(cleaned_json)
+            return keyword  # 단일 문자열 반환
             
-        except json.JSONDecodeError:
-            print("!!! AI Mapping JSON Parsing Failed")
-            # 실패 시 기본값 반환 로직 추가 가능
-            return None
-        
         except Exception as e:
-            print(f"!!! AI Mapping Error: {e}")
-            return None
+            print(f"!!! Keyword Extraction Error: {e}")
+            # 실패 시 단순 단어 분리
+            return question.split()[:4]
+
+    @staticmethod
+    def generate_rag_report(elements, context_texts):
+        """그래프 조회 결과 기반 수사 보고서 생성"""
+        client = AIService.get_client()
+        
+        # 온톨로지 분석 추가
+        ontology_info = ""
+        if elements:
+            try:
+                from app.services.ontology_service import SemanticAnalyzer
+                semantic_analysis = SemanticAnalyzer.analyze(elements, context_texts)
+                ontology_info = "\n\n[온톨로지 분석]\n" + semantic_analysis.get('summary', '')
+            except:
+                pass
+        
+        # 컨텍스트 제한 (너무 길면 OpenAI 토큰 초과)
+        safe_context = str(context_texts[:80]) + ontology_info 
+        
+        prompt = f"""
+        [사이버 범죄 수사 그래프 분석 보고서 작성]
+        
+        당신은 사이버 범죄 수사 전문가입니다. 
+        그래프 데이터베이스에서 조회된 결과를 바탕으로 간결하고 명확한 수사 보고서를 작성하세요.
+        
+        [조회 결과 데이터]
+        {safe_context}
+        
+        [보고서 작성 가이드]
+        1. **분석 개요**: 조회 결과 요약 (노드 개수, 주요 패턴)
+        2. **핵심 발견사항**: 중요한 연결 관계 및 패턴
+        3. **수사 제안사항**: 추가 수사 방향 또는 주목할 점
+        
+        보고서:
+        """
+        
+        try:
+            resp = client.chat.completions.create(
+                model="gpt-4o",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.3
+            )
+            
+            return resp.choices[0].message.content.strip()
+            
+        except Exception as e:
+            print(f"!!! RAG Report Gen Error: {e}")
+            return f"보고서 생성 실패: {e}"
+
+    @staticmethod
+    def suggest_schema_mapping(sample_rows):
+        """CSV 샘플 데이터로부터 그래프 스키마 매핑 제안"""
+        client = AIService.get_client()
+        
+        sample_preview = json.dumps(sample_rows[:5], ensure_ascii=False, indent=2)
+        
+        prompt = f"""
+        다음은 사이버 범죄 수사 데이터의 CSV 샘플입니다.
+        이 데이터를 그래프 데이터베이스에 적재하기 위한 노드/엣지 매핑을 제안하세요.
+        
+        [CSV 샘플]
+        {sample_preview}
+        
+        [사용 가능한 노드 타입]
+        - vt_flnm (접수번호/사건): flnm, receipt_no
+        - vt_telno (전화번호): telno, phone
+        - vt_bacnt (계좌): actno, bacnt, account
+        - vt_site (사이트): site, url, domain
+        - vt_ip (IP주소): ip, ip_addr
+        - vt_file (파일): file, filename
+        - vt_id (ID): id, user_id
+        - vt_psn (사람): name
+        - vt_atm (ATM): atm, atm_id
+        
+        [매핑 제안 형식]
+        {{
+            "source_node": {{
+                "label": "vt_flnm",
+                "property": "flnm",
+                "column": "접수번호"
+            }},
+            "target_node": {{
+                "label": "vt_bacnt",
+                "property": "actno",
+                "column": "계좌번호"
+            }},
+            "edge": {{
+                "type": "used_account",
+                "properties": ["등록일", "범죄유형"]
+            }}
+        }}
+        
+        매핑 제안:
+        """
+        
+        try:
+            resp = client.chat.completions.create(
+                model="gpt-4o",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0
+            )
+            
+            content = resp.choices[0].message.content.strip()
+            
+            # JSON 추출
+            try:
+                # 마크다운 코드 블록 제거
+                content = content.replace("```json", "").replace("```", "").strip()
+                mapping = json.loads(content)
+                return mapping
+            except:
+                return {"error": "JSON 파싱 실패", "raw_suggestion": content}
+            
+        except Exception as e:
+            print(f"!!! Schema Mapping Error: {e}")
+            return {"error": str(e)}
