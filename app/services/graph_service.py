@@ -111,6 +111,91 @@ class GraphService:
             conn.close()
 
     @staticmethod
+    def list_graphs():
+        """모든 그래프 목록 조회"""
+        conn, cur = GraphService.get_db_connection()
+        if not conn: return []
+        try:
+            # AgensGraph에서 그래프 목록 조회
+            cur.execute("""
+                SELECT nspname as graph_name
+                FROM pg_catalog.pg_namespace n
+                JOIN ag_catalog.ag_graph g ON n.oid = g.graphid
+                ORDER BY nspname
+            """)
+            graphs = []
+            for row in cur.fetchall():
+                graph_name = row[0]
+                # 각 그래프의 노드 수 조회
+                try:
+                    cur.execute(f"""
+                        SELECT COUNT(*) 
+                        FROM "{graph_name}"."ag_vertex"
+                    """)
+                    node_count = cur.fetchone()[0]
+                except:
+                    node_count = 0
+                
+                graphs.append({
+                    "name": graph_name,
+                    "node_count": node_count
+                })
+            return graphs
+        except Exception as e:
+            print(f"List Graphs Error: {e}")
+            return []
+        finally:
+            conn.close()
+
+    @staticmethod
+    def create_graph(graph_name):
+        """새 그래프 생성"""
+        conn, cur = GraphService.get_db_connection()
+        if not conn: return False, "DB 연결 실패"
+        try:
+            # AgensGraph에서 그래프 생성
+            cur.execute(f"CREATE GRAPH IF NOT EXISTS {graph_name};")
+            cur.execute(f"SET graph_path = {graph_name};")
+            
+            # 기본 vertex/edge 라벨 생성
+            cur.execute("CREATE VLABEL IF NOT EXISTS vt_psn;")
+            cur.execute("CREATE VLABEL IF NOT EXISTS vt_bacnt;")
+            cur.execute("CREATE VLABEL IF NOT EXISTS vt_telno;")
+            cur.execute("CREATE VLABEL IF NOT EXISTS vt_site;")
+            cur.execute("CREATE VLABEL IF NOT EXISTS vt_ip;")
+            cur.execute("CREATE VLABEL IF NOT EXISTS vt_flnm;")
+            cur.execute("CREATE VLABEL IF NOT EXISTS vt_id;")
+            cur.execute("CREATE VLABEL IF NOT EXISTS vt_atm;")
+            cur.execute("CREATE ELABEL IF NOT EXISTS related_to;")
+            cur.execute("CREATE ELABEL IF NOT EXISTS used_account;")
+            cur.execute("CREATE ELABEL IF NOT EXISTS used_phone;")
+            cur.execute("CREATE ELABEL IF NOT EXISTS digital_trace;")
+            
+            return True, f"그래프 '{graph_name}' 생성 완료"
+        except Exception as e:
+            return False, str(e)
+        finally:
+            conn.close()
+
+    @staticmethod
+    def delete_graph(graph_name):
+        """그래프 삭제"""
+        conn, cur = GraphService.get_db_connection()
+        if not conn: return False, "DB 연결 실패"
+        try:
+            # 보호: 기본 그래프는 삭제 방지
+            if graph_name in ['agens_graph', 'public']:
+                return False, "시스템 그래프는 삭제할 수 없습니다."
+            
+            # AgensGraph에서 그래프 삭제
+            cur.execute(f"DROP GRAPH IF EXISTS {graph_name} CASCADE;")
+            return True, f"그래프 '{graph_name}' 삭제 완료"
+        except Exception as e:
+            return False, str(e)
+        finally:
+            conn.close()
+
+    @staticmethod
     def search_nodes(keyword, graph_path):
         """키워드로 노드 검색 (모든 라벨 타입) + 연결된 엣지 포함"""
         conn, cur = GraphService.get_db_connection()

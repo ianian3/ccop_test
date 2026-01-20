@@ -31,6 +31,47 @@ def clear_graph():
     if success: return jsonify({"status": "success", "message": msg})
     else: return jsonify({"status": "error", "message": msg}), 500
 
+@bp.route('/api/graph/list', methods=['GET'])
+def list_graphs():
+    """그래프 목록 조회"""
+    graphs = GraphService.list_graphs()
+    return jsonify({"status": "success", "graphs": graphs})
+
+@bp.route('/api/graph/create', methods=['POST'])
+def create_graph():
+    """새 그래프 생성"""
+    data = request.get_json()
+    graph_name = data.get('graph_name', '').strip()
+    
+    if not graph_name:
+        return jsonify({"status": "error", "message": "그래프 이름이 필요합니다."}), 400
+    
+    # 이름 유효성 검사 (영문, 숫자, 언더스코어만)
+    import re
+    if not re.match(r'^[a-zA-Z][a-zA-Z0-9_]*$', graph_name):
+        return jsonify({"status": "error", "message": "그래프 이름은 영문자로 시작해야 하며, 영문, 숫자, 언더스코어만 사용 가능합니다."}), 400
+    
+    success, msg = GraphService.create_graph(graph_name)
+    if success:
+        return jsonify({"status": "success", "message": msg, "graph_name": graph_name})
+    else:
+        return jsonify({"status": "error", "message": msg}), 500
+
+@bp.route('/api/graph/delete', methods=['POST'])
+def delete_graph():
+    """그래프 삭제"""
+    data = request.get_json()
+    graph_name = data.get('graph_name', '').strip()
+    
+    if not graph_name:
+        return jsonify({"status": "error", "message": "그래프 이름이 필요합니다."}), 400
+    
+    success, msg = GraphService.delete_graph(graph_name)
+    if success:
+        return jsonify({"status": "success", "message": msg})
+    else:
+        return jsonify({"status": "error", "message": msg}), 500
+
 @bp.route('/api/search', methods=['GET'])
 def search_node():
     keyword = request.args.get('keyword', '').strip()
