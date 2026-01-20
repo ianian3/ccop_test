@@ -568,8 +568,14 @@
                 </div>
 
                 <div class="search-bar">
-                    <input type="text" id="manualInput" placeholder="이름 / 전화번호 / 계좌" style="width: 200px;">
+                    <input type="text" id="manualInput" placeholder="이름 / 전화번호 / 계좌" style="width: 150px;">
                     <button class="btn-search" onclick="manualSearch()"><i class="fas fa-search"></i> 검색</button>
+                </div>
+
+                <div class="search-bar">
+                    <input type="text" id="aiInput" placeholder="자연어 분석 요청..." style="width: 250px;">
+                    <button class="btn-ai" onclick="askAI()"><i class="fas fa-robot"></i> 쿼리생성</button>
+                    <button class="btn-rag" onclick="askGraphRAG()"><i class="fas fa-file-contract"></i> 보고서</button>
                 </div>
             </div>
         </div>
@@ -588,15 +594,6 @@
             <button class="nav-tab" onclick="switchTab('legal')" id="tab-legal">
                 <i class="fas fa-balance-scale"></i> 법률 자문
             </button>
-
-            <!-- 우측 도구 (현재 탭에 따라 변경) -->
-            <div style="margin-left: auto; display: flex; gap: 10px;" id="tab-tools">
-                <div class="search-bar" id="ai-tools">
-                    <input type="text" id="aiInput" placeholder="자연어 분석 요청..." style="width: 300px;">
-                    <button class="btn-ai" onclick="askAI()"><i class="fas fa-robot"></i> 쿼리생성</button>
-                    <button class="btn-rag" onclick="askGraphRAG()"><i class="fas fa-file-contract"></i> 보고서</button>
-                </div>
-            </div>
         </div>
     </div>
 
@@ -761,15 +758,13 @@
             switch (tabName) {
                 case 'graph':
                     // 그래프 탐색 - 기본 상태
-                    document.getElementById('ai-tools').style.display = 'flex';
                     break;
                 case 'etl':
                     // 데이터 적재 모달 열기
                     openCsvModal();
                     break;
                 case 'ai':
-                    // AI 분석 - 우측 도구 표시
-                    document.getElementById('ai-tools').style.display = 'flex';
+                    // AI 분석 - 입력창 포커스
                     document.getElementById('aiInput').focus();
                     break;
                 case 'legal':
