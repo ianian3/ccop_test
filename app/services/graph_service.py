@@ -57,6 +57,14 @@ class GraphService:
         
         # 우선순위 기반 분류
         
+        # 0. 이벤트 (Dynamic Ontology)
+        if 'event_type' in props or 'event_id' in props:
+            return 'vt_event'
+
+        # 0.1 페르소나
+        if 'persona_type' in props or 'persona_id' in props:
+            return 'vt_persona'
+
         # 1. IP 주소 (가장 구체적)
         if 'ip' in props or 'ip_addr' in props or 'ipaddr' in props:
             return 'vt_ip'
@@ -112,33 +120,24 @@ class GraphService:
 
     @staticmethod
     def list_graphs():
-        """모든 그래프 목록 조회"""
+        """모든 그래프 목록 조회 (성능 최적화: 카운트 제외)"""
         conn, cur = GraphService.get_db_connection()
         if not conn: return []
         try:
             # AgensGraph에서 그래프 목록 조회
             cur.execute("""
-                SELECT nspname as graph_name
-                FROM pg_catalog.pg_namespace n
-                JOIN ag_catalog.ag_graph g ON n.oid = g.graphid
-                ORDER BY nspname
+                SELECT graphname
+                FROM pg_catalog.ag_graph
+                ORDER BY graphname;
             """)
             graphs = []
             for row in cur.fetchall():
                 graph_name = row[0]
-                # 각 그래프의 노드 수 조회
-                try:
-                    cur.execute(f"""
-                        SELECT COUNT(*) 
-                        FROM "{graph_name}"."ag_vertex"
-                    """)
-                    node_count = cur.fetchone()[0]
-                except:
-                    node_count = 0
-                
+                # 외부 DB 연결 시 COUNT(*)는 매우 느리므로 0으로 반환하거나 생략
+                # 필요시 별도 API로 상세 정보 조회하도록 변경 권장
                 graphs.append({
                     "name": graph_name,
-                    "node_count": node_count
+                    "node_count": 0  # 성능을 위해 0으로 고정
                 })
             return graphs
         except Exception as e:
@@ -166,7 +165,14 @@ class GraphService:
             cur.execute("CREATE VLABEL IF NOT EXISTS vt_flnm;")
             cur.execute("CREATE VLABEL IF NOT EXISTS vt_id;")
             cur.execute("CREATE VLABEL IF NOT EXISTS vt_atm;")
+            cur.execute("CREATE VLABEL IF NOT EXISTS vt_event;")
+            cur.execute("CREATE VLABEL IF NOT EXISTS vt_persona;")
+            
             cur.execute("CREATE ELABEL IF NOT EXISTS related_to;")
+            cur.execute("CREATE ELABEL IF NOT EXISTS uses_persona;")
+            cur.execute("CREATE ELABEL IF NOT EXISTS participated_in;")
+            cur.execute("CREATE ELABEL IF NOT EXISTS event_involved;")
+            cur.execute("CREATE ELABEL IF NOT EXISTS supported_by;")
             cur.execute("CREATE ELABEL IF NOT EXISTS used_account;")
             cur.execute("CREATE ELABEL IF NOT EXISTS used_phone;")
             cur.execute("CREATE ELABEL IF NOT EXISTS digital_trace;")
@@ -305,14 +311,29 @@ class GraphService:
                                     })
                                     node_ids.add(tgt_id)
                                 
-                                # 엣지 추가
+                                # 엣지 추가 - 라벨 결정
+                                # ag_edge 테이블인 경우 properties에서 실제 관계 타입 추출
+                                edge_label = edge_table
+                                if edge_table == 'ag_edge':
+                                    # 속성에서 실제 관계 타입 찾기
+                                    edge_label = (
+                                        edge_props.get('semantic_relation') or 
+                                        edge_props.get('domain_meaning') or
+                                        edge_props.get('edge_type') or
+                                        edge_props.get('type') or
+                                        'related_to'  # 기본값
+                                    )
+                                    # 대문자를 소문자로 변환 (USED_ACCOUNT -> used_account)
+                                    if isinstance(edge_label, str):
+                                        edge_label = edge_label.lower()
+                                
                                 elements.append({
                                     "group": "edges",
                                     "data": {
                                         "id": edge_id,
                                         "source": src_id,
                                         "target": tgt_id,
-                                        "label": edge_table,
+                                        "label": edge_label,
                                         "props": edge_props
                                     }
                                 })
@@ -338,19 +359,36 @@ class GraphService:
         
         elements = []
         try:
-            # 1. 엣지 테이블 목록 동적 조회
+            # 1. 엣지 테이블 목록 동적 조회 - 모든 엣지 테이블 포함
             cur.execute(f"""
                 SELECT table_name 
                 FROM information_schema.tables 
                 WHERE table_schema = '{graph_path}' 
-                  AND (table_name LIKE 'eg_%' OR table_name IN ('call', 'used_account', 'digital_trace', 'used_phone'))
+                  AND table_name NOT IN ('ag_vertex')
+                  AND table_name NOT LIKE 'vt_%'
             """)
             edge_tables = [r[0] for r in cur.fetchall()]
+            
+            # 기본 엣지 테이블 추가 (4-Layer 모델 기반)
+            core_edge_tables = [
+                'involves', 'owns', 'has_account', 'transferred_to', 
+                'contacted', 'communicated_with', 'accessed', 'linked_to',
+                'performed', 'from_account', 'to_account', 'caller', 'callee',
+                'uses_persona', 'participated_in', 'event_involved', 'supported_by'
+            ]
+            for t in core_edge_tables:
+                if t not in edge_tables:
+                    edge_tables.append(t)
+            
+            print(f"[expand_node] 조회할 엣지 테이블: {edge_tables}")
+            
+            # 중복 엣지 방지를 위한 ID 추적
+            added_edge_ids = set()
             
             # 2. 각 엣지 테이블에서 연결된 엣지 조회
             for edge_table in edge_tables:
                 try:
-                    # AgensGraph는 ag_vertex 베이스 테이블에 모든 노드가 있음
+                    # AgensGraph graphid 형식 처리
                     edge_query = f"""
                     SELECT e.id, e.start, e."end", e.properties, 
                            vs.id as src_id, vs.properties as src_props,
@@ -358,13 +396,18 @@ class GraphService:
                     FROM "{graph_path}"."{edge_table}" e
                     LEFT JOIN "{graph_path}"."ag_vertex" vs ON e.start = vs.id
                     LEFT JOIN "{graph_path}"."ag_vertex" vt ON e."end" = vt.id
-                    WHERE e.start = '{node_id}' OR e."end" = '{node_id}'
+                    WHERE e.start::text = '{node_id}' OR e."end"::text = '{node_id}'
                     LIMIT 50
                     """
                     
                     cur.execute(edge_query)
                     for r in cur.fetchall():
                         edge_id = str(r[0])
+                        
+                        # 이미 추가된 엣지면 건너뜀
+                        if edge_id in added_edge_ids:
+                            continue
+                            
                         start_id = str(r[1])
                         end_id = str(r[2])
                         edge_props = r[3] if isinstance(r[3], dict) else {}
@@ -391,20 +434,33 @@ class GraphService:
                                 "data": {"id": tgt_id, "label": tgt_label, "props": tgt_props}
                             })
                         
-                        # 엣지 추가
+                        # 엣지 추가 - 라벨 결정 로직 적용
+                        edge_label = edge_table
+                        if edge_table == 'ag_edge':
+                            edge_label = (
+                                edge_props.get('semantic_relation') or 
+                                edge_props.get('domain_meaning') or
+                                edge_props.get('edge_type') or
+                                edge_props.get('type') or
+                                'related_to'
+                            )
+                            if isinstance(edge_label, str):
+                                edge_label = edge_label.lower()
+
                         elements.append({
                             "group": "edges",
                             "data": {
                                 "id": edge_id,
                                 "source": start_id,
                                 "target": end_id,
-                                "label": edge_table,  # 엣지 타입은 테이블명
+                                "label": edge_label,
                                 "props": edge_props
                             }
                         })
+                        added_edge_ids.add(edge_id)
                 
                 except Exception as table_error:
-                    print(f"Expand Error in table {edge_table}: {table_error}")
+                    # 테이블이 없는 경우는 무시 (동적으로 추가된 테이블 목록이므로)
                     continue
             
             return elements
@@ -472,6 +528,344 @@ class GraphService:
         except Exception as e:
             print(f"Path Error: {e}")
             return False, []
+        finally:
+            conn.close()
+
+    @staticmethod
+    def multi_hop_expand(node_id, depth, graph_path, max_nodes=200):
+        """N-hop 다단계 확장 (Cypher 변수 길이 경로)"""
+        conn, cur = GraphService.get_db_connection()
+        if not conn: return {'nodes': [], 'edges': [], 'stats': {}}
+        
+        depth = min(int(depth), 5)  # 최대 5-hop
+        
+        try:
+            cur.execute(f"SET graph_path = {graph_path};")
+            
+            elements_nodes = []
+            elements_edges = []
+            node_set = set()
+            edge_set = set()
+            
+            # 시작 노드 정보
+            cur.execute(f"MATCH (n) WHERE id(n) = {node_id} RETURN id(n), labels(n), properties(n)")
+            start = cur.fetchone()
+            if start:
+                sid = str(start[0])
+                node_set.add(sid)
+                elements_nodes.append({
+                    "group": "nodes",
+                    "data": {"id": sid, "label": start[1][0] if isinstance(start[1], list) else str(start[1]),
+                             "props": GraphService.safe_props(start[2]), "hop": 0}
+                })
+            
+            # 단일 hop 단계 (exact depth) 확장으로 변경
+            try:
+                if depth == 1:
+                    query = f"""
+                        MATCH (start)-[r]-(end_node)
+                        WHERE id(start) = {node_id}
+                        RETURN id(end_node), labels(end_node), properties(end_node),
+                               id(r), type(r), properties(r), id(start) AS prev_id
+                        LIMIT {max_nodes}
+                    """
+                else:
+                    # 중간 경로는 무시하고 가장 마지막 단계의 노드(end_node)와 그 직전 엣지(r)만 반환
+                    prev_hops = depth - 1
+                    query = f"""
+                        MATCH (start)-[*{prev_hops}..{prev_hops}]-(prev)-[r]-(end_node)
+                        WHERE id(start) = {node_id}
+                        RETURN id(end_node), labels(end_node), properties(end_node),
+                               id(r), type(r), properties(r), id(prev) AS prev_id
+                        LIMIT {max_nodes}
+                    """
+                
+                cur.execute(query)
+                exact_hop_results = cur.fetchall()
+                
+                for r_row in exact_hop_results:
+                    nid = str(r_row[0])
+                    n_label = r_row[1][0] if isinstance(r_row[1], list) else str(r_row[1])
+                    n_props = GraphService.safe_props(r_row[2])
+                    
+                    eid = str(r_row[3])
+                    e_label_raw = str(r_row[4])
+                    e_props = GraphService.safe_props(r_row[5])
+                    prev_id = str(r_row[6])
+                    
+                    # 노드 추가
+                    if nid not in node_set:
+                        node_set.add(nid)
+                        elements_nodes.append({
+                            "group": "nodes",
+                            "data": {
+                                "id": nid,
+                                "label": n_label,
+                                "props": n_props,
+                                "hop": depth
+                            }
+                        })
+                    
+                    # 직전 노드(prev)도 현재 elements_nodes에 없다면 시각화를 위해 최소한의 형태로 추가
+                    # (화면에 둥둥 떠다니는 걸 방지하려면 연결될 부모 노드가 필요함.
+                    # 단, 중간 과정이 전부 나오는게 싫다면 이 prev 노드들은 투명하게 처리하거나
+                    # 프론트엔드에서 레이아웃만 맞추는 용도로 쓸 수 있지만, 선행 노드가 화면에 없으면 Cytoscape에서 엣지가 그려지지 않음)
+                    if prev_id not in node_set and prev_id != sid:
+                        node_set.add(prev_id)
+                        elements_nodes.append({
+                            "group": "nodes",
+                            "data": {
+                                "id": prev_id,
+                                "label": "Unknown", # 최소 정보만
+                                "props": {},
+                                "hop": depth - 1,
+                                "hidden_intermediate": True # 프론트에서 숨김 처리 가능하도록 플래그
+                            }
+                        })
+                        
+                    # 엣지 추가
+                    if eid not in edge_set:
+                        edge_set.add(eid)
+                        
+                        # 엣지 라벨 재확인 (ag_edge일 경우 실제 타입 추출)
+                        edge_label = e_label_raw
+                        if edge_label == 'ag_edge' or not edge_label:
+                            edge_label = (
+                                e_props.get('semantic_relation') or 
+                                e_props.get('domain_meaning') or
+                                e_props.get('edge_type') or
+                                e_props.get('type') or
+                                'related_to'
+                            )
+                            if isinstance(edge_label, str):
+                                edge_label = edge_label.lower()
+                                
+                        elements_edges.append({
+                            "group": "edges",
+                            "data": {
+                                "id": eid,
+                                "source": prev_id,
+                                "target": nid,
+                                "label": edge_label,
+                                "props": e_props
+                            }
+                        })
+                            
+            except Exception as hop_err:
+                print(f"Exact Hop {depth} error: {hop_err}")
+            
+            stats = {
+                'total_nodes': len(elements_nodes),
+                'total_edges': len(elements_edges),
+                'depth': depth,
+                'start_node': node_id
+            }
+            
+            return {
+                'nodes': elements_nodes,
+                'edges': elements_edges,
+                'stats': stats
+            }
+        except Exception as e:
+            print(f"Multi-hop Error: {e}")
+            return {'nodes': [], 'edges': [], 'stats': {'error': str(e)}}
+        finally:
+            conn.close()
+
+    @staticmethod
+    def find_accomplice_network(node_id, graph_path):
+        """공범 네트워크 탐색 — 선택 노드에서 accomplice_of 관계 + 공유 자원 추적"""
+        conn, cur = GraphService.get_db_connection()
+        if not conn: return {'nodes': [], 'edges': [], 'shared': []}
+        
+        try:
+            cur.execute(f"SET graph_path = {graph_path};")
+            
+            elements_nodes = []
+            elements_edges = []
+            shared_resources = []
+            node_set = set()
+            edge_set = set()
+            
+            # 1. 시작 Person 노드
+            cur.execute(f"MATCH (p) WHERE id(p) = {node_id} RETURN id(p), labels(p), properties(p)")
+            start = cur.fetchone()
+            if not start:
+                return {'nodes': [], 'edges': [], 'shared': [], 'error': 'Node not found'}
+            
+            sid = str(start[0])
+            node_set.add(sid)
+            elements_nodes.append({
+                "group": "nodes",
+                "data": {"id": sid, "label": start[1][0] if isinstance(start[1], list) else str(start[1]),
+                         "props": GraphService.safe_props(start[2]), "role": "center"}
+            })
+            
+            # 2. accomplice_of 관계로 연결된 인물들 (2-hop)
+            try:
+                cur.execute(f"""
+                    MATCH (p1)-[r:accomplice_of]-(p2)
+                    WHERE id(p1) = {node_id}
+                    RETURN id(p2), labels(p2), properties(p2), id(r), properties(r)
+                """)
+                for r in cur.fetchall():
+                    pid = str(r[0])
+                    if pid not in node_set:
+                        node_set.add(pid)
+                        elements_nodes.append({
+                            "group": "nodes",
+                            "data": {"id": pid, "label": r[1][0] if isinstance(r[1], list) else str(r[1]),
+                                     "props": GraphService.safe_props(r[2]), "role": "accomplice"}
+                        })
+                    eid = str(r[3])
+                    if eid not in edge_set:
+                        edge_set.add(eid)
+                        eprops = GraphService.safe_props(r[4])
+                        elements_edges.append({
+                            "group": "edges",
+                            "data": {"id": eid, "source": sid, "target": pid,
+                                     "label": "accomplice_of", "props": eprops}
+                        })
+            except Exception as e:
+                print(f"Accomplice query error: {e}")
+            
+            # 3. 공유 자원 (계좌/전화) 추적
+            for rel, res_label, prop_name in [
+                ('has_account', 'vt_bacnt', 'actno'),
+                ('owns_phone', 'vt_telno', 'telno'),
+                ('used_ip', 'vt_ip', 'ip_addr')
+            ]:
+                try:
+                    cur.execute(f"""
+                        MATCH (p)-[r:{rel}]->(res:{res_label})
+                        WHERE id(p) = {node_id}
+                        RETURN id(res), labels(res), properties(res), id(r)
+                    """)
+                    for r in cur.fetchall():
+                        rid = str(r[0])
+                        if rid not in node_set:
+                            node_set.add(rid)
+                            rprops = GraphService.safe_props(r[2])
+                            elements_nodes.append({
+                                "group": "nodes",
+                                "data": {"id": rid, "label": r[1][0] if isinstance(r[1], list) else str(r[1]),
+                                         "props": rprops, "role": "resource"}
+                            })
+                            shared_resources.append({
+                                'type': rel,
+                                'value': rprops.get(prop_name, ''),
+                                'id': rid
+                            })
+                        eid_r = str(r[3])
+                        if eid_r not in edge_set:
+                            edge_set.add(eid_r)
+                            elements_edges.append({
+                                "group": "edges",
+                                "data": {"id": eid_r, "source": sid, "target": rid,
+                                         "label": rel, "props": {}}
+                            })
+                except:
+                    continue
+            
+            # 4. 관련 사건도 추가
+            try:
+                cur.execute(f"""
+                    MATCH (c:vt_case)-[:involves]->(p)
+                    WHERE id(p) = {node_id}
+                    RETURN id(c), labels(c), properties(c)
+                """)
+                for r in cur.fetchall():
+                    cid = str(r[0])
+                    if cid not in node_set:
+                        node_set.add(cid)
+                        elements_nodes.append({
+                            "group": "nodes",
+                            "data": {"id": cid, "label": r[1][0] if isinstance(r[1], list) else str(r[1]),
+                                     "props": GraphService.safe_props(r[2]), "role": "case"}
+                        })
+                        elements_edges.append({
+                            "group": "edges",
+                            "data": {"id": f"inv_{cid}_{sid}", "source": cid, "target": sid,
+                                     "label": "involves", "props": {}}
+                        })
+            except:
+                pass
+            
+            return {
+                'nodes': elements_nodes,
+                'edges': elements_edges,
+                'shared': shared_resources,
+                'stats': {
+                    'accomplices': sum(1 for n in elements_nodes if n['data'].get('role') == 'accomplice'),
+                    'cases': sum(1 for n in elements_nodes if n['data'].get('role') == 'case'),
+                    'resources': len(shared_resources)
+                }
+            }
+        except Exception as e:
+            print(f"Accomplice Network Error: {e}")
+            return {'nodes': [], 'edges': [], 'shared': [], 'error': str(e)}
+        finally:
+            conn.close()
+
+    @staticmethod
+    def find_hub_nodes(graph_path, top_n=10):
+        """허브 노드 탐지 (연결 수 상위 N개)"""
+        conn, cur = GraphService.get_db_connection()
+        if not conn: return []
+        
+        try:
+            cur.execute(f"SET graph_path = {graph_path};")
+            
+            hubs = []
+            # Person 허브
+            try:
+                cur.execute(f"""
+                    MATCH (p:vt_psn)
+                    WHERE p.name <> '불상' AND p.name <> '미상'
+                    RETURN id(p), p.name,
+                           size((p)<-[:involves]-()) AS cases,
+                           size((p)-[:has_account]->()) AS accounts,
+                           size((p)-[:owns_phone]->()) AS phones,
+                           size((p)-[:accomplice_of]-()) AS accomplices
+                    ORDER BY cases + accounts + phones + accomplices DESC
+                    LIMIT {top_n}
+                """)
+                for r in cur.fetchall():
+                    hubs.append({
+                        'id': str(r[0]), 'name': r[1], 'type': 'person',
+                        'cases': r[2], 'accounts': r[3], 'phones': r[4],
+                        'accomplices': r[5],
+                        'total': r[2] + r[3] + r[4] + r[5]
+                    })
+            except Exception as e:
+                print(f"Person hub error: {e}")
+            
+            # Account 허브
+            try:
+                cur.execute(f"""
+                    MATCH (a:vt_bacnt)
+                    RETURN id(a), a.actno,
+                           size((a)<-[:eg_used_account]-()) AS cases,
+                           size((a)<-[:has_account]-()) AS persons
+                    ORDER BY cases + persons DESC
+                    LIMIT {top_n}
+                """)
+                for r in cur.fetchall():
+                    hubs.append({
+                        'id': str(r[0]), 'name': r[1], 'type': 'account',
+                        'cases': r[2], 'persons': r[3],
+                        'total': r[2] + r[3]
+                    })
+            except Exception as e:
+                print(f"Account hub error: {e}")
+            
+            # 전체 정렬
+            hubs.sort(key=lambda x: x.get('total', 0), reverse=True)
+            return hubs[:top_n]
+            
+        except Exception as e:
+            print(f"Hub Error: {e}")
+            return []
         finally:
             conn.close()
 

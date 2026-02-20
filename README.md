@@ -29,26 +29,49 @@ AgensGraph 기반 사기 사건 분석 및 시각화 플랫폼입니다. CSV 데
 ```
 coop_v1.0/
 ├── app/
-│   ├── __init__.py           # Flask 앱 초기화
-│   ├── routes.py             # API 엔드포인트
-│   ├── database.py           # DB 연결 관리
+│   ├── __init__.py              # Flask 앱 팩토리 패턴
+│   ├── routes.py                # 웹 UI 라우트
+│   ├── routes_api.py            # REST API v1 엔드포인트
+│   ├── routes_admin.py          # 관리자 라우트
+│   ├── database.py              # DB 연결 관리
 │   ├── core/
-│   │   └── cypher_service.py # Cypher 쿼리 실행 엔진
+│   │   └── cypher_service.py    # Apache AGE Cypher 실행기
+│   ├── middleware/
+│   │   └── api_auth.py          # API 키 인증 미들웨어
+│   ├── models/
+│   │   └── api_key.py           # API 키 관리 모델
 │   ├── services/
-│   │   ├── ai_service.py     # OpenAI GPT 통합
-│   │   ├── graph_service.py  # 그래프 검색/확장/경로
-│   │   ├── etl_service.py    # CSV 데이터 ETL
-│   │   ├── ontology_service.py # 노드 타입 분류 로직
-│   │   └── subgraph_service.py # 서브그래프 관리
-│   ├── static/
-│   │   └── images/           # 노드 아이콘 (person, phone, account 등)
+│   │   ├── ai_service.py        # OpenAI GPT 통합
+│   │   ├── graph_service.py     # 그래프 검색/확장/경로
+│   │   ├── etl_service.py       # CSV 데이터 ETL
+│   │   ├── ontology_service.py  # KICS 기반 4-Layer 온톨로지
+│   │   ├── pattern_library.py   # 5대 사이버 범죄 패턴
+│   │   ├── pattern_analyzer.py  # 범죄 패턴 분석 엔진
+│   │   ├── evidence_analyzer.py # 증거 완성도 분석
+│   │   ├── legal_rag_service.py # 법률 RAG (ChromaDB)
+│   │   ├── schema_mapper.py     # LLM 스키마 자동 매핑
+│   │   ├── relationship_inferencer.py # 관계 추론 서비스
+│   │   ├── graph_context_extractor.py # 그래프 맥락 추출
+│   │   └── subgraph_service.py  # 서브그래프 관리
 │   └── templates/
-│       └── index.html        # 웹 UI (Cytoscape.js)
-├── config.py                 # DB 및 API 설정
-├── run.py                    # Flask 서버 실행
-├── NODE_LABELS_GUIDE.md      # 노드 타입 매핑 가이드
-└── debug_*.py                # 디버깅 유틸리티 스크립트
+│       └── index.html           # 웹 UI (Cytoscape.js, 다크 모드)
+├── docs/                         # 기술 문서
+│   ├── ONTOLOGY_GUIDE.md        # KICS 온톨로지 가이드
+│   ├── KICS_ONTOLOGY_MAPPING.md # KICS 매핑 정의서
+│   ├── KICS_CYBER_CRIME_STANDARD.md # 범죄 유형별 표준
+│   ├── API_GUIDE.md             # API 사용 가이드
+│   └── ...
+├── scripts/
+│   └── init.sql                 # RDB + GDB + Vector 통합 스키마
+├── tests/
+│   └── data/                    # 테스트용 CSV 데이터
+├── config.py                    # 환경 설정
+├── run.py                       # Flask 서버 실행
+├── docker-compose.yml           # Docker 컨테이너 설정
+├── Dockerfile                   # 앱 컨테이너 빌드
+└── requirements.txt             # Python 의존성
 ```
+
 
 ## 📦 설치 및 실행
 

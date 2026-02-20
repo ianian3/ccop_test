@@ -51,17 +51,30 @@ class AIService:
    - ATM - vt_atm
      속성: atm, atm_id (ATM ID)
 
-=== 의미론적 관계 (Semantic Relationships) ===
+=== 의미론적 관계 (Semantic Relationships) - 4계층 모델 ===
 
-- used_account: 사건 → 계좌 (계좌 사용)
-- digital_trace: 사건 → 디지털증거 (디지털 흔적)
-- used_phone: 사건 → 전화 (전화 사용)
-- related_to: 일반 관계
+[L1 → L2] Case → Actor
+- involves: 사건 → 인물/조직 (관련자)
 
-=== 범죄 패턴 (Crime Patterns) ===
+[L2 → L4] Actor → Evidence (소유관계)
+- owns: 인물 → 전화번호 (소유)
+- has_account: 인물 → 계좌 (계좌보유)
 
-몸캠피싱: (vt_flnm)-[:digital_trace]->(vt_site)-[:related_to]->(vt_file)
-보이스피싱: (vt_flnm)-[:used_phone]->(vt_telno)-[:used_account]->(vt_bacnt)
+[L4 ↔ L4] Evidence P2P (핵심 분석 대상)
+- transferred_to: 계좌 → 계좌 (자금 이체)
+- contacted: 전화 → 전화 (통화)
+- communicated_with: IP → IP (통신)
+- accessed: IP → 사이트 (접속)
+- linked_to: 전화 → 계좌 (연결)
+
+[참고] Case→Evidence 직접 연결 금지
+- ❌ used_account, used_phone, digital_trace 등은 4계층 모델에서 제거됨
+- ✅ Case는 반드시 Actor(인물)를 통해서만 Evidence에 연결
+
+=== 범죄 패턴 (Crime Patterns) - 4계층 기반 ===
+
+몸캠피싱: (vt_case)-[:involves]->(suspect)-[:owns]->(vt_telno), (vt_ip)-[:accessed]->(vt_site)
+보이스피싱: (vt_case)-[:involves]->(suspect)-[:owns]->(vt_telno)-[:contacted]->(victim_phone), (account1)-[:transferred_to]->(account2)
 
 === 개념 매핑 (Concept Mapping) ===
 
@@ -72,9 +85,36 @@ class AIService:
 "IP", "IP주소" → (n:vt_ip)
 "전화", "전화번호" → (n:vt_telno)
 "파일" → (n:vt_file)
-"사건" → (n:vt_flnm)
+"사건" → (n:vt_flnm) OR (n:vt_case)
 "몸캠피싱" → WHERE n.crime_type CONTAINS '몸캠'
 "보이스피싱" → WHERE n.crime_type CONTAINS '보이스'
+
+=== [중요] 표준 코드 매핑 (Standard Codes) ===
+자연어 질문을 노드 속성으로 변환 시, 가능한 경우 표준 코드를 사용하세요.
+
+1. 은행 (Bank) -> bnk_cd
+   - 국민은행, KB -> '004'
+   - 신한은행, 신한 -> '088'
+   - 우리은행, 우리 -> '020'
+   - 하나은행, 하나 -> '081'
+   - 농협은행, 농협 -> '011'
+   - 기업은행, IBK -> '003'
+   - 산업은행, KDB -> '002'
+   - 카카오뱅크, 카카오 -> '090'
+   - 토스뱅크, 토스 -> '092'
+   * 조회 예시: WHERE n.bnk_cd = '004' (OR n.bank CONTAINS '국민')
+
+2. 통신사 (Carrier) -> carr_cd
+   - SKT, SK -> '01'
+   - KT, Olleh -> '02'
+   - LGU+, LG -> '03'
+   - 알뜰폰, MVNO -> '04'
+   * 조회 예시: WHERE n.carr_cd = '01' (OR n.carrier CONTAINS 'SKT')
+
+3. 인물 역할 (Role) -> role_cd
+   - 피의자 -> '01'
+   - 피해자 -> '02'
+   - 참고인 -> '03'
 
 === 쿼리 규칙 (Query Rules) ===
 
@@ -86,11 +126,11 @@ class AIService:
 6. 기본 제한: LIMIT 30
 7. PostgreSQL 캐스팅 사용 금지 (::text, ::graphid 등)
 
-[Examples]
-✅ Good: WHERE v.flnm CONTAINS '2019-001' OR v.bacnt CONTAINS '2019-001'
-❌ Bad:  WHERE v.flnm CONTAINS "2019-001"
-✅ Good: MATCH (n:vt_bacnt) RETURN id(n), labels(n), properties(n) LIMIT 30
-✅ Good: MATCH (case:vt_flnm)-[:used_account]->(account:vt_bacnt) RETURN case, account
+[Examples - 4계층 기반]
+✅ Good: MATCH (case:vt_case)-[:involves]->(p:vt_id)-[:has_account]->(a:vt_bacnt) RETURN case, p, a
+✅ Good: MATCH (a1:vt_bacnt)-[:transferred_to]->(a2:vt_bacnt) RETURN a1, a2
+✅ Good: MATCH (p1:vt_telno)-[:contacted]->(p2:vt_telno) RETURN p1, p2
+❌ Bad:  MATCH (c:vt_case)-[:used_account]->(a:vt_bacnt) (4계층 위반)
 
 질문: "{question}"
 
@@ -157,19 +197,14 @@ Cypher 쿼리:
             return question.split()[:4]
 
     @staticmethod
-    def generate_rag_report(elements, context_texts):
+    def generate_rag_report(question, context_texts, semantic_analysis=None):
         """그래프 조회 결과 기반 수사 보고서 생성"""
         client = AIService.get_client()
         
-        # 온톨로지 분석 추가
+        # 온톨로지 분석 정보 추가
         ontology_info = ""
-        if elements:
-            try:
-                from app.services.ontology_service import SemanticAnalyzer
-                semantic_analysis = SemanticAnalyzer.analyze(elements, context_texts)
-                ontology_info = "\n\n[온톨로지 분석]\n" + semantic_analysis.get('summary', '')
-            except:
-                pass
+        if semantic_analysis:
+            ontology_info = "\n\n[온톨로지 분석]\n" + semantic_analysis.get('summary', '')
         
         # 컨텍스트 제한 (너무 길면 OpenAI 토큰 초과)
         safe_context = str(context_texts[:80]) + ontology_info 

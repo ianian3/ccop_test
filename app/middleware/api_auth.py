@@ -11,8 +11,8 @@ from datetime import datetime
 # 임시 메모리 저장소 (프로덕션에서는 데이터베이스 사용)
 API_KEYS_STORE = {
     # SHA-256 해시된 API 키 -> 파트너 정보
-    # 예시: hashlib.sha256(b"demo-key-12345").hexdigest()
-    "5c5e2a6f9c8b3d7e1f4a9b2c6d8e3f7a1b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e": {
+    # demo-key-12345 의 해시: 367fe8933ad8bba8f7ff02c047bcb5c00a4fff3ad6e82fef2bf4ee0c850d7c36
+    "367fe8933ad8bba8f7ff02c047bcb5c00a4fff3ad6e82fef2bf4ee0c850d7c36": {
         "partner_name": "demo_partner",
         "tier": "free",
         "rate_limit": 1000,  # requests per hour

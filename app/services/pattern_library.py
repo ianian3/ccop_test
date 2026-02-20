@@ -8,7 +8,7 @@ class CrimePattern:
     """범죄 패턴 정의 클래스"""
     
     def __init__(self, pattern_id, name, description, required_nodes, 
-                 required_edges, optional_nodes=None, scoring=None):
+                 required_edges, optional_nodes=None, scoring=None, cypher_query=None):
         self.pattern_id = pattern_id
         self.name = name
         self.description = description
@@ -20,6 +20,7 @@ class CrimePattern:
             "optional_bonus": 0.3,
             "min_threshold": 0.85
         }
+        self.cypher_query = cypher_query or ""
     
     def to_dict(self):
         """패턴을 딕셔너리로 변환"""
@@ -30,7 +31,8 @@ class CrimePattern:
             "required_nodes": self.required_nodes,
             "required_edges": self.required_edges,
             "optional_nodes": self.optional_nodes,
-            "scoring": self.scoring
+            "scoring": self.scoring,
+            "cypher_query": self.cypher_query
         }
 
 
@@ -102,7 +104,21 @@ class PatternLibrary:
                 "required_match": 0.7,
                 "optional_bonus": 0.3,
                 "min_threshold": 0.85
-            }
+            },
+            cypher_query="""
+MATCH (c:vt_flnm)-[:related_to]->(f:vt_file)
+MATCH (c)-[:digital_trace]->(s:vt_site)
+MATCH (c)-[:used_account]->(a:vt_bacnt)
+WHERE 
+  f.filename =~ '.*(avi|mp4|mov|wmv).*'
+  AND (s.site CONTAINS 'chat' OR s.site CONTAINS 'cam' OR s.site CONTAINS '만남')
+RETURN 
+  c.flnm AS case_id, 
+  s.site AS site_url, 
+  f.filename AS video_file, 
+  a.actno AS account_no,
+  '몸캠피싱 의심' AS pattern_name
+"""
         ),
         
         # 2. 보이스피싱 (Voice Phishing)
@@ -157,7 +173,16 @@ class PatternLibrary:
                 "required_match": 0.75,
                 "optional_bonus": 0.25,
                 "min_threshold": 0.80
-            }
+            },
+            cypher_query="""
+MATCH (c:vt_flnm)-[:used_phone]->(p:vt_telno)
+MATCH (c)-[:used_account]->(a:vt_bacnt)
+RETURN 
+  c.flnm AS case_id, 
+  p.telno AS phone_number,
+  a.actno AS account_no,
+  '보이스피싱 의심' AS pattern_name
+"""
         ),
         
         # 3. 전화금융사기 (Phone Financial Fraud)
@@ -218,7 +243,19 @@ class PatternLibrary:
                 "required_match": 0.7,
                 "optional_bonus": 0.3,
                 "min_threshold": 0.80
-            }
+            },
+            cypher_query="""
+MATCH (c:vt_flnm)-[:used_phone]->(p:vt_telno)
+MATCH (c)-[:used_account]->(a1:vt_bacnt)
+MATCH (c)-[:used_account]->(a2:vt_bacnt)
+WHERE a1 <> a2
+RETURN 
+  c.flnm AS case_id, 
+  p.telno AS phone_number,
+  a1.actno AS account1,
+  a2.actno AS account2,
+  '전화금융사기 의심' AS pattern_name
+"""
         ),
         
         # 4. 투자사기 (Investment Fraud)
@@ -273,7 +310,17 @@ class PatternLibrary:
                 "required_match": 0.7,
                 "optional_bonus": 0.3,
                 "min_threshold": 0.85
-            }
+            },
+            cypher_query="""
+MATCH (c:vt_flnm)-[:digital_trace]->(s:vt_site)
+MATCH (c)-[:used_account]->(a:vt_bacnt)
+WHERE s.site CONTAINS '투자' OR s.site CONTAINS 'invest' OR s.site CONTAINS 'coin'
+RETURN 
+  c.flnm AS case_id, 
+  s.site AS site_url,
+  a.actno AS account_no,
+  '투자사기 의심' AS pattern_name
+"""
         ),
         
         # 5. 스미싱 (Smishing)
@@ -330,7 +377,7 @@ class PatternLibrary:
                     "description": "사이트 IP"
                 },
                 "file": {
-                    "label": "vt_file",
+                "label": "vt_file",
                     "weight": 0.1,
                     "description": "악성 앱 파일"
                 }
@@ -339,7 +386,209 @@ class PatternLibrary:
                 "required_match": 0.7,
                 "optional_bonus": 0.3,
                 "min_threshold": 0.85
-            }
+            },
+            cypher_query="""
+MATCH (c:vt_flnm)-[:used_phone]->(p:vt_telno)
+MATCH (c)-[:digital_trace]->(s:vt_site)
+MATCH (c)-[:used_account]->(a:vt_bacnt)
+WHERE s.site CONTAINS 'http' OR s.site CONTAINS 'bit.ly' OR s.site CONTAINS 'apk'
+RETURN 
+  c.flnm AS case_id,
+  p.telno AS phone_number,
+  s.site AS malicious_url,
+  a.actno AS account_no,
+  '스미싱 의심' AS pattern_name
+"""
+        ),
+        
+        # ═══════════════════════════════════════════════════════════════════
+        # ACTION LAYER 기반 패턴 (KICS 확장)
+        # ═══════════════════════════════════════════════════════════════════
+        
+        # 6. 자금세탁 체인 (Money Laundering Chain)
+        "money_laundering_chain": CrimePattern(
+            pattern_id="money_laundering_v2",
+            name="자금세탁체인",
+            description="다단계 이체를 통한 자금세탁. 3단계 이상 계좌 이동 패턴을 탐지",
+            required_nodes={
+                "transfer1": {
+                    "label": "vt_transfer",
+                    "properties": {},
+                    "description": "첫 번째 이체"
+                },
+                "transfer2": {
+                    "label": "vt_transfer",
+                    "properties": {},
+                    "description": "두 번째 이체"
+                },
+                "transfer3": {
+                    "label": "vt_transfer",
+                    "properties": {},
+                    "description": "세 번째 이체"
+                },
+                "account1": {
+                    "label": "vt_bacnt",
+                    "properties": {},
+                    "description": "시작 계좌"
+                },
+                "account2": {
+                    "label": "vt_bacnt",
+                    "properties": {},
+                    "description": "중간 계좌"
+                },
+                "account3": {
+                    "label": "vt_bacnt",
+                    "properties": {},
+                    "description": "중간 계좌 2"
+                },
+                "account4": {
+                    "label": "vt_bacnt",
+                    "properties": {},
+                    "description": "최종 계좌"
+                }
+            },
+            required_edges=[
+                {"from": "transfer1", "to": "account1", "type": "from_account"},
+                {"from": "transfer1", "to": "account2", "type": "to_account"},
+                {"from": "transfer2", "to": "account2", "type": "from_account"},
+                {"from": "transfer2", "to": "account3", "type": "to_account"},
+                {"from": "transfer3", "to": "account3", "type": "from_account"},
+                {"from": "transfer3", "to": "account4", "type": "to_account"}
+            ],
+            optional_nodes={},
+            scoring={
+                "required_match": 0.8,
+                "optional_bonus": 0.2,
+                "min_threshold": 0.75
+            },
+            cypher_query="""
+MATCH path = (a1:vt_bacnt)<-[:from_account]-(t1:vt_transfer)-[:to_account]->(a2:vt_bacnt)
+             <-[:from_account]-(t2:vt_transfer)-[:to_account]->(a3:vt_bacnt)
+             <-[:from_account]-(t3:vt_transfer)-[:to_account]->(a4:vt_bacnt)
+WHERE t1.timestamp < t2.timestamp AND t2.timestamp < t3.timestamp
+RETURN 
+  a1.actno AS start_account,
+  a4.actno AS end_account,
+  t1.amount + t2.amount + t3.amount AS total_amount,
+  length(path) AS hop_count,
+  '자금세탁체인' AS pattern_name
+ORDER BY total_amount DESC
+LIMIT 20
+"""
+        ),
+        
+        # 7. 통화 네트워크 분석 (Call Network Analysis)
+        "call_network_analysis": CrimePattern(
+            pattern_id="call_network_v1",
+            name="통화네트워크",
+            description="통화 기록 기반 조직 분석. 중앙 허브 번호와 다수 번호 간 통화 패턴",
+            required_nodes={
+                "call": {
+                    "label": "vt_call",
+                    "properties": {},
+                    "description": "통화 기록"
+                },
+                "phone_hub": {
+                    "label": "vt_telno",
+                    "properties": {},
+                    "description": "허브 전화번호 (조직 총책)"
+                },
+                "phone_member": {
+                    "label": "vt_telno",
+                    "properties": {},
+                    "description": "조직원 번호"
+                }
+            },
+            required_edges=[
+                {"from": "call", "to": "phone_hub", "type": "caller"},
+                {"from": "call", "to": "phone_member", "type": "callee"}
+            ],
+            optional_nodes={
+                "case": {
+                    "label": "vt_case",
+                    "weight": 0.2,
+                    "description": "관련 사건"
+                }
+            },
+            scoring={
+                "required_match": 0.7,
+                "optional_bonus": 0.3,
+                "min_threshold": 0.80
+            },
+            cypher_query="""
+MATCH (p_hub:vt_telno)<-[:caller]-(call:vt_call)-[:callee]->(p_member:vt_telno)
+WITH p_hub, collect(DISTINCT p_member) AS members, count(call) AS call_count
+WHERE call_count >= 5
+RETURN 
+  p_hub.telno AS hub_phone,
+  size(members) AS member_count,
+  call_count,
+  [m IN members | m.telno][..5] AS sample_members,
+  '통화네트워크' AS pattern_name
+ORDER BY call_count DESC
+LIMIT 10
+"""
+        ),
+        
+        # 8. 대포통장 탐지 (Mule Account Detection)
+        "mule_account_detection": CrimePattern(
+            pattern_id="mule_account_v1",
+            name="대포통장",
+            description="다수 사건에 공통으로 등장하는 계좌 탐지. 3건 이상 연루 시 대포통장 의심",
+            required_nodes={
+                "case1": {
+                    "label": "vt_case",
+                    "properties": {},
+                    "description": "사건 1"
+                },
+                "case2": {
+                    "label": "vt_case",
+                    "properties": {},
+                    "description": "사건 2"
+                },
+                "case3": {
+                    "label": "vt_case",
+                    "properties": {},
+                    "description": "사건 3"
+                },
+                "account": {
+                    "label": "vt_bacnt",
+                    "properties": {},
+                    "description": "공통 계좌"
+                }
+            },
+            required_edges=[
+                {"from": "case1", "to": "account", "type": "used_account"},
+                {"from": "case2", "to": "account", "type": "used_account"},
+                {"from": "case3", "to": "account", "type": "used_account"}
+            ],
+            optional_nodes={
+                "transfer": {
+                    "label": "vt_transfer",
+                    "weight": 0.3,
+                    "description": "관련 이체"
+                }
+            },
+            scoring={
+                "required_match": 0.8,
+                "optional_bonus": 0.2,
+                "min_threshold": 0.80
+            },
+            cypher_query="""
+MATCH (c:vt_case)-[:used_account]->(a:vt_bacnt)
+WITH a, collect(DISTINCT c) AS cases
+WHERE size(cases) >= 3
+OPTIONAL MATCH (t:vt_transfer)-[:to_account]->(a)
+RETURN 
+  a.actno AS mule_account,
+  a.bank AS bank,
+  size(cases) AS case_count,
+  [c IN cases | c.flnm][..5] AS sample_cases,
+  count(t) AS transfer_count,
+  '대포통장' AS pattern_name
+ORDER BY case_count DESC
+LIMIT 10
+"""
         )
     }
     
@@ -365,3 +614,20 @@ class PatternLibrary:
             if pattern.name == name:
                 return pattern
         return None
+    
+    @classmethod
+    def get_action_based_patterns(cls):
+        """Action Layer 기반 패턴만 가져오기"""
+        action_patterns = ["money_laundering_chain", "call_network_analysis", "mule_account_detection"]
+        return {k: v for k, v in cls.PATTERNS.items() if k in action_patterns}
+    
+    @classmethod
+    def get_pattern_by_layer(cls, layer):
+        """Layer별 패턴 가져오기 (Case/Action)"""
+        if layer == "Action":
+            return cls.get_action_based_patterns()
+        else:
+            # Case 기반 패턴 (기존)
+            action_patterns = ["money_laundering_chain", "call_network_analysis", "mule_account_detection"]
+            return {k: v for k, v in cls.PATTERNS.items() if k not in action_patterns}
+

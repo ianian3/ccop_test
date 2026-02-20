@@ -17,7 +17,7 @@ services:
     networks:
       - ccop_network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-ccop}"]
+      test: [ "CMD-SHELL", "pg_isready -U ${DB_USER:-ccop}" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -41,6 +41,7 @@ services:
     volumes:
       - ./app:/app/app
       - ./logs:/app/logs
+      - ./chroma_data:/app/chroma_data # ChromaDB Vector Store (Legal RAG)
     depends_on:
       agensgraph:
         condition: service_healthy

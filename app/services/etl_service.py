@@ -5,6 +5,136 @@ import re
 from flask import current_app
 from app.services.subgraph_service import SubGraphService
 
+
+class StandardCodeMapper:
+    """
+    표준 코드 자동 매핑 클래스
+    - 은행 약어 → 금결원 코드
+    - 통신사 약어 → 표준 코드
+    - 해시 알고리즘 정규화
+    """
+    
+    # 은행 약어 → 금결원 코드 매핑
+    BANK_CODES = {
+        'KB': '004', '국민': '004', '국민은행': '004',
+        'SH': '088', '신한': '088', '신한은행': '088',
+        'WR': '020', '우리': '020', '우리은행': '020',
+        'HN': '081', '하나': '081', '하나은행': '081',
+        'NH': '011', '농협': '011', '농협은행': '011',
+        'IBK': '003', '기업': '003', '기업은행': '003',
+        'SC': '023', 'SC제일': '023', 'SC제일은행': '023',
+        'CITI': '027', '씨티': '027', '씨티은행': '027',
+        'KDB': '002', '산업': '002', '산업은행': '002',
+        'Sh': '007', '수협': '007', '수협은행': '007',
+        'DGB': '031', '대구': '031', '대구은행': '031',
+        'BNK': '032', '부산': '032', '부산은행': '032',
+        'KJB': '034', '광주': '034', '광주은행': '034',
+        'JJB': '035', '제주': '035', '제주은행': '035',
+        'JBB': '037', '전북': '037', '전북은행': '037',
+        'MG': '045', '새마을': '045', '새마을금고': '045',
+        'CU': '048', '신협': '048',
+        'POST': '071', '우체국': '071',
+        'KBANK': '089', '케이뱅크': '089', 'K뱅크': '089',
+        'KAKAO': '090', '카카오': '090', '카카오뱅크': '090',
+        'TOSS': '092', '토스': '092', '토스뱅크': '092',
+    }
+    
+    # 통신사 약어 → 표준 코드 매핑
+    CARRIER_CODES = {
+        'SKT': '01', 'SK텔레콤': '01', 'SK': '01',
+        'KT': '02', '케이티': '02',
+        'LGU': '03', 'LGU+': '03', 'LG유플러스': '03', 'LG': '03',
+        'MVNO': '04', '알뜰폰': '04', '가상이동통신': '04',
+    }
+    
+    # 해시 알고리즘 정규화
+    HASH_ALGORITHMS = {
+        'md5': 'MD5', 'MD5': 'MD5',
+        'sha1': 'SHA1', 'SHA1': 'SHA1', 'SHA-1': 'SHA1',
+        'sha256': 'SHA256', 'SHA256': 'SHA256', 'SHA-256': 'SHA256',
+        'sha384': 'SHA384', 'SHA384': 'SHA384', 'SHA-384': 'SHA384',
+        'sha512': 'SHA512', 'SHA512': 'SHA512', 'SHA-512': 'SHA512',
+    }
+    
+    @classmethod
+    def map_bank_code(cls, value: str) -> str:
+        """은행 약어/이름을 금결원 코드로 변환"""
+        if not value:
+            return None
+        value = str(value).strip()
+        # 이미 3자리 숫자 코드면 그대로 반환
+        if re.match(r'^\d{3}$', value):
+            return value
+        return cls.BANK_CODES.get(value)
+    
+    @classmethod
+    def map_carrier_code(cls, value: str) -> str:
+        """통신사 약어/이름을 표준 코드로 변환"""
+        if not value:
+            return None
+        value = str(value).strip()
+        # 이미 2자리 숫자 코드면 그대로 반환
+        if re.match(r'^\d{2}$', value):
+            return value
+        return cls.CARRIER_CODES.get(value)
+    
+    @classmethod
+    def normalize_hash_algorithm(cls, value: str) -> str:
+        """해시 알고리즘 이름 정규화"""
+        if not value:
+            return 'SHA256'  # 기본값
+        value = str(value).strip()
+        return cls.HASH_ALGORITHMS.get(value, 'SHA256')
+    
+    @classmethod
+    def enrich_account_node(cls, props: dict) -> dict:
+        """계좌 노드에 표준 은행코드 추가"""
+        # bank_cd, bank, bank_nm 등의 컬럼에서 은행 정보 추출
+        bank_value = props.get('bank_cd') or props.get('bank') or props.get('bank_nm') or props.get('은행')
+        if bank_value:
+            bnk_cd = cls.map_bank_code(bank_value)
+            if bnk_cd:
+                props['bnk_cd'] = bnk_cd
+        return props
+    
+    @classmethod
+    def enrich_phone_node(cls, props: dict) -> dict:
+        """전화 노드에 표준 통신사코드 추가"""
+        carrier_value = props.get('carrier') or props.get('carr') or props.get('통신사')
+        if carrier_value:
+            carr_cd = cls.map_carrier_code(carrier_value)
+            if carr_cd:
+                props['carr_cd'] = carr_cd
+        return props
+    
+    @classmethod
+    def enrich_file_node(cls, props: dict) -> dict:
+        """파일 노드에 해시 속성 정규화"""
+        # 해시 알고리즘 정규화
+        hash_alg = props.get('hash_alg') or props.get('hash_algorithm')
+        if hash_alg:
+            props['hash_alg'] = cls.normalize_hash_algorithm(hash_alg)
+        else:
+            props['hash_alg'] = 'SHA256'  # 기본값
+        
+        # 해시값이 없으면 evd_cd 추가
+        if not props.get('hash_val'):
+            props['evd_cd'] = 'E09'  # 디지털파일
+        
+        return props
+    
+    @classmethod
+    def auto_enrich(cls, label: str, props: dict) -> dict:
+        """라벨에 따라 자동으로 표준 코드 추가"""
+        if label == 'vt_bacnt':
+            return cls.enrich_account_node(props)
+        elif label == 'vt_telno':
+            return cls.enrich_phone_node(props)
+        elif label == 'vt_file':
+            return cls.enrich_file_node(props)
+        return props
+
+
 class ETLService:
     
     @staticmethod
@@ -107,7 +237,16 @@ class ETLService:
                 # 이번 row의 추가 속성만 먼저 수집
                 row_src_props = {}
                 row_tgt_props = {}
-                edge_props = {"source": "csv_import"}
+                
+                # 시간축(Temporal) & 출처(Provenance) 속성 자동 추가
+                from datetime import datetime
+                current_time = datetime.now().isoformat()
+                edge_props = {
+                    "source": "csv_import",
+                    "timestamp": current_time,
+                    "seq": i + 1,  # 행 순서 번호
+                    "created_at": current_time
+                }
                 
                 # 속성 이름 정제 함수
                 def sanitize_key(k):
@@ -129,9 +268,9 @@ class ETLService:
                 # Source 노드 처리 (중복 제거 - 속성 병합)
                 src_node_key = f"{src_key}_{src_val}"
                 if src_node_key not in node_data_map:
-                    # 새 노드 생성 시만 기본 속성 초기화
+                    # 새 노드 생성 시만 기본 속성 초기화 (created_at 포함)
                     node_data_map[src_node_key] = {
-                        "props": {src_key: src_val, "updated": "true"},
+                        "props": {src_key: src_val, "updated": "true", "created_at": current_time},
                         "manual_label": src_label
                     }
                 # 이번 row의 추가 속성 병합
@@ -140,9 +279,9 @@ class ETLService:
                 # Target 노드 처리 (중복 제거 - 속성 병합)
                 tgt_node_key = f"{tgt_key}_{tgt_val}"
                 if tgt_node_key not in node_data_map:
-                    # 새 노드 생성 시만 기본 속성 초기화
+                    # 새 노드 생성 시만 기본 속성 초기화 (created_at 포함)
                     node_data_map[tgt_node_key] = {
-                        "props": {tgt_key: tgt_val, "updated": "true"},
+                        "props": {tgt_key: tgt_val, "updated": "true", "created_at": current_time},
                         "manual_label": tgt_label
                     }
                 # 이번 row의 추가 속성 병합
@@ -214,6 +353,9 @@ class ETLService:
                     # 온톨로지 메타데이터 추가
                     from app.services.ontology_service import OntologyEnricher
                     enriched_props = OntologyEnricher.enrich_node(dynamic_label, node_props)
+                    
+                    # 표준 코드 자동 매핑 (StandardCodeMapper)
+                    enriched_props = StandardCodeMapper.auto_enrich(dynamic_label, enriched_props)
                     
                     label_stats[dynamic_label] = label_stats.get(dynamic_label, 0) + 1
                     
@@ -326,10 +468,66 @@ class ETLService:
                     continue
             
             conn.commit()
-            print(f"  [ETL] 엣지 {edges_created_count}개 CREATE 완료")
+            print(f"  [ETL] 기본 엣지 {edges_created_count}개 CREATE 완료")
 
-            # 커밋을 해야 다른 서비스에서 테이블을 볼 수 있음
-            conn.commit() 
+            # ============================
+            # [Step C] 추가 관계 처리 (additionalRelations)
+            # ============================
+            additional_rels = mapping.get('additionalRelations', [])
+            if additional_rels:
+                print(f"  [ETL] 추가 관계 {len(additional_rels)}개 처리 중...")
+                additional_edges_count = 0
+                
+                for add_rel in additional_rels:
+                    add_src_col = add_rel.get('sourceCol', '').strip()
+                    add_tgt_col = add_rel.get('targetCol', '').strip()
+                    add_src_key = add_rel.get('srcKey', 'id').strip()
+                    add_tgt_key = add_rel.get('tgtKey', 'id').strip()
+                    add_edge_type = ETLService._sanitize_label(add_rel.get('edgeType', 'RELATION'))
+                    
+                    if add_src_col not in df.columns or add_tgt_col not in df.columns:
+                        print(f"    ⚠️ 컬럼 누락: {add_src_col} 또는 {add_tgt_col}")
+                        continue
+                    
+                    for i, row in df.iterrows():
+                        add_src_val = str(row[add_src_col]).strip()
+                        add_tgt_val = str(row[add_tgt_col]).strip()
+                        
+                        if not add_src_val or not add_tgt_val:
+                            continue
+                        
+                        try:
+                            # 기존 노드 ID 조회 + 엣지 생성
+                            edge_create_query = f"""
+                            SELECT v1.id, v2.id 
+                            FROM "{target_graph}"."ag_vertex" v1,
+                                 "{target_graph}"."ag_vertex" v2
+                            WHERE v1.properties ->> '{add_src_key}' = '{add_src_val}'
+                              AND v2.properties ->> '{add_tgt_key}' = '{add_tgt_val}'
+                            LIMIT 1
+                            """
+                            cur.execute(edge_create_query)
+                            result = cur.fetchone()
+                            
+                            if result:
+                                src_id, tgt_id = result
+                                create_edge_q = f"""
+                                MATCH (v1), (v2)
+                                WHERE id(v1) = {src_id} AND id(v2) = {tgt_id}
+                                CREATE (v1)-[:{add_edge_type}]->(v2)
+                                """
+                                cur.execute(create_edge_q)
+                                additional_edges_count += 1
+                        except Exception as e:
+                            # 엣지 생성 실패 시 스킵
+                            continue
+                    
+                    print(f"    [{add_edge_type}] 엣지 처리 완료")
+                
+                edges_created_count += additional_edges_count
+                print(f"  [ETL] 추가 엣지 {additional_edges_count}개 CREATE 완료")
+            
+            conn.commit()
             print(f"▶ [ETL] 모든 작업 완료! (Node: {nodes_created_count}, Edge: {edges_created_count})")
             
             return True, nodes_created_count, edges_created_count, "적재 완료"
@@ -342,3 +540,314 @@ class ETLService:
         finally:
             if 'conn' in locals():
                 conn.close()
+    
+    # ═══════════════════════════════════════════════════════════════════
+    # KICS 확장 모델 - Action Layer ETL
+    # ═══════════════════════════════════════════════════════════════════
+    
+    @staticmethod
+    def import_with_schema_mapping(file, target_graph):
+        """
+        LLM 스키마 매핑 기반 자동 ETL
+        
+        1. CSV 분석 → LLM 스키마 매핑
+        2. Action 감지 → Action 노드 생성
+        3. Entity 노드 생성
+        4. 관계 생성
+        """
+        import pandas as pd
+        from app.services.schema_mapper import KICSSchemaMapper
+        
+        print("▶ [ETL] KICS 확장 모델 ETL 시작...")
+        
+        conn, cur = ETLService.get_db_connection()
+        if not conn:
+            return False, {"error": "DB 연결 실패"}
+        
+        try:
+            # 1. CSV 로드
+            df = pd.read_csv(file)
+            df = df.fillna('')
+            df.columns = df.columns.str.strip()
+            
+            print(f"   [CSV] {len(df)}행, 컬럼: {list(df.columns)}")
+            
+            # 2. LLM 스키마 매핑
+            sample_rows = df.head(5).to_dict('records')
+            mapping_result = KICSSchemaMapper.analyze_csv(
+                list(df.columns),
+                sample_rows
+            )
+            
+            if not mapping_result.get("success"):
+                return False, {"error": "스키마 매핑 실패"}
+            
+            mapping = mapping_result.get("mapping", {})
+            print(f"   [Mapping] Source: {mapping_result.get('source')}")
+            
+            # 3. Action 감지
+            detected_action = mapping.get("detected_action", {})
+            action_type = detected_action.get("type")
+            
+            results = {
+                "mapping": mapping,
+                "action_nodes": 0,
+                "entity_nodes": 0,
+                "relationships": 0
+            }
+            
+            cur.execute(f"SET graph_path = {target_graph};")
+            
+            # 4. Action 노드 생성 (Transfer/Call/Access/Message)
+            if action_type:
+                print(f"   [Action] {action_type} 감지됨")
+                action_count = ETLService._create_action_nodes(
+                    df, mapping, action_type, cur, target_graph
+                )
+                results["action_nodes"] = action_count
+            
+            # 5. Entity 노드 생성
+            entity_count = ETLService._create_entity_nodes_extended(
+                df, mapping, cur, target_graph
+            )
+            results["entity_nodes"] = entity_count
+            
+            # 6. 관계 생성
+            rel_count = ETLService._create_action_relationships(
+                df, mapping, cur, target_graph
+            )
+            results["relationships"] = rel_count
+            
+            conn.commit()
+            print(f"▶ [ETL] 완료! Action:{results['action_nodes']}, Entity:{results['entity_nodes']}, Rel:{results['relationships']}")
+            
+            return True, results
+            
+        except Exception as e:
+            print(f"!!! [ETL Error] {e}")
+            import traceback
+            traceback.print_exc()
+            return False, {"error": str(e)}
+        finally:
+            conn.close()
+    
+    @staticmethod
+    def _create_action_nodes(df, mapping, action_type, cur, target_graph):
+        """Action 노드 생성 (Transfer, Call, Access, Message)"""
+        
+        action_labels = {
+            "Transfer": "vt_transfer",
+            "Call": "vt_call",
+            "Access": "vt_access",
+            "Message": "vt_msg"
+        }
+        
+        label = action_labels.get(action_type, "vt_action")
+        detected = mapping.get("detected_action", {})
+        
+        count = 0
+        for idx, row in df.iterrows():
+            try:
+                # Action 속성 구성
+                props = {
+                    f"{action_type.lower()}_id": f"{action_type}_{idx}"
+                }
+                
+                # 금액 컬럼
+                if detected.get("amount_col") and detected["amount_col"] in row:
+                    props["amount"] = str(row[detected["amount_col"]])
+                
+                # 타임스탬프 컬럼
+                if detected.get("timestamp_col") and detected["timestamp_col"] in row:
+                    props["timestamp"] = str(row[detected["timestamp_col"]])
+                
+                # 추가 속성 (layer_mapping에서 Action으로 분류된 컬럼)
+                layer_mapping = mapping.get("layer_mapping", {})
+                for col, info in layer_mapping.items():
+                    if info.get("layer") == "Action" and info.get("role") == "property":
+                        if col in row and str(row[col]).strip():
+                            props[col] = str(row[col])
+                
+                # 노드 생성
+                props_list = [f"{k}: '{str(v).replace(chr(39), chr(39)+chr(39))}'" 
+                             for k, v in props.items() if v]
+                props_str = ", ".join(props_list)
+                
+                create_query = f"CREATE (:{label} {{{props_str}}})"
+                cur.execute(create_query)
+                count += 1
+                
+            except Exception as e:
+                print(f"   Action 노드 생성 오류: {e}")
+                continue
+        
+        print(f"   [Action] {label} 노드 {count}개 생성")
+        return count
+    
+    @staticmethod
+    def _create_entity_nodes_extended(df, mapping, cur, target_graph):
+        """Entity 노드 생성 (확장 모델)"""
+        from app.services.ontology_service import OntologyEnricher
+        
+        layer_mapping = mapping.get("layer_mapping", {})
+        
+        # Entity 컬럼만 추출 (Actor, Evidence)
+        entity_cols = [
+            (col, info) for col, info in layer_mapping.items()
+            if info.get("layer") in ["Actor", "Evidence"] 
+            and info.get("role") in ["source", "target"]
+            and info.get("label")
+        ]
+        
+        count = 0
+        seen = {}  # 중복 방지
+        
+        for col, info in entity_cols:
+            label = info.get("label")
+            entity_type = info.get("entity", "Unknown")
+            
+            for idx, row in df.iterrows():
+                value = str(row.get(col, "")).strip()
+                if not value:
+                    continue
+                
+                # 중복 체크
+                key = f"{label}:{value}"
+                if key in seen:
+                    continue
+                seen[key] = True
+                
+                try:
+                    # 기본 속성
+                    props = {col: value}
+                    
+                    # 온톨로지 메타데이터 추가
+                    enriched = OntologyEnricher.enrich_node(label, props)
+                    
+                    # 표준 코드 자동 매핑
+                    enriched = StandardCodeMapper.auto_enrich(label, enriched)
+                    
+                    props_list = [f"{k}: '{str(v).replace(chr(39), chr(39)+chr(39))}'" 
+                                 for k, v in enriched.items() if v]
+                    props_str = ", ".join(props_list)
+                    
+                    create_query = f"CREATE (:{label} {{{props_str}}})"
+                    cur.execute(create_query)
+                    count += 1
+                    
+                except Exception as e:
+                    continue
+        
+        print(f"   [Entity] 노드 {count}개 생성")
+        return count
+    
+    @staticmethod
+    def _create_action_relationships(df, mapping, cur, target_graph):
+        """Action-Entity 관계 생성 (온톨로지 기반)"""
+        
+        relationships = mapping.get("relationships", [])
+        layer_mapping = mapping.get("layer_mapping", {})
+        detected_action = mapping.get("detected_action", {})
+        action_type = detected_action.get("type")
+        
+        # KICS 엔티티 → 속성키 매핑
+        ENTITY_PROP_KEYS = {
+            "Case": "flnm",
+            "BankAccount": "actno",
+            "ContactInfo": "telno",
+            "Phone": "telno",
+            "NetworkTrace": "ip",
+            "WebTrace": "site_url",
+            "FileTrace": "filename",
+            "Person": "name",
+            "ATM": "atm_id",
+            "Unknown": None
+        }
+        
+        count = 0
+        
+        for idx, row in df.iterrows():
+            try:
+                action_id = f"{action_type}_{idx}" if action_type else None
+                
+                for rel in relationships:
+                    from_col = rel.get("from_col")
+                    to_col = rel.get("to_col")
+                    edge_type = rel.get("type")
+                    
+                    if not all([from_col, to_col, edge_type]):
+                        continue
+                    
+                    from_val = str(row.get(from_col, "")).strip()
+                    to_val = str(row.get(to_col, "")).strip()
+                    
+                    if not from_val or not to_val:
+                        continue
+                    
+                    from_info = layer_mapping.get(from_col, {})
+                    to_info = layer_mapping.get(to_col, {})
+                    
+                    # KICS 라벨 사용 (vt_bacnt, vt_telno 등)
+                    from_label = from_info.get("label", "")
+                    to_label = to_info.get("label", "")
+                    
+                    # 엔티티 타입에서 속성 키 결정
+                    from_entity = from_info.get("entity", "Unknown")
+                    to_entity = to_info.get("entity", "Unknown")
+                    
+                    from_prop_key = ENTITY_PROP_KEYS.get(from_entity) or from_col.lower().replace(" ", "_")
+                    to_prop_key = ENTITY_PROP_KEYS.get(to_entity) or to_col.lower().replace(" ", "_")
+                    
+                    if not from_label or not to_label:
+                        continue
+                    
+                    # SQL Escape
+                    from_val_esc = from_val.replace("'", "''")
+                    to_val_esc = to_val.replace("'", "''")
+                    
+                    # 엣지 생성 (MATCH + CREATE) - 속성 키 수정됨
+                    # ag_vertex 사용으로 더 안정적인 매칭
+                    edge_query = f"""
+                    MATCH (a:{from_label}), (b:{to_label})
+                    WHERE a.{from_prop_key} = '{from_val_esc}' AND b.{to_prop_key} = '{to_val_esc}'
+                    CREATE (a)-[:{edge_type}]->(b)
+                    """
+                    
+                    try:
+                        cur.execute(edge_query)
+                        count += 1
+                    except Exception as e:
+                        # Fallback: ag_vertex 직접 조회로 ID 기반 매칭
+                        try:
+                            find_src = f"""
+                            SELECT id FROM "{target_graph}"."ag_vertex"
+                            WHERE properties::text LIKE '%{from_val_esc}%'
+                            LIMIT 1
+                            """
+                            cur.execute(find_src)
+                            src_result = cur.fetchone()
+                            
+                            find_tgt = f"""
+                            SELECT id FROM "{target_graph}"."ag_vertex"
+                            WHERE properties::text LIKE '%{to_val_esc}%'
+                            LIMIT 1
+                            """
+                            cur.execute(find_tgt)
+                            tgt_result = cur.fetchone()
+                            
+                            if src_result and tgt_result:
+                                edge_fallback = f"""
+                                MATCH (v1), (v2)
+                                WHERE id(v1) = {src_result[0]} AND id(v2) = {tgt_result[0]}
+                                CREATE (v1)-[:{edge_type}]->(v2)
+                                """
+                                cur.execute(edge_fallback)
+                                count += 1
+                        except:
+                            pass
+                        
+            except Exception as e:
+                continue
+        
+        print(f"   [Relationship] 엣지 {count}개 생성")
+        return count

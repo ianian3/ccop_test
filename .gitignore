@@ -56,3 +56,7 @@ test_*.py
 dist/
 build/
 *.egg-info/
+
+# DBs & Coverage
+chroma_data/
+.coverage
