@@ -1,4 +1,6 @@
 """
+logger = logging.getLogger(__name__)
+
 LLM 기반 KICS 확장 스키마 자동 매핑 서비스
 
 CSV 데이터를 KICS 확장 모델 (4-Layer)에 자동 매핑
@@ -11,6 +13,7 @@ CSV 데이터를 KICS 확장 모델 (4-Layer)에 자동 매핑
 import json
 from openai import OpenAI
 from flask import current_app
+import logging
 
 
 class KICSSchemaMapper:
@@ -171,7 +174,7 @@ Case 관계: involves, involves_org, involves_device (Case는 Actor에만 연결
             }
             
         except Exception as e:
-            print(f"⚠️ LLM 스키마 매핑 오류: {e}")
+            logger.error(f"⚠️ LLM 스키마 매핑 오류: {e}")
             # Fallback: 규칙 기반 매핑
             return cls._fallback_mapping(columns, sample_rows)
     

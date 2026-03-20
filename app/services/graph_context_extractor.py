@@ -1,4 +1,6 @@
 """
+logger = logging.getLogger(__name__)
+
 그래프 맥락 추출 서비스
 
 사건 그래프에서 법률 자문에 필요한 맥락 정보를 추출
@@ -8,6 +10,7 @@ LegalGraphRAG에서 사용
 """
 
 from flask import current_app
+import logging
 
 
 class GraphContextExtractor:
@@ -113,7 +116,7 @@ class GraphContextExtractor:
         from app.services.pattern_analyzer import PatternAnalyzer
         from app.services.evidence_analyzer import EvidenceAnalyzer
         
-        print(f"▶ [GraphContext] 사건 '{case_id}' 맥락 추출 시작...")
+        logger.info(f"▶ [GraphContext] 사건 '{case_id}' 맥락 추출 시작...")
         
         # 기본 값 설정
         crime_type = "미확인"
@@ -129,7 +132,7 @@ class GraphContextExtractor:
                 crime_type = matched_pattern.get("pattern_name", "미확인")
                 pattern_confidence = matched_pattern.get("confidence", 0)
         except Exception as e:
-            print(f"   ⚠️ 패턴 분석 오류: {e}")
+            logger.error(f"   ⚠️ 패턴 분석 오류: {e}")
             pattern_result = {"matched_patterns": [], "confidence": 0}
         
         # 2. 서브그래프 추출
@@ -138,7 +141,7 @@ class GraphContextExtractor:
             if extracted:
                 subgraph = extracted
         except Exception as e:
-            print(f"   ⚠️ 서브그래프 추출 오류: {e}")
+            logger.error(f"   ⚠️ 서브그래프 추출 오류: {e}")
         
         # 3. 증거 완성도 평가
         evidence_result = {"completeness_score": 0, "missing_evidence": []}
@@ -148,7 +151,7 @@ class GraphContextExtractor:
                     case_id, matched_pattern, subgraph
                 )
             except Exception as e:
-                print(f"   ⚠️ 증거 분석 오류: {e}")
+                logger.error(f"   ⚠️ 증거 분석 오류: {e}")
         
         # 4. 증거 노드 분류
         evidence_nodes = cls._classify_evidence_nodes(subgraph)
@@ -162,7 +165,7 @@ class GraphContextExtractor:
             evidence_result.get("missing_evidence", [])
         )
         
-        print(f"   [GraphContext] 맥락 추출 완료: {crime_type} (신뢰도 {pattern_confidence*100:.1f}%)")
+        logger.info(f"   [GraphContext] 맥락 추출 완료: {crime_type} (신뢰도 {pattern_confidence*100:.1f}%)")
         
         return {
             "case_id": case_id,

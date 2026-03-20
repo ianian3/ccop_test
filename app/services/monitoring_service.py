@@ -2,6 +2,7 @@
 import os
 import psycopg2
 from flask import current_app
+from app.database import safe_set_graph_path
 from app.services.legal_rag_service import LegalRAGService
 
 try:
@@ -55,14 +56,28 @@ class MonitoringService:
             
             # 3. 주요 테이블 건수 (Row Count)
             tables = []
-            target_tables = ['rdb_cases', 'rdb_suspects', 'rdb_accounts', 'rdb_phones', 'rdb_calls']
-            for t in target_tables:
+            target_tables = {
+                'cases': 'TB_INCDNT_MST',
+                'suspects': 'TB_PRSN',
+                'accounts': 'TB_FIN_BACNT',
+                'phones': 'TB_TELNO_MST',
+                'calls': 'TB_TELNO_CALL_DTL',
+                'transfers': 'TB_FIN_BACNT_DLNG',
+                'relations': 'TB_FRD_VCTM_RPT',
+                'ips': 'TB_SYS_LGN_EVT',
+                'orgs': 'TB_INST',
+                'sms': 'TB_TELNO_SMS_MSG',
+                'vehicles': 'TB_VHCL_MST',
+                'locations': 'TB_GEO_MBL_LOC_EVT',
+            }
+            for key, tbl in target_tables.items():
                 try:
-                    cur.execute(f"SELECT count(*) FROM {t}")
+                    cur.execute(f"SELECT count(*) FROM {tbl}")
                     cnt = cur.fetchone()[0]
-                    tables.append({"name": t, "count": cnt})
+                    tables.append({"name": key, "count": cnt})
                 except:
-                    pass
+                    conn.rollback()
+                    tables.append({"name": key, "count": 0})
                     
             return {
                 "status": "online",
@@ -94,7 +109,7 @@ class MonitoringService:
             for g in graphs:
                 # 각 그래프별 노드/엣지 수 (대략적)
                 try:
-                    cur.execute(f"SET graph_path = {g}")
+                    safe_set_graph_path(cur, g)
                     
                     # 노드 수 (information_schema 활용 - vt_ 테이블)
                     # 실제 count(*)는 느릴 수 있으므로, 여기서는 테이블 개수로 대체하거나

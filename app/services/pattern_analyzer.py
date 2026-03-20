@@ -1,4 +1,6 @@
 """
+logger = logging.getLogger(__name__)
+
 범죄 패턴 분석 엔진
 
 그래프 데이터에서 범죄 패턴 자동 인식 및 매칭
@@ -6,6 +8,8 @@
 
 from app.services.pattern_library import PatternLibrary
 from app.services.graph_service import GraphService
+from app.database import safe_set_graph_path
+import logging
 
 
 class PatternAnalyzer:
@@ -86,7 +90,7 @@ class PatternAnalyzer:
             return None
         
         try:
-            cur.execute(f"SET graph_path = {graph_path}")
+            safe_set_graph_path(cur, graph_path)
             
             # 사건 노드 찾기 (case는 예약어이므로 c로 변경)
             query = f"""
@@ -107,7 +111,7 @@ class PatternAnalyzer:
             # 1-hop 연결 노드 및 엣지 가져오기
             query = f"""
             MATCH (c)-[r]-(n)
-            WHERE id(c) = {case_node_id}
+            WHERE id(c) = '{case_node_id}'
             RETURN id(n), labels(n), properties(n), 
                    id(r), type(r), properties(r),
                    id(c) = id(startNode(r)) as is_outgoing
@@ -157,7 +161,7 @@ class PatternAnalyzer:
             }
             
         except Exception as e:
-            print(f"Subgraph extraction error: {e}")
+            logger.error(f"Subgraph extraction error: {e}")
             return None
         finally:
             conn.close()

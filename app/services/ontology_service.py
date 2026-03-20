@@ -209,6 +209,36 @@ class KICSCrimeDomainOntology:
             'properties': ['loc_id', 'address'],
             'attributes': ['lat', 'lng', 'place_name', 'place_type'],
             'legal_category': '위치정보'
+        },
+        
+        # --- Vehicle Evidence (V2 추가) ---
+        'Vehicle': {
+            'layer': 'Evidence',
+            'sublayer': 'Physical',
+            'label': 'vt_vhcl',
+            'label_ko': '차량',
+            'properties': ['vhclno', 'vehicle_no'],
+            'attributes': ['car_model', 'car_detail', 'owner_name'],
+            'legal_category': '차량정보',
+            'description': '차량 (번호판 기반 식별)'
+        },
+        'LocationEvent': {
+            'layer': 'Action',
+            'label': 'vt_loc_evt',
+            'label_ko': '위치이벤트',
+            'properties': ['loc_evt_sn'],
+            'attributes': ['telno', 'lat', 'lng', 'event_type', 'timestamp'],
+            'legal_category': '위치정보',
+            'description': '기지국 접속 위치 기록'
+        },
+        'LPREvent': {
+            'layer': 'Action',
+            'label': 'vt_lpr_evt',
+            'label_ko': 'LPR인식',
+            'properties': ['rcgn_sn'],
+            'attributes': ['vhclno', 'cctv_id', 'location', 'lat', 'lng', 'timestamp'],
+            'legal_category': '차량정보',
+            'description': '차량 번호판 인식 이벤트 (방범CCTV)'
         }
     }
     
@@ -216,11 +246,82 @@ class KICSCrimeDomainOntology:
     LAYERS = {
         'Case': ['Case', 'Investigation'],
         'Actor': ['Person', 'Organization', 'Device', 'Persona'],
-        'Action': ['Transfer', 'Call', 'Access', 'Message'], # Backward Compatibility
+        'Action': ['Transfer', 'Call', 'Access', 'Message', 'LocationEvent', 'LPREvent'],
         'Event': ['Event'], # New Dynamic Layer
         'Evidence': ['BankAccount', 'CryptoWallet', 'NetworkTrace', 'WebTrace', 
-                    'FileTrace', 'Phone', 'ATM', 'Location']
+                    'FileTrace', 'Phone', 'ATM', 'Location', 'Vehicle']
     }
+    
+    # ═══════════════════════════════════════════════════════════════════
+    # 네이밍 통합 유틸리티 (Concept Name ↔ GDB Label 양방향 매핑)
+    # ═══════════════════════════════════════════════════════════════════
+    
+    # 개념명 → GDB 라벨 매핑 (Person → vt_psn)
+    GDB_LABEL_MAP = {
+        'Case': 'vt_case', 'Investigation': 'vt_inv', 'Event': 'vt_event',
+        'Person': 'vt_psn', 'Persona': 'vt_persona', 'Organization': 'vt_org', 'Device': 'vt_dev',
+        'Transfer': 'vt_transfer', 'Call': 'vt_call', 'Access': 'vt_access', 'Message': 'vt_msg',
+        'LocationEvent': 'vt_loc_evt', 'LPREvent': 'vt_lpr_evt',
+        'BankAccount': 'vt_bacnt', 'CryptoWallet': 'vt_crypto', 'NetworkTrace': 'vt_ip',
+        'WebTrace': 'vt_site', 'FileTrace': 'vt_file', 'Phone': 'vt_telno',
+        'ATM': 'vt_atm', 'Location': 'vt_loc', 'Vehicle': 'vt_vhcl'
+    }
+    
+    # GDB 라벨 → 개념명 역매핑 (vt_psn → Person)
+    CONCEPT_LOOKUP = {
+        'vt_case': 'Case', 'vt_inv': 'Investigation', 'vt_event': 'Event',
+        'vt_psn': 'Person', 'vt_persona': 'Persona', 'vt_org': 'Organization', 'vt_dev': 'Device',
+        'vt_transfer': 'Transfer', 'vt_call': 'Call', 'vt_access': 'Access', 'vt_msg': 'Message',
+        'vt_loc_evt': 'LocationEvent', 'vt_lpr_evt': 'LPREvent',
+        'vt_bacnt': 'BankAccount', 'vt_crypto': 'CryptoWallet', 'vt_ip': 'NetworkTrace',
+        'vt_site': 'WebTrace', 'vt_file': 'FileTrace', 'vt_telno': 'Phone',
+        'vt_atm': 'ATM', 'vt_loc': 'Location', 'vt_vhcl': 'Vehicle'
+    }
+    
+    # GDB 라벨 → 한국어명 매핑 (vt_psn → 인물)
+    LABEL_KO_MAP = {
+        'vt_case': '사건', 'vt_inv': '수사', 'vt_event': '이벤트',
+        'vt_psn': '인물', 'vt_persona': '페르소나', 'vt_org': '조직', 'vt_dev': '기기',
+        'vt_transfer': '이체', 'vt_call': '통화', 'vt_access': '접속', 'vt_msg': '메시지',
+        'vt_loc_evt': '위치이벤트', 'vt_lpr_evt': 'LPR인식',
+        'vt_bacnt': '계좌', 'vt_crypto': '가상자산', 'vt_ip': 'IP주소',
+        'vt_site': '사이트', 'vt_file': '파일', 'vt_telno': '전화번호',
+        'vt_atm': 'ATM', 'vt_loc': '위치', 'vt_vhcl': '차량'
+    }
+    
+    # Layer별 GDB 라벨 그룹 (LAYERS의 GDB 라벨 버전)
+    LAYERS_GDB = {
+        'Case': ['vt_case', 'vt_inv'],
+        'Actor': ['vt_psn', 'vt_org', 'vt_dev', 'vt_persona'],
+        'Action': ['vt_transfer', 'vt_call', 'vt_access', 'vt_msg', 'vt_loc_evt', 'vt_lpr_evt'],
+        'Event': ['vt_event'],
+        'Evidence': ['vt_bacnt', 'vt_crypto', 'vt_ip', 'vt_site', 'vt_file', 'vt_telno', 'vt_atm', 'vt_loc', 'vt_vhcl']
+    }
+    
+    @classmethod
+    def get_gdb_label(cls, concept_name):
+        """개념명을 GDB 라벨로 변환 (Person → vt_psn)"""
+        return cls.GDB_LABEL_MAP.get(concept_name, concept_name)
+    
+    @classmethod
+    def get_concept_name(cls, gdb_label):
+        """GDB 라벨을 개념명으로 변환 (vt_psn → Person)"""
+        return cls.CONCEPT_LOOKUP.get(gdb_label, gdb_label)
+    
+    @classmethod
+    def get_label_ko(cls, gdb_label):
+        """GDB 라벨의 한국어명 반환 (vt_psn → 인물)"""
+        return cls.LABEL_KO_MAP.get(gdb_label, gdb_label)
+    
+    @classmethod
+    def get_relationship_gdb_labels(cls, rel_name):
+        """관계 정의의 domain/range를 GDB 라벨로 반환"""
+        rel = cls.RELATIONSHIPS.get(rel_name)
+        if not rel:
+            return None, None
+        domain_gdb = cls.GDB_LABEL_MAP.get(rel['domain'], rel['domain'])
+        range_gdb = cls.GDB_LABEL_MAP.get(rel['range'], rel['range'])
+        return domain_gdb, range_gdb
     
     # 관계 시맨틱 (Relationship Semantics) - 통합 정의
     # source_types: LLM 추론 시 컬럼 타입 조합 → 관계 타입 결정에 사용
@@ -532,9 +633,9 @@ class KICSCrimeDomainOntology:
             'legal_significance': None
         },
         'from_account': {
-            'domain': 'Transfer',
-            'range': 'BankAccount',
-            'source_types': [('transfer', 'from_account'), ('이체', '출금계좌')],
+            'domain': 'BankAccount',
+            'range': 'Transfer',
+            'source_types': [('from_account', 'transfer'), ('출금계좌', '이체')],
             'semantic_relation': 'withdrawnFrom',
             'label_ko': '출금계좌',
             'meaning': '이체의 출금 계좌',
@@ -550,9 +651,9 @@ class KICSCrimeDomainOntology:
             'legal_significance': '금융거래정보'
         },
         'caller': {
-            'domain': 'Call',
-            'range': 'Phone',
-            'source_types': [('call', 'caller'), ('통화', '발신번호')],
+            'domain': 'Phone',
+            'range': 'Call',
+            'source_types': [('caller', 'call'), ('발신번호', '통화')],
             'semantic_relation': 'calledFrom',
             'label_ko': '발신',
             'meaning': '통화의 발신 번호',
@@ -585,13 +686,13 @@ class KICSCrimeDomainOntology:
             'meaning': '접속의 목적지 사이트',
             'legal_significance': '인터넷기록'
         },
-        'sent_by': {
-            'domain': 'Message',
-            'range': 'Person',
-            'source_types': [('message', 'sender'), ('메시지', '발신자')],
-            'semantic_relation': 'sentBy',
-            'label_ko': '발신자',
-            'meaning': '메시지 발신자',
+        'sent_msg': {
+            'domain': 'Phone',
+            'range': 'Message',
+            'source_types': [('sender', 'message'), ('발신번호', '문자')],
+            'semantic_relation': 'sentMessage',
+            'label_ko': '발신',
+            'meaning': '메시지 발신 번호',
             'legal_significance': '통신사실확인자료'
         },
         'received_by': {
@@ -606,6 +707,57 @@ class KICSCrimeDomainOntology:
         # Note: Case→Action 직접 연결 제거됨 (4계층 모델 준수)
         # Case는 Actor를 통해서만 Action에 연결됨:
         # Case → Actor (involves) → Action (performed)
+        
+        # ═══════════════════════════════════════════════════════════
+        # [Enhancement] 보강 엣지 — 교차 도메인 관계
+        # ═══════════════════════════════════════════════════════════
+        'related_case': {
+            'domain': 'Case',
+            'range': 'Case',
+            'semantic_relation': 'relatedCase',
+            'label_ko': '관련사건',
+            'meaning': '공유 증거(계좌/전화) 기반 사건 연결',
+            'inference': True,
+            'confidence': 0.75,
+            'legal_significance': '연쇄사건 추적'
+        },
+        'belongs_to': {
+            'domain': 'BankAccount',
+            'range': 'Organization',
+            'source_types': [('account', 'org'), ('계좌', '기관')],
+            'semantic_relation': 'belongsToOrg',
+            'label_ko': '소속기관',
+            'meaning': '계좌 소속 금융기관',
+            'legal_significance': '금융거래정보'
+        },
+        'works_at': {
+            'domain': 'Person',
+            'range': 'Organization',
+            'source_types': [('person', 'org'), ('인물', '조직')],
+            'semantic_relation': 'worksAt',
+            'label_ko': '소속',
+            'meaning': '인물의 소속 조직',
+            'legal_significance': '내부자 식별'
+        },
+        'resolved_to': {
+            'domain': 'NetworkTrace',
+            'range': 'WebTrace',
+            'semantic_relation': 'resolvedTo',
+            'label_ko': 'DNS해석',
+            'meaning': 'IP → 도메인 연결',
+            'inference': True,
+            'legal_significance': '네트워크 추적'
+        },
+        'mentions_account': {
+            'domain': 'Message',
+            'range': 'BankAccount',
+            'semantic_relation': 'mentionsAccount',
+            'label_ko': '계좌언급',
+            'meaning': '메시지 내 계좌번호 언급',
+            'inference': True,
+            'confidence': 0.85,
+            'legal_significance': '보이스피싱 핵심증거'
+        },
     }
     
     @classmethod
@@ -623,11 +775,11 @@ class KICSCrimeDomainOntology:
 
     # 컬럼 타입 추론 패턴 (Centralized Definition)
     COLUMN_PATTERNS = {
-        "case_id": {
-            "patterns": ["접수번호", "사건번호", "flnm", "receipt", "case_no", "case_id"],
+        "case": {
+            "patterns": ["사건", "case", "사건번호", "접수번호"],
             "kics_label": "vt_case",
             "kics_property": "flnm",
-            "description": "사건 접수번호"
+            "description": "사건번호/관리번호"
         },
         "phone": {
             "patterns": ["전화", "phone", "telno", "tel", "mobile", "휴대폰", "연락처", "발신번호", "수신번호"],
@@ -636,7 +788,7 @@ class KICSCrimeDomainOntology:
             "description": "전화번호"
         },
         "account": {
-            "patterns": ["계좌", "account", "actno", "bacnt", "bank", "은행"],
+            "patterns": ["actno", "계좌", "account", "bacnt", "bank", "은행"],
             "kics_label": "vt_bacnt",
             "kics_property": "actno",
             "description": "계좌번호"
@@ -659,11 +811,11 @@ class KICSCrimeDomainOntology:
             "kics_property": "file",
             "description": "파일"
         },
-        "user_id": {
-            "patterns": ["user_id", "userid", "아이디", "sns_id", "닉네임", "nickname", "nick", "피의자", "ID"],
+        "suspect": {
+            "patterns": ["피의자", "suspect", "용의자", "범인", "target", "사용자", "명의자", "flnm", "rrno"],
             "kics_label": "vt_psn",
             "kics_property": "id",
-            "description": "사용자 ID/닉네임"
+            "description": "피의자 식별자 (ID/주민번호)"
         },
         "person": {
             "patterns": ["이름", "name", "성명", "피해자", "용의자", "인물"],
@@ -686,59 +838,54 @@ class KICSCrimeDomainOntology:
             "is_attribute": True
         },
         "date": {
-            "patterns": ["등록일", "날짜", "date", "일자", "신고일", "접수일", "발생일", "time"],
-            "kics_label": "",
-            "kics_property": "date",
-            "description": "날짜",
-            "is_attribute": True
+            "patterns": ["rmt_ymdhm", "일시", "date", "시간", "time", "발생일시", "거래일시", "통화일시", "접수일자", "발생일", "이체일시", "bgng_ymdhm"],
+            "kics_label": "common",
+            "kics_property": "event_date",
+            "description": "사건/이벤트 발생 일시"
         },
         "amount": {
-            "patterns": ["금액", "amount", "피해금액", "송금액", "합계"],
-            "kics_label": "",
+            "patterns": ["dpst_amt", "금액", "amount", "이체금액", "거래금액", "피해금액"],
+            "kics_label": "vt_event",
             "kics_property": "amount",
-            "description": "금액",
-            "is_attribute": True
+            "description": "이체/피해 금액"
         },
         "crime": {
-            "patterns": ["죄명", "crime", "범죄", "혐의", "crime_name"],
-            "kics_label": "",
+            "patterns": ["죄명", "범죄유형", "crime", "범죄유형명", "사건개요"],
+            "kics_label": "vt_case",
             "kics_property": "crime",
-            "description": "죄명/범죄유형",
-            "is_attribute": True
+            "description": "범죄 유형/죄명"
         },
         "sender": {
-            "patterns": ["송금", "출금", "sender", "송금계좌", "출금계좌"],
-            "kics_label": "vt_bacnt",
-            "kics_property": "actno",
-            "description": "송금 계좌",
-            "is_attribute": False
+            "patterns": ["dpstr", "송금", "송금계좌", "출금", "출금계좌", "sender", "보낸사람", "from"],
+            "kics_label": "vt_transfer",
+            "kics_property": "from_account",
+            "description": "이체 출발 계좌"
         },
         "receiver": {
-            "patterns": ["수취", "입금", "receiver", "수취계좌", "입금계좌"],
-            "kics_label": "vt_bacnt",
-            "kics_property": "actno",
-            "description": "수취 계좌",
-            "is_attribute": False
+            "patterns": ["rlt_actno", "rlt_dpstr", "수취", "수금", "수취계좌", "입금", "입금계좌", "receiver", "받는사람", "to"],
+            "kics_label": "vt_transfer",
+            "kics_property": "to_account",
+            "description": "이체 도착 계좌"
         },
         "caller": {
-            "patterns": ["발신", "caller", "발신번호", "발신자"],
+            "patterns": ["발신", "caller", "발신번호", "발신자", "dsptch_no"],
             "kics_label": "vt_telno",
             "kics_property": "telno",
             "description": "발신 번호",
             "is_attribute": False
         },
         "callee": {
-            "patterns": ["수신", "callee", "수신번호", "수신자"],
+            "patterns": ["수신", "callee", "수신번호", "수신자", "rcptn_no"],
             "kics_label": "vt_telno",
             "kics_property": "telno",
             "description": "수신 번호",
             "is_attribute": False
         },
         "duration": {
-            "patterns": ["시간", "duration", "통화시간", "통화시각"],
+            "patterns": ["통화시간", "duration", "시간"],
             "kics_label": "",
             "kics_property": "duration",
-            "description": "통화 시간",
+            "description": "통화 시간 (초)",
             "is_attribute": True
         },
         "nickname": {
@@ -747,6 +894,41 @@ class KICSCrimeDomainOntology:
             "kics_property": "nickname",
             "description": "닉네임/별명",
             "is_attribute": False
+        },
+        "message": {
+            "patterns": ["메시지", "message", "내용", "content", "msg", "문자내용", "채팅내용", "메모"],
+            "kics_label": "vt_msg",
+            "kics_property": "content",
+            "description": "메시지 내용",
+            "is_attribute": False
+        },
+        "org": {
+            "patterns": ["조직", "org", "기관", "organization", "company", "회사", "법인", "은행명"],
+            "kics_label": "vt_org",
+            "kics_property": "org_name",
+            "description": "조직/기관명",
+            "is_attribute": False
+        },
+        "vehicle": {
+            "patterns": ["차량", "vehicle", "차량번호", "vhclno", "car", "번호판"],
+            "kics_label": "vt_vhcl",
+            "kics_property": "vhclno",
+            "description": "차량 번호",
+            "is_attribute": False
+        },
+        "lat": {
+            "patterns": ["위도", "lat", "latitude", "bsst_lat"],
+            "kics_label": "",
+            "kics_property": "lat",
+            "description": "위도 좌표",
+            "is_attribute": True
+        },
+        "lng": {
+            "patterns": ["경도", "lng", "longitude", "lon", "bsst_lot"],
+            "kics_label": "",
+            "kics_property": "lng",
+            "description": "경도 좌표",
+            "is_attribute": True
         },
     }
 
@@ -757,6 +939,8 @@ class KICSCrimeDomainOntology:
     # ─────────────────────────────────────────────
     COLUMN_TYPE_TO_RDB = {
         'case_id': 'case',
+        'case': 'case',          # COLUMN_PATTERNS key = 'case'
+        'suspect': 'suspect',    # COLUMN_PATTERNS key = 'suspect'
         'phone': 'phone',
         'account': 'account',
         'ip': 'ip',
@@ -773,6 +957,11 @@ class KICSCrimeDomainOntology:
         'duration': 'duration',
         'site': 'site',
         'file': 'file',
+        'message': 'message',
+        'org': 'org',
+        'vehicle': 'vehicle',
+        'lat': 'lat',
+        'lng': 'lng',
     }
     
     # 추론 규칙 (KICS-Specific Inference Rules)
@@ -792,7 +981,39 @@ class KICSCrimeDomainOntology:
             'description': '3단계 이상 계좌이체 → 자금세탁 의심',
             'confidence': 0.75,
             'legal_basis': '특정금융거래정보법'
-        }
+        },
+        {
+            'name': 'Accomplice',
+            'pattern': 'shared_contacts',
+            'threshold': 5,
+            'description': '2인 이상이 동일 전화번호 5건+ 공유 통화 → 공범 의심',
+            'confidence': 0.70,
+            'legal_basis': '형법 제30조 공동정범'
+        },
+        {
+            'name': 'RapidTransfer',
+            'pattern': 'high_frequency_transfer',
+            'threshold': 10,
+            'description': '1시간 내 10건+ 이체 → 대포통장 의심',
+            'confidence': 0.85,
+            'legal_basis': '전자금융거래법'
+        },
+        {
+            'name': 'NightActivity',
+            'pattern': 'night_time_activity',
+            'threshold': 3,
+            'description': '00~06시 사이 3건+ 이체/통화 → 야간 범행 패턴',
+            'confidence': 0.65,
+            'legal_basis': '야간 범행 가중처벌'
+        },
+        {
+            'name': 'CrossDomainLink',
+            'pattern': 'ip_account_phone_correlation',
+            'threshold': 2,
+            'description': '동일 IP에서 다수 계좌+전화 접속 → 총책 의심',
+            'confidence': 0.80,
+            'legal_basis': '정보통신망법'
+        },
     ]
 
 

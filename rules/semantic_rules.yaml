@@ -1,0 +1,33 @@
+# CCOP Semantic Inference Rules
+# 관리자 및 수석 수사관이 논리적 추론 규칙을 정의하는 파일입니다.
+# 엔진 구동 시 이 파일의 규칙들을 Cypher 쿼리로 변환하여 가상 엣지(Virtual Edge)를 생성합니다.
+
+rules:
+  - rule_id: "shared_ip_location"
+    name: "동일 접속지 기반 연관성 (same_location)"
+    description: "서로 다른 피의자가 동일한 IP 주소로 접속한 이력이 있는 경우, 합숙 또는 동일 조직일 확률이 높음."
+    confidence: 0.85
+    cypher_query: >
+      MATCH (p1:vt_psn)-[:used_ip]->(ip:vt_ip)<-[:used_ip]-(p2:vt_psn)
+      WHERE id(p1) > id(p2)
+      MERGE (p1)-[r:same_location {
+        is_virtual: 'true',
+        reason: '동일 IP(' + ip.ip_addr + ') 동시 접속 이력 확인',
+        confidence: 0.85
+      }]-(p2)
+      RETURN count(r) as new_edges
+
+  - rule_id: "indirect_transfer_laundering"
+    name: "자금 세탁/경유 계좌 배후 식별 (indirect_transfer)"
+    description: "A계좌에서 B계좌로 이체 후, 금액의 변동 없이 즉시 C계좌로 이체된 경우 B는 단순 경유지이고 A의 자금이 C로 흘러갔다고 추론함."
+    confidence: 0.90
+    cypher_query: >
+      MATCH (a:vt_bacnt)-[:from_account]->(t1:vt_transfer)-[:to_account]->(b:vt_bacnt)
+      MATCH (b)-[:from_account]->(t2:vt_transfer)-[:to_account]->(c:vt_bacnt)
+      WHERE a <> c AND t1.amount = t2.amount
+      MERGE (a)-[r:indirect_transfer {
+        is_virtual: 'true',
+        reason: '경유지(' + b.actno + ')를 거친 동일 금액(' + t1.amount + '원) 연속 송금 패턴 감지',
+        confidence: 0.90
+      }]->(c)
+      RETURN count(r) as new_edges

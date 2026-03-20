@@ -3,8 +3,12 @@ import psycopg2
 import json
 import re
 from flask import current_app
+from app.database import safe_set_graph_path
 from app.services.subgraph_service import SubGraphService
+import logging
 
+
+logger = logging.getLogger(__name__)
 
 class StandardCodeMapper:
     """
@@ -152,7 +156,7 @@ class ETLService:
             conn.autocommit = True
             return conn, conn.cursor()
         except Exception as e:
-            print(f"!!! DB 접속 오류: {e}")
+            logger.error(f"!!! DB 접속 오류: {e}")
             return None, None
 
     @staticmethod
@@ -177,14 +181,14 @@ class ETLService:
                 ON "{graph_name}"."{label_name}" USING GIN (properties);
             """
             cur.execute(query)
-            print(f"   [Index] '{label_name}' 라벨에 GIN 인덱스 적용 완료")
+            logger.info(f"   [Index] '{label_name}' 라벨에 GIN 인덱스 적용 완료")
         except Exception as e:
             # 인덱스 생성 실패가 전체 로직을 멈추게 하지는 않음 (로그만 출력)
-            print(f"   ⚠️ 인덱스 생성 중 경고 (무시 가능): {e}")
+            logger.warning(f"   ⚠️ 인덱스 생성 중 경고 (무시 가능): {e}")
 
     @staticmethod
     def import_csv(file, mapping, target_graph):
-        print("▶ [ETL] 고속 적재(Batch) + 인덱싱 모드 시작...")
+        logger.info("▶ [ETL] 고속 적재(Batch) + 인덱싱 모드 시작...")
 
         conn, cur = ETLService.get_db_connection()
         if not conn: return False, 0, 0, "DB 연결 실패"
@@ -214,17 +218,17 @@ class ETLService:
             extra_props = mapping.get('properties', [])
             
             # 헤더 검증
-            print(f"   [CSV 헤더] {list(df.columns)}")
-            print(f"   [매핑 정보] Source: {src_col} → {src_key} (라벨: {src_label})")
-            print(f"   [매핑 정보] Target: {tgt_col} → {tgt_key} (라벨: {tgt_label})")
+            logger.info(f"   [CSV 헤더] {list(df.columns)}")
+            logger.info(f"   [매핑 정보] Source: {src_col} → {src_key} (라벨: {src_label})")
+            logger.info(f"   [매핑 정보] Target: {tgt_col} → {tgt_key} (라벨: {tgt_label})")
             if src_col not in df.columns: return False, 0, 0, f"❌ '{src_col}' 컬럼 없음"
             if tgt_col not in df.columns: return False, 0, 0, f"❌ '{tgt_col}' 컬럼 없음"
 
             # 그래프 경로 설정
-            cur.execute(f"SET graph_path = {target_graph};")
+            safe_set_graph_path(cur, target_graph)
 
             # 5. 데이터 전처리 (메모리 구조화)
-            print("▶ [ETL] 데이터 구조화 중...")
+            logger.info("▶ [ETL] 데이터 구조화 중...")
             node_data_map = {} 
             edge_data_list = []
 
@@ -299,20 +303,20 @@ class ETLService:
             # ============================
             # 3. 중복 제거 (메모리 레벨)
             # ============================
-            print(f"▶ [ETL] 중복 제거 중... (총 {len(node_data_map)}개 노드)")
+            logger.info(f"▶ [ETL] 중복 제거 중... (총 {len(node_data_map)}개 노드)")
             unique_nodes = list(node_data_map.values())
             
             # ============================
             # 3.5 인덱스 생성 (성능 최적화)
             # ============================
-            print("▶ [ETL] 데이터베이스 인덱스 생성 중...")
+            logger.info("▶ [ETL] 데이터베이스 인덱스 생성 중...")
             # KICS 전체 노드 타입에 대한 인덱스 생성
             kics_labels = ['vt_flnm', 'vt_bacnt', 'vt_telno', 'vt_site', 
                           'vt_ip', 'vt_file', 'vt_atm', 'vt_id', 'vt_psn']
             for label in kics_labels:
                 ETLService._create_gin_index(cur, target_graph, label)
             
-            print(f"  [ETL] 인덱스 생성 완료 ({len(kics_labels)}개 라벨)")
+            logger.info(f"  [ETL] 인덱스 생성 완료 ({len(kics_labels)}개 라벨)")
             
             # ============================
             # 4. 노드 처리 (MERGE 로직)
@@ -322,18 +326,18 @@ class ETLService:
 
             if total_nodes == 0: return True, 0, 0, "유효 데이터 0건"
 
-            print(f"▶ [ETL] 적재 시작 (Node: {total_nodes}, Edge: {total_edges})")
+            logger.info(f"▶ [ETL] 적재 시작 (Node: {total_nodes}, Edge: {total_edges})")
 
             # 6. DB 적재 실행 (Batch Processing)
             
             # [Step A] 노드 적재 - AgensGraph CREATE 사용 (동적 라벨 결정)
-            print(f"  [ETL] 노드 {total_nodes}개 CREATE 시작...")
+            logger.info(f"  [ETL] 노드 {total_nodes}개 CREATE 시작...")
             
             # GraphService import (동적 라벨 결정용)
             from app.services.graph_service import GraphService
             
             # (1) SET graph_path
-            cur.execute(f"SET graph_path = {target_graph};")
+            safe_set_graph_path(cur, target_graph)
             
             nodes_created_count = 0
             nodes_updated_count = 0
@@ -398,15 +402,15 @@ class ETLService:
                         nodes_created_count += 1
                         
                 except Exception as e:
-                    print(f"    노드 처리 실패: {e}")
+                    logger.error(f"    노드 처리 실패: {e}")
                     continue
 
             conn.commit()
-            print(f"  [ETL] 노드 처리 완료: 생성 {nodes_created_count}개, 업데이트 {nodes_updated_count}개")
-            print(f"  [ETL] 라벨별 분포: {label_stats}")
+            logger.info(f"  [ETL] 노드 처리 완료: 생성 {nodes_created_count}개, 업데이트 {nodes_updated_count}개")
+            logger.info(f"  [ETL] 라벨별 분포: {label_stats}")
 
             # [Step B] 엣지 적재 - MATCH + CREATE 패턴 (동적 라벨 매칭)
-            print(f"  [ETL] 엣지 {total_edges}개 CREATE 시작...")
+            logger.info(f"  [ETL] 엣지 {total_edges}개 CREATE 시작...")
             
             edges_created_count = 0
             for edge_data in edge_data_list:
@@ -457,25 +461,25 @@ class ETLService:
                     # 3. Cypher로 엣지 생성 (ID 사용)
                     edge_create_query = f"""
                     MATCH (v1), (v2)
-                    WHERE id(v1) = {src_id} AND id(v2) = {tgt_id}
+                    WHERE id(v1) = '{src_id}' AND id(v2) = '{tgt_id}'
                     CREATE (v1)-[r:{edge_type} {{{edge_props_str}}}]->(v2)
                     """
                     cur.execute(edge_create_query)
                     edges_created_count += 1
                 except Exception as e:
                     # 노드가 없거나 에러 발생 시 스킵
-                    print(f"    엣지 생성 실패: {e}")
+                    logger.error(f"    엣지 생성 실패: {e}")
                     continue
             
             conn.commit()
-            print(f"  [ETL] 기본 엣지 {edges_created_count}개 CREATE 완료")
+            logger.info(f"  [ETL] 기본 엣지 {edges_created_count}개 CREATE 완료")
 
             # ============================
             # [Step C] 추가 관계 처리 (additionalRelations)
             # ============================
             additional_rels = mapping.get('additionalRelations', [])
             if additional_rels:
-                print(f"  [ETL] 추가 관계 {len(additional_rels)}개 처리 중...")
+                logger.info(f"  [ETL] 추가 관계 {len(additional_rels)}개 처리 중...")
                 additional_edges_count = 0
                 
                 for add_rel in additional_rels:
@@ -486,7 +490,7 @@ class ETLService:
                     add_edge_type = ETLService._sanitize_label(add_rel.get('edgeType', 'RELATION'))
                     
                     if add_src_col not in df.columns or add_tgt_col not in df.columns:
-                        print(f"    ⚠️ 컬럼 누락: {add_src_col} 또는 {add_tgt_col}")
+                        logger.warning(f"    ⚠️ 컬럼 누락: {add_src_col} 또는 {add_tgt_col}")
                         continue
                     
                     for i, row in df.iterrows():
@@ -513,7 +517,7 @@ class ETLService:
                                 src_id, tgt_id = result
                                 create_edge_q = f"""
                                 MATCH (v1), (v2)
-                                WHERE id(v1) = {src_id} AND id(v2) = {tgt_id}
+                                WHERE id(v1) = '{src_id}' AND id(v2) = '{tgt_id}'
                                 CREATE (v1)-[:{add_edge_type}]->(v2)
                                 """
                                 cur.execute(create_edge_q)
@@ -522,18 +526,18 @@ class ETLService:
                             # 엣지 생성 실패 시 스킵
                             continue
                     
-                    print(f"    [{add_edge_type}] 엣지 처리 완료")
+                    logger.info(f"    [{add_edge_type}] 엣지 처리 완료")
                 
                 edges_created_count += additional_edges_count
-                print(f"  [ETL] 추가 엣지 {additional_edges_count}개 CREATE 완료")
+                logger.info(f"  [ETL] 추가 엣지 {additional_edges_count}개 CREATE 완료")
             
             conn.commit()
-            print(f"▶ [ETL] 모든 작업 완료! (Node: {nodes_created_count}, Edge: {edges_created_count})")
+            logger.info(f"▶ [ETL] 모든 작업 완료! (Node: {nodes_created_count}, Edge: {edges_created_count})")
             
             return True, nodes_created_count, edges_created_count, "적재 완료"
 
         except Exception as e:
-            print(f"!!! [ETL Error] {e}")
+            logger.error(f"!!! [ETL Error] {e}")
             import traceback
             traceback.print_exc()
             return False, 0, 0, str(e)
@@ -558,7 +562,7 @@ class ETLService:
         import pandas as pd
         from app.services.schema_mapper import KICSSchemaMapper
         
-        print("▶ [ETL] KICS 확장 모델 ETL 시작...")
+        logger.info("▶ [ETL] KICS 확장 모델 ETL 시작...")
         
         conn, cur = ETLService.get_db_connection()
         if not conn:
@@ -570,7 +574,7 @@ class ETLService:
             df = df.fillna('')
             df.columns = df.columns.str.strip()
             
-            print(f"   [CSV] {len(df)}행, 컬럼: {list(df.columns)}")
+            logger.info(f"   [CSV] {len(df)}행, 컬럼: {list(df.columns)}")
             
             # 2. LLM 스키마 매핑
             sample_rows = df.head(5).to_dict('records')
@@ -583,7 +587,7 @@ class ETLService:
                 return False, {"error": "스키마 매핑 실패"}
             
             mapping = mapping_result.get("mapping", {})
-            print(f"   [Mapping] Source: {mapping_result.get('source')}")
+            logger.info(f"   [Mapping] Source: {mapping_result.get('source')}")
             
             # 3. Action 감지
             detected_action = mapping.get("detected_action", {})
@@ -596,11 +600,11 @@ class ETLService:
                 "relationships": 0
             }
             
-            cur.execute(f"SET graph_path = {target_graph};")
+            safe_set_graph_path(cur, target_graph)
             
             # 4. Action 노드 생성 (Transfer/Call/Access/Message)
             if action_type:
-                print(f"   [Action] {action_type} 감지됨")
+                logger.info(f"   [Action] {action_type} 감지됨")
                 action_count = ETLService._create_action_nodes(
                     df, mapping, action_type, cur, target_graph
                 )
@@ -619,12 +623,12 @@ class ETLService:
             results["relationships"] = rel_count
             
             conn.commit()
-            print(f"▶ [ETL] 완료! Action:{results['action_nodes']}, Entity:{results['entity_nodes']}, Rel:{results['relationships']}")
+            logger.info(f"▶ [ETL] 완료! Action:{results['action_nodes']}, Entity:{results['entity_nodes']}, Rel:{results['relationships']}")
             
             return True, results
             
         except Exception as e:
-            print(f"!!! [ETL Error] {e}")
+            logger.error(f"!!! [ETL Error] {e}")
             import traceback
             traceback.print_exc()
             return False, {"error": str(e)}
@@ -678,10 +682,10 @@ class ETLService:
                 count += 1
                 
             except Exception as e:
-                print(f"   Action 노드 생성 오류: {e}")
+                logger.error(f"   Action 노드 생성 오류: {e}")
                 continue
         
-        print(f"   [Action] {label} 노드 {count}개 생성")
+        logger.info(f"   [Action] {label} 노드 {count}개 생성")
         return count
     
     @staticmethod
@@ -738,7 +742,7 @@ class ETLService:
                 except Exception as e:
                     continue
         
-        print(f"   [Entity] 노드 {count}개 생성")
+        logger.info(f"   [Entity] 노드 {count}개 생성")
         return count
     
     @staticmethod
@@ -838,7 +842,7 @@ class ETLService:
                             if src_result and tgt_result:
                                 edge_fallback = f"""
                                 MATCH (v1), (v2)
-                                WHERE id(v1) = {src_result[0]} AND id(v2) = {tgt_result[0]}
+                                WHERE id(v1) = '{src_result[0]}' AND id(v2) = '{tgt_result[0]}'
                                 CREATE (v1)-[:{edge_type}]->(v2)
                                 """
                                 cur.execute(edge_fallback)
@@ -849,5 +853,5 @@ class ETLService:
             except Exception as e:
                 continue
         
-        print(f"   [Relationship] 엣지 {count}개 생성")
+        logger.info(f"   [Relationship] 엣지 {count}개 생성")
         return count

@@ -2,19 +2,32 @@
 관리자 페이지 라우트
 API 키 관리 및 파트너 관리
 """
-from flask import Blueprint, render_template, request, jsonify, session, redirect, url_for
+from flask import Blueprint, render_template, request, jsonify, session, redirect, url_for, current_app
 from functools import wraps
 from app.models.api_key import APIKey, TIERS
 import hashlib
+import hmac
+import logging
+import os
 
 admin = Blueprint('admin', __name__, url_prefix='/admin')
 
-# 간단한 관리자 인증 (프로덕션에서는 더 강력한 인증 사용)
-ADMIN_PASSWORD_HASH = hashlib.sha256(b"admin123").hexdigest()  # 기본 비밀번호: admin123
+logger = logging.getLogger(__name__)
 
-# API 키 평문 저장소 (보안상 실제 프로덕션에서는 암호화된 DB 사용)
-# key_hash -> plaintext_key 매핑
-API_KEYS_PLAINTEXT = {}
+# API_KEYS_PLAINTEXT는 api_auth 모듈에서 관리 (영속화)
+
+
+def _get_admin_password_hash():
+    """
+    환경변수 ADMIN_PASSWORD에서 관리자 비밀번호 해시를 생성.
+    설정되지 않으면 기본값 사용 + 경고 로그 출력.
+    """
+    password = os.getenv("ADMIN_PASSWORD")
+    if not password:
+        logger.warning("⚠️  ADMIN_PASSWORD 환경변수가 설정되지 않았습니다. 기본 비밀번호가 사용됩니다. 프로덕션 환경에서는 반드시 설정하세요!")
+        password = "admin123"  # fallback (개발 환경 전용)
+    return hashlib.sha256(password.encode()).hexdigest()
+
 
 def require_admin(f):
     """관리자 인증 데코레이터"""
@@ -32,10 +45,13 @@ def login():
         password = request.form.get('password')
         password_hash = hashlib.sha256(password.encode()).hexdigest()
         
-        if password_hash == ADMIN_PASSWORD_HASH:
+        # 타이밍 공격 방어를 위해 hmac.compare_digest 사용
+        if hmac.compare_digest(password_hash, _get_admin_password_hash()):
             session['admin_logged_in'] = True
+            logger.info("관리자 로그인 성공")
             return redirect(url_for('admin.dashboard'))
         else:
+            logger.warning(f"관리자 로그인 실패 (IP: {request.remote_addr})")
             return render_template('admin/login.html', error="잘못된 비밀번호입니다.")
     
     return render_template('admin/login.html')
@@ -76,12 +92,16 @@ def create_partner():
             allowed_endpoints=TIERS[tier]['allowed_endpoints']
         )
         
-        # 임시 저장소에 추가 (프로덕션에서는 데이터베이스 사용)
-        from app.middleware.api_auth import API_KEYS_STORE
+        # 저장소에 추가
+        from app.middleware.api_auth import API_KEYS_STORE, API_KEYS_PLAINTEXT, save_api_keys, save_plaintext_keys
         API_KEYS_STORE[result['key_hash']] = result['partner_data']
         
         # 평문 키 저장 (관리자가 나중에 볼 수 있도록)
         API_KEYS_PLAINTEXT[result['key_hash']] = result['api_key']
+        
+        # 파일 영속화
+        save_api_keys()
+        save_plaintext_keys()
         
         return jsonify({
             "status": "success",
@@ -98,7 +118,7 @@ def create_partner():
 def list_partners():
     """파트너 목록 조회"""
     try:
-        from app.middleware.api_auth import API_KEYS_STORE
+        from app.middleware.api_auth import API_KEYS_STORE, API_KEYS_PLAINTEXT
         
         partners = []
         for key_hash, data in API_KEYS_STORE.items():
@@ -132,10 +152,11 @@ def deactivate_partner():
         if not key_hash:
             return jsonify({"error": "key_hash is required"}), 400
         
-        from app.middleware.api_auth import API_KEYS_STORE
+        from app.middleware.api_auth import API_KEYS_STORE, save_api_keys
         
         if key_hash in API_KEYS_STORE:
             API_KEYS_STORE[key_hash]['is_active'] = False
+            save_api_keys()
             return jsonify({"status": "success", "message": "Partner deactivated"}), 200
         else:
             return jsonify({"error": "Partner not found"}), 404
@@ -154,11 +175,14 @@ def delete_partner():
         if not key_hash:
             return jsonify({"error": "key_hash is required"}), 400
         
-        from app.middleware.api_auth import API_KEYS_STORE
+        from app.middleware.api_auth import API_KEYS_STORE, API_KEYS_PLAINTEXT, save_api_keys, save_plaintext_keys
         
         if key_hash in API_KEYS_STORE:
             partner_name = API_KEYS_STORE[key_hash]['partner_name']
             del API_KEYS_STORE[key_hash]
+            API_KEYS_PLAINTEXT.pop(key_hash, None)
+            save_api_keys()
+            save_plaintext_keys()
             return jsonify({
                 "status": "success", 
                 "message": f"Partner {partner_name} deleted"

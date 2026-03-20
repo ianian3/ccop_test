@@ -1,4 +1,7 @@
+logger = logging.getLogger(__name__)
+
 def create_graph_indexes(cur, graph_name):
+import logging
     """
     KICS 노드 타입별 인덱스 생성 (성능 최적화)
     
@@ -48,10 +51,10 @@ def create_graph_indexes(cur, graph_name):
                 
         except Exception as e:
             # 인덱스 생성 실패는 치명적이지 않으므로 계속 진행
-            print(f"  [경고] 인덱스 생성 실패 ({label}): {e}")
+            logger.error(f"  [경고] 인덱스 생성 실패 ({label}): {e}")
             continue
     
     if created_indexes:
-        print(f"  [ETL] 인덱스 생성 완료: {len(created_indexes)}개")
+        logger.info(f"  [ETL] 인덱스 생성 완료: {len(created_indexes)}개")
     else:
-        print(f"  [ETL] 인덱스 생성 스킵 (이미 존재)")
+        logger.info(f"  [ETL] 인덱스 생성 스킵 (이미 존재)")

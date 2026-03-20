@@ -29,6 +29,11 @@ def create_app():
     app.logger.setLevel(getattr(logging, Config.LOG_LEVEL))
     app.logger.info('CCOP application starting up...')
     
+    # API 키 파일 로드 (영속화)
+    from app.middleware.api_auth import load_api_keys, load_plaintext_keys
+    load_api_keys()
+    load_plaintext_keys()
+    
     # Security headers
     @app.after_request
     def add_security_headers(response):

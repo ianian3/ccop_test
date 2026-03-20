@@ -1,4 +1,6 @@
 """
+logger = logging.getLogger(__name__)
+
 LLM 기반 관계 추론 서비스 (RELATE 스타일)
 
 CSV 데이터에서 자동으로 엔티티와 관계를 추론하여
@@ -14,6 +16,7 @@ import json
 import re
 from openai import OpenAI
 from flask import current_app
+import logging
 
 
 class RelationshipInferencer:
@@ -109,7 +112,7 @@ class RelationshipInferencer:
         Returns:
             추론 결과 딕셔너리
         """
-        print("▶ [Inference] CSV 분석 시작...")
+        logger.info("▶ [Inference] CSV 분석 시작...")
         
         columns = list(df.columns)
         sample_rows = df.head(sample_size).to_dict('records')
@@ -123,11 +126,11 @@ class RelationshipInferencer:
             llm_types = cls._infer_column_types_by_llm(unknown_columns, sample_rows)
             column_types.update(llm_types)
         
-        print(f"   [Inference] 컬럼 타입 추론 완료: {len(column_types)}개 컬럼")
+        logger.info(f"   [Inference] 컬럼 타입 추론 완료: {len(column_types)}개 컬럼")
         
         # Stage 2: 관계 추론
         relationships = cls._infer_relationships(column_types)
-        print(f"   [Inference] 관계 추론 완료: {len(relationships)}개 관계")
+        logger.info(f"   [Inference] 관계 추론 완료: {len(relationships)}개 관계")
         
         # Stage 3: ETL 매핑 생성
         suggested_mappings = cls._generate_etl_mappings(column_types, relationships)
@@ -370,7 +373,7 @@ class RelationshipInferencer:
             return result
             
         except Exception as e:
-            print(f"   ⚠️ LLM 컬럼 추론 오류: {e}")
+            logger.error(f"   ⚠️ LLM 컬럼 추론 오류: {e}")
             return {}
 
     @classmethod

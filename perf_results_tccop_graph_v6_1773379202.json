@@ -1,0 +1,191 @@
+{
+  "graph": "tccop_graph_v6",
+  "model": "deepseek-ai/deepseek-coder-7b-instruct-v1.5",
+  "summary": {
+    "total": 30,
+    "success": 30,
+    "avg_latency": 3.249965953826904
+  },
+  "details": [
+    {
+      "query": "특정 계좌(123-456)의 소유자가 누구인지 찾아줘",
+      "duration": 2.178703784942627,
+      "success": true,
+      "cypher": "MATCH (a:vt_bacnt {actno: '123-456'})-[:belongs_to]->(p:vt_psn) RETURN a, p LIMIT 30"
+    },
+    {
+      "query": "인물 '홍길동'이 보유한 모든 전화번호 리스트를 보여줘",
+      "duration": 1.241443157196045,
+      "success": true,
+      "cypher": "MATCH (p:vt_psn {name: '홍길동'})-[:owns_phone]->(t:vt_telno) RETURN p, t LIMIT 30"
+    },
+    {
+      "query": "사건번호 'CASE-2025-001'에 연루된 모든 피의자 리스트",
+      "duration": 1.4315221309661865,
+      "success": true,
+      "cypher": "MATCH (c:vt_case {flnm: 'CASE-2025-001'})-[:involves]->(a:vt_psn) RETURN a"
+    },
+    {
+      "query": "전화번호 '010-1111-2222'를 사용하는 사람이 접속한 IP 주소 목록",
+      "duration": 1.260960340499878,
+      "success": true,
+      "cypher": "MATCH (p:vt_telno {telno: '010-1111-2222'})-[:used_ip]->(i:vt_ip) RETURN p, i LIMIT 30"
+    },
+    {
+      "query": "특정 ATM(ATM-01)에서 돈을 인출한 계좌 정보를 모두 찾아줘",
+      "duration": 1.208066701889038,
+      "success": true,
+      "cypher": "MATCH (a:vt_bacnt)-[r:has_account]->(atm:vt_atm {atm_id: 'ATM-01'}) RETURN a, r, atm LIMIT 30"
+    },
+    {
+      "query": "피의자 '김철수'와 연관된 모든 사건 리스트",
+      "duration": 1.077981948852539,
+      "success": true,
+      "cypher": "MATCH (c:vt_case)-[:involves]->(p:vt_psn {name: '김철수'}) RETURN c, p LIMIT 30"
+    },
+    {
+      "query": "이체 내역 중 금액이 1,000만원 이상인 건들과 연결된 계좌들",
+      "duration": 1.393975019454956,
+      "success": true,
+      "cypher": "MATCH (a1:vt_bacnt)-[r1:from_account]->(t:vt_transfer)-[r2:to_account]->(a2:vt_bacnt) WHERE t.amount >= '10000000' RETURN a1, r1, t, r2, a2 LIMIT 30"
+    },
+    {
+      "query": "특정 IP(1.2.3.4)를 통해 접속한 모든 사용자 ID",
+      "duration": 1.1039280891418457,
+      "success": true,
+      "cypher": "MATCH (ip:vt_ip {ip_addr: '1.2.3.4'})-[:used_ip]->(user:vt_psn) RETURN user.id LIMIT 30"
+    },
+    {
+      "query": "계좌 '333-444-555'로 입금한 모든 송금인 계좌번호",
+      "duration": 1.5992839336395264,
+      "success": true,
+      "cypher": "MATCH (a1:vt_bacnt {actno: '333-444-555'})-[r1:to_account]->(t:vt_transfer)-[r2:from_account]->(a2:vt_bacnt) RETURN a2.actno AS receiving_account, COLLECT(DISTINCT t) AS transactions LIMIT 30"
+    },
+    {
+      "query": "특정 전화번호와 통화한 모든 수신자 리스트",
+      "duration": 1.7035808563232422,
+      "success": true,
+      "cypher": "MATCH (p:vt_telno {telno: '7088888888'})-[:callee]->(t:vt_call)-[:caller]->(a:vt_telno) RETURN p, t, a LIMIT 30"
+    },
+    {
+      "query": "홍길동의 계좌에서 나간 돈이 최종적으로 도달한 계좌들을 추적해줘",
+      "duration": 1.8348290920257568,
+      "success": true,
+      "cypher": "MATCH (psn:vt_psn {name: '홍길동'})-[:has_account]->(bacnt:vt_bacnt)-[:from_account]->(transfer:vt_transfer)-[:to_account]->(end_bacnt:vt_bacnt) RETURN psn, bacnt, transfer, end_bacnt LIMIT 30"
+    },
+    {
+      "query": "김철수와 이영희 사이의 모든 통화 및 이체 연결 고리(3단계 이내)",
+      "duration": 4.180690050125122,
+      "success": true,
+      "cypher": "MATCH (p1:vt_psn {name: '김철수'})-[:involves*1..3]->(t:vt_transfer)-[:involves*1..3]->(p2:vt_psn {name: '이영희'}) \nRETURN p1, t, p2 LIMIT 30\n\n\n이 쿼리는 김철수와 이영희 사이에서 최대 3단계 이내의 모든 통화 및 이체 연결을 찾습니다. 각 연결은 `involves` 관계를 통해 연결되며, 김철수와 이영희 모두 `involves` 관계를 통해 통화 또는 이체 노드에 연결됩니다."
+    },
+    {
+      "query": "특정 전화번호로 통화한 사람이 사용한 모든 은행 계좌들",
+      "duration": 2.351972818374634,
+      "success": true,
+      "cypher": "MATCH (p:vt_telno {telno: '특정 전화번호'})-[:contacted]->(psn:vt_psn)-[:has_account]->(bacnt:vt_bacnt) RETURN p, psn, bacnt LIMIT 30\n\n(주의: '특정 전화번호'를 실제 전화번호로 대체해야 합니다.)"
+    },
+    {
+      "query": "동일한 IP를 공유하는 인물들 간의 자금 흐름 분석",
+      "duration": 4.0496461391448975,
+      "success": true,
+      "cypher": "MATCH (ip1:vt_ip {ip_addr: '103.38.1.160'})-[:used_ip]->(p1:vt_psn), (ip2:vt_ip {ip_addr: '103.38.1.160'})-[:used_ip]->(p2:vt_psn)\nWHERE p1 <> p2\nWITH p1, p2\nMATCH (p1)-[:involves]->(c1:vt_case), (p2)-[:involves]->(c2:vt_case)\nWHERE c1 <> c2\nWITH p1, p2, c1, c2\nMATCH (c1)-[:involves]->(a1:vt_actor), (c2)-[:involves]->(a2:vt_actor)\nWHERE a1 <> a2\nWITH p1, p2, c1, c2, a1, a2\nMATCH (a1)-[:has_account]->(bacnt1:vt_bacnt), (a2)-[:has_account]->(bacnt2:vt_bacnt)\nWHERE bacnt1 <> bacnt2\nMATCH (bacnt1)-[:from_account]->(t1:vt_transfer)-[:to_account]->(bacnt2)\nRETURN p1, p2, c1, c2, a1, a2, bacnt1, bacnt2, t1\nLIMIT 30"
+    },
+    {
+      "query": "사건 A와 사건 B에 동시에 등장하는 공통 피의자 검색",
+      "duration": 3.4354491233825684,
+      "success": true,
+      "cypher": "MATCH (c1:vt_case {id: 'A'})-[:involves]->(p:vt_psn)\nWITH p, c1\nMATCH (c2:vt_case {id: 'B'})-[:involves]->(p)\nRETURN p, c1, c2\n\n\n이 쿼리는 먼저 사건 A에 관련된 모든 피의자를 찾고, 그 다음에 사건 B에 관련된 모든 피의자를 찾습니다. 그리고 두 집합의 교집합을 반환하여 두 사건에 동시에 등장하는 공통 피의자를 찾습니다."
+    },
+    {
+      "query": "대포통장 의심 계좌(A)에서 세 단계를 거쳐 세탁된 자금의 행방",
+      "duration": 6.9114251136779785,
+      "success": true,
+      "cypher": "MATCH (a1:vt_bacnt {actno: 'A'})-[:from_account]->(t1:vt_transfer)-[:to_account]->(a2:vt_bacnt)\nMATCH (a2)-[:from_account]->(t2:vt_transfer)-[:to_account]->(a3:vt_bacnt)\nMATCH (a3)-[:from_account]->(t3:vt_transfer)-[:to_account]->(a4:vt_bacnt)\nRETURN a1, t1, a2, t2, a3, t3, a4\nLIMIT 30\n\n\n이 쿼리는 대포통장 의심 계좌(A)에서 출금된 자금이 다른 계좌로 이체되는 경로를 찾습니다. 그런 다음, 그 자금이 세 단계를 거쳐 다른 계좌로 이체되는 경로를 찾습니다. 이 쿼리는 모든 경로를 반환하므로, 특정 경로를 찾으려면 추가적인 조건을 적용해야 할 수 있습니다."
+    },
+    {
+      "query": "특정 사이트에 접속한 사람들이 사용한 공통된 전화번호 추출",
+      "duration": 1.8900747299194336,
+      "success": true,
+      "cypher": "MATCH (p:vt_psn)-[:has_account]->(a:vt_telno {telno: '1000000004'})-[:used_ip]->(ip:vt_ip)<-[:used_ip]-(p2:vt_psn) WHERE NOT (p)-[:has_account]->(a) RETURN p, a, ip, p2 LIMIT 30"
+    },
+    {
+      "query": "피의자 그룹 내에서 가장 빈번하게 통화가 일어나는 핵심 인물 찾기",
+      "duration": 6.0336503982543945,
+      "success": true,
+      "cypher": "MATCH (p1:vt_psn)-[r1:called]->(c:vt_call)-[r2:called]->(p2:vt_psn)\nWHERE p1 <> p2 // 같은 사람과의 통화는 제외\nRETURN p1, r1, c, r2, p2, count(*) as call_count\nORDER BY call_count DESC\nLIMIT 10\n\n\n이 쿼리는 모든 피의자(p1)가 걸어서 통화를 시작하고(r1), 그 후 통화가 이루어지고(c), 그 후 다른 피의자(p2)가 걸어서 통화를 받는(r2) 경우를 찾습니다. 그리고 이 통화 건수를 세어 가장 많은 통화를 가진 사람을 찾습니다. 이 쿼리는 같은 사람과의 통화를 제외하고 있습니다."
+    },
+    {
+      "query": "인물 A의 계좌에서 인물 B의 계좌로 직접 송금이 없어도 연결된 경로가 있는지",
+      "duration": 9.752104997634888,
+      "success": true,
+      "cypher": "MATCH path = shortestPath((a1:vt_bacnt {actno: 'A의 계좌번호'})-[:*]->(a2:vt_bacnt {actno: 'B의 계좌번호'}))\nRETURN path\n\n\n이 쿼리는 인물 A의 계좌에서 시작하여 인물 B의 계좌로 가는 최단 경로를 찾습니다. `[:*]` 는 모든 관계를 따라갈 수 있음을 의미합니다. 만약 인물 A의 계좌에서 인물 B의 계좌로 직접 송금이 없더라도 연결된 경로가 있다면, 그 경로를 반환합니다.\n\n참고로, 이 쿼리는 최단 경로를 찾기 때문에 인물 A의 계좌에서 인물 B의 계좌로 직접 송금이 있는 경우보다 다른 경로를 따라갈 수도 있습니다. 만약 직접 송금만 궁금하다면, 다음과 같은 쿼리를 사용하면 됩니다.\n\n\nMATCH (a1:vt_bacnt {actno: 'A의 계좌번호'})-[:from_account]->(t:vt_transfer)-[:to_account]->(a2:vt_bacnt {actno: 'B의 계좌번호'}) RETURN a1, t, a2 LIMIT 30\n\n\n이 쿼리는 인물 A의 계좌에서 출금된 금액이 인물 B의 계좌에 입금된 금액과 같은 금액의 송금만 반환합니다."
+    },
+    {
+      "query": "특정 계좌와 연결된 모든 증거물(전화, IP, 차량) 통합 조회",
+      "duration": 5.868395090103149,
+      "success": true,
+      "cypher": "MATCH (a:vt_bacnt {actno: '123-456'})-[r]->(n) \nRETURN a, r, n LIMIT 30\n\n\n이 쿼리는 계좌 노드(vt_bacnt)를 찾아 그것과 연결된 모든 노드를 반환합니다. 이 노드는 전화번호(vt_telno), IP 주소(vt_ip), 차량(vt_vhcl) 등이 될 수 있습니다. 이 쿼리는 모든 관계를 반환하므로, 원하는 정보를 얻기 위해서는 반환된 관계의 종류를 확인하고 필요한 정보만 추출해야 합니다."
+    },
+    {
+      "query": "어제 오후 2시부터 4시 사이에 발생한 100만원 이상의 모든 이체 내역",
+      "duration": 1.5378549098968506,
+      "success": true,
+      "cypher": "MATCH (t:vt_transfer) WHERE t.timestamp >= datetime('2023-04-01T14:00:00') AND t.timestamp < datetime('2023-04-01T16:00:00') AND t.amount >= 1000000 RETURN t LIMIT 30"
+    },
+    {
+      "query": "최근 3일간 5회 이상 빈번하게 송금이 일어난 계좌 간의 관계도",
+      "duration": 6.704639911651611,
+      "success": true,
+      "cypher": "MATCH (a1:vt_bacnt)-[r1:from_account]->(t:vt_transfer)-[r2:to_account]->(a2:vt_bacnt)\nWHERE t.timestamp > datetime({epochSeconds: timestamp() - 3 * 24 * 60 * 60})\nWITH a1, a2, count(*) as transfer_count\nWHERE transfer_count >= 5\nRETURN a1, a2, transfer_count\n\n\n이 쿼리는 모든 송금 관계를 찾아서, 최근 3일 동안의 관계만 필터링하고, 그 중에서도 5회 이상 거래가 발생한 계좌 간의 관계를 반환합니다. 이 쿼리는 주어진 그래프 DB의 구조와 데이터에 따라 정확하지 않을 수 있으므로, 실제 사용 시 적절히 수정해야 합니다."
+    },
+    {
+      "query": "통화 시간이 10분 이상인 긴밀한 관계의 인물들 네트워크",
+      "duration": 4.816697120666504,
+      "success": true,
+      "cypher": "MATCH (p1:vt_psn)-[r1:has_account]->(bacnt1:vt_bacnt)<-[r2:has_account]-(p2:vt_psn)\nWHERE p1 <> p2 AND r1.duration >= 10 AND r2.duration >= 10\nWITH p1, p2, r1, r2\nMATCH (p1)-[r3:called]->(p2)\nWHERE r3.duration >= 10\nRETURN p1, r1, bacnt1, r2, p2, r3\nLIMIT 30\n\n\nThis query first matches pairs of persons who have accounts with the same bank account (bacnt1), ensuring that the persons are not the same and that the duration of their relationship is 10 minutes or more. Then it matches the pairs of persons who are involved in a call with each other, ensuring that the call duration is 10 minutes or more. Finally, it returns the persons and their relationships.\n\nPlease note that this query assumes that the relationships between persons and bank accounts are represented by the `has_account` relationship, and that the `called` relationship represents a call between persons. The `duration` property is assumed to be on these relationships."
+    },
+    {
+      "query": "특정 사건과 연관된 인물들이 사용한 모든 가상 자산 정보",
+      "duration": 1.4323997497558594,
+      "success": true,
+      "cypher": "MATCH (c:vt_case {flnm: 'CASE-2025-0610'})-[:involves]->(p:vt_psn)-[:has_account]->(bacnt:vt_bacnt) RETURN c, p, bacnt LIMIT 30"
+    },
+    {
+      "query": "보이스피싱 의심 번호와 연관된 모든 인출책 계좌 추적",
+      "duration": 1.2362349033355713,
+      "success": true,
+      "cypher": "MATCH (v:vt_telno {telno: '보이스피싱 의심 번호'})-[:has_account]->(a:vt_bacnt) RETURN a, v LIMIT 30"
+    },
+    {
+      "query": "이동 경로상 동일한 위치(ATM)를 공유하는 피의자들의 접점 분석",
+      "duration": 4.1318159103393555,
+      "success": true,
+      "cypher": "MATCH (atm:vt_atm)-[:located_at]->(location)\nWITH atm, collect(location) as locations\nWHERE size(locations) > 1\nMATCH (atm)-[:located_at]->(location)-[:located_at]->(suspect:vt_psn)\nRETURN atm, collect(suspect) as suspects\n\n\nThis query first finds all ATMs and their locations. It then filters out ATMs that are located at only one location. For each of these ATMs, it finds all suspects who have been at the ATM's location and at any other location connected to the ATM. The result is a list of ATMs and the suspects who have been at those ATMs.\n\nPlease note that this query assumes that there is a relationship `located_at` between an ATM and a location, and between a location and a suspect. If the relationship names or types are different in your graph, you will need to adjust the query accordingly."
+    },
+    {
+      "query": "특정 IP 대역을 사용하는 조직적인 접속 시도와 연관된 사건들",
+      "duration": 1.69588303565979,
+      "success": true,
+      "cypher": "MATCH (ip:vt_ip {ip_addr: '152.38.1.150'})-[:used_ip]->(e:vt_event)-[:involves]->(c:vt_case) RETURN ip, e, c LIMIT 30"
+    },
+    {
+      "query": "피의자 한 명을 중심으로 뻗어나가는 3-Hop 이내의 모든 범죄 네트워크",
+      "duration": 6.801849126815796,
+      "success": true,
+      "cypher": "MATCH (p:vt_psn {id: '피해자3'})-[*..3]-(c:vt_case)\nRETURN p, [*..3] AS path, c\n\n\n이 쿼리는 피의자 '피해자3'을 시작으로 3-Hop 이내의 모든 관계를 찾습니다. 결과는 피의자, 경로, 그리고 그 경로에 연결된 모든 사건(vt_case)을 반환합니다.\n\n이 쿼리는 피의자와 관련된 모든 노드와 그들 간의 관계를 반환하므로, 결과를 해석하여 범죄 네트워크를 파악할 수 있습니다. 쿼리의 `*..3`은 0-3개의 관계를 가진 모든 경로를 의미합니다."
+    },
+    {
+      "query": "자금 세탁 패턴(순환 송금 등)이 의심되는 계좌 세트 탐지",
+      "duration": 4.461316108703613,
+      "success": true,
+      "cypher": "MATCH (a1:vt_bacnt)-[r1:from_account]->(t1:vt_transfer)-[r2:to_account]->(a2:vt_bacnt)\nWITH a1, a2, t1, r1, r2\nMATCH (a3:vt_bacnt)-[r3:from_account]->(t2:vt_transfer)-[r4:to_account]->(a4:vt_bacnt)\nWHERE a1 = a3 AND t1 <> t2 AND t1.timestamp + 1000 * 60 * 60 * 24 > t2.timestamp // Assuming transfers are within 24 hours\nRETURN a1, a2, t1, r1, r2, a3, a4, t2, r3, r4\nLIMIT 30\n\n\nThis query matches transfers from one account to another, then matches more transfers from different accounts to different transfers. It checks if the two transfers are from the same source account and if the second transfer is within 24 hours of the first transfer.\n\nPlease note that this is a simplified example and may not cover all possible money laundering patterns. It's also important to note that the Cypher query should be adjusted based on the actual schema and data in your graph database."
+    },
+    {
+      "query": "전체 그래프에서 가장 많은 연결을 가진 상위 10개 허브 노드 정보",
+      "duration": 4.172604322433472,
+      "success": true,
+      "cypher": "MATCH (n)\nWITH n, size((n)--()) AS connections\nORDER BY connections DESC\nRETURN n, connections\nLIMIT 10\n\n\n이 쿼리는 그래프의 모든 노드를 찾고, 각 노드의 연결 수를 계산하고, 그 수를 기준으로 내림차순으로 정렬하여 상위 10개의 노드를 반환합니다."
+    }
+  ]
+}
