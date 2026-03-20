@@ -1,11 +1,18 @@
 import json
-from app.database import get_db_connection, safe_props
+import logging
+from app.database import get_db_connection, safe_props, safe_set_graph_path, validate_graph_path
 from app.services.subgraph_service import SubGraphService
 from app.services.ai_service import AIService
 import psycopg2
 from flask import current_app
 
+logger = logging.getLogger(__name__)
+
 class GraphService:
+    
+    # 스키마 캐시 (graph_path 별 저장)
+    _SCHEMA_CACHE = {}
+    _CACHE_TTL = 300 # 5분
     
     @staticmethod
     def get_db_connection():
@@ -21,7 +28,7 @@ class GraphService:
             conn.autocommit = True
             return conn, conn.cursor()
         except Exception as e:
-            print(f"DB 접속 오류: {e}")
+            logger.error(f"DB 접속 오류: {e}")
             return None, None
 
     @staticmethod
@@ -105,12 +112,77 @@ class GraphService:
         return 'vt_psn'
 
     @staticmethod
+    def get_current_schema(graph_path, force_refresh=False):
+        """현재 그래프의 활성 VLABEL 및 ELABEL 정보와 각 속성 키들을 동적으로 조회 (캐시 적용)"""
+        import time
+        from flask import current_app
+        
+        # 캐시 확인
+        if not force_refresh and graph_path in GraphService._SCHEMA_CACHE:
+            cached_data, timestamp = GraphService._SCHEMA_CACHE[graph_path]
+            if time.time() - timestamp < GraphService._CACHE_TTL:
+                logger.info(f"▶ [SchemaCache] 캐시 히트: {graph_path}")
+                return cached_data
+
+        conn, cur = GraphService.get_db_connection()
+        if not conn: return {"node_labels": {}, "edge_types": []}
+        try:
+            # Vertex 라벨 및 대표 속성 샘플링 조회
+            cur.execute(f"""
+                SELECT table_name 
+                FROM information_schema.tables 
+                WHERE table_schema = '{graph_path}' 
+                  AND table_name LIKE 'vt_%'
+            """)
+            vertex_labels = [r[0] for r in cur.fetchall()]
+            
+            node_info = {}
+            for label in vertex_labels:
+                # 각 라벨의 컬럼(속성) 목록 조회
+                cur.execute(f"""
+                    SELECT column_name 
+                    FROM information_schema.columns 
+                    WHERE table_schema = '{graph_path}' AND table_name = '{label}'
+                      AND column_name NOT IN ('id', 'properties')
+                """)
+                cols = [r[0] for r in cur.fetchall()]
+                # JSONB properties 내부의 키 샘플링
+                cur.execute(f"SELECT jsonb_object_keys(properties) FROM \"{graph_path}\".\"{label}\" LIMIT 10")
+                prop_keys = list(set([r[0] for r in cur.fetchall()]))
+                node_info[label] = list(set(cols + prop_keys))
+
+            # Edge 라벨 조회
+            cur.execute(f"""
+                SELECT table_name 
+                FROM information_schema.tables 
+                WHERE table_schema = '{graph_path}' 
+                  AND table_name NOT LIKE 'vt_%'
+                  AND table_name NOT IN ('ag_vertex', 'ag_label', 'ag_edge')
+            """)
+            edge_labels = [r[0] for r in cur.fetchall()]
+            
+            schema_data = {
+                "node_labels": node_info,
+                "edge_types": edge_labels
+            }
+            
+            # 캐시 저장
+            GraphService._SCHEMA_CACHE[graph_path] = (schema_data, time.time())
+            return schema_data
+
+        except Exception as e:
+            logger.error(f"Get Schema Error: {e}")
+            return {"node_labels": {}, "edge_types": []}
+        finally:
+            conn.close()
+
+    @staticmethod
     def clear_graph(graph_path):
         """그래프 데이터 전체 초기화"""
         conn, cur = GraphService.get_db_connection()
         if not conn: return False, "DB 연결 실패"
         try:
-            cur.execute(f"SET graph_path = {graph_path};")
+            safe_set_graph_path(cur, graph_path)
             cur.execute("MATCH (n) DETACH DELETE n")
             return True, "삭제 완료"
         except Exception as e:
@@ -141,7 +213,7 @@ class GraphService:
                 })
             return graphs
         except Exception as e:
-            print(f"List Graphs Error: {e}")
+            logger.error(f"List Graphs Error: {e}")
             return []
         finally:
             conn.close()
@@ -154,7 +226,7 @@ class GraphService:
         try:
             # AgensGraph에서 그래프 생성
             cur.execute(f"CREATE GRAPH IF NOT EXISTS {graph_name};")
-            cur.execute(f"SET graph_path = {graph_name};")
+            safe_set_graph_path(cur, graph_name)
             
             # 기본 vertex/edge 라벨 생성
             cur.execute("CREATE VLABEL IF NOT EXISTS vt_psn;")
@@ -252,7 +324,7 @@ class GraphService:
                             }
                         })
                 except Exception as table_error:
-                    print(f"Search error in {table_name}: {table_error}")
+                    logger.info(f"Search error in {table_name}: {table_error}")
                     continue
             
             # 3. 검색된 노드들 간의 엣지 찾기
@@ -266,6 +338,7 @@ class GraphService:
                           AND table_name NOT LIKE 'vt_%'
                           AND table_name != 'ag_label'
                           AND table_name != 'ag_vertex'
+                          AND table_name != 'ag_edge'
                     """)
                     edge_tables = [r[0] for r in cur.fetchall()]
                     
@@ -338,15 +411,15 @@ class GraphService:
                                     }
                                 })
                         except Exception as edge_error:
-                            print(f"Edge search error in {edge_table}: {edge_error}")
+                            logger.debug(f"Edge search error in {edge_table}: {edge_error}")
                             continue
                             
                 except Exception as e:
-                    print(f"Edge retrieval error: {e}")
+                    logger.error(f"Edge retrieval error: {e}")
             
             return elements
         except Exception as e:
-            print(f"Search Error: {e}")
+            logger.error(f"Search Error: {e}")
             return []
         finally:
             conn.close()
@@ -364,7 +437,7 @@ class GraphService:
                 SELECT table_name 
                 FROM information_schema.tables 
                 WHERE table_schema = '{graph_path}' 
-                  AND table_name NOT IN ('ag_vertex')
+                  AND table_name NOT IN ('ag_vertex', 'ag_label', 'ag_edge')
                   AND table_name NOT LIKE 'vt_%'
             """)
             edge_tables = [r[0] for r in cur.fetchall()]
@@ -380,7 +453,7 @@ class GraphService:
                 if t not in edge_tables:
                     edge_tables.append(t)
             
-            print(f"[expand_node] 조회할 엣지 테이블: {edge_tables}")
+            logger.debug(f"[expand_node] 조회할 엣지 테이블: {edge_tables}")
             
             # 중복 엣지 방지를 위한 ID 추적
             added_edge_ids = set()
@@ -465,7 +538,7 @@ class GraphService:
             
             return elements
         except Exception as e:
-            print(f"Expand Error: {e}")
+            logger.error(f"Expand Error: {e}")
             return []
         finally:
             conn.close()
@@ -477,7 +550,7 @@ class GraphService:
         if not conn: return False, []
         
         try:
-            cur.execute(f"SET graph_path = {graph_path};")
+            safe_set_graph_path(cur, graph_path)
             
             # BFS 탐색
             queue = [[src]]
@@ -489,10 +562,10 @@ class GraphService:
                 curr = path[-1]
                 if curr == tgt:
                     found_path = path; break
-                if len(path) > 4: continue # 깊이 제한
+                if len(path) > 6: continue # 깊이 제한
                 
                 # 이웃 노드 검색
-                cur.execute(f"MATCH (u)-[]-(v) WHERE id(u) = {curr} RETURN id(v)")
+                cur.execute(f"MATCH (u)-[]-(v) WHERE id(u) = '{curr}' RETURN id(v)")
                 for row in cur.fetchall():
                     neighbor_id = str(row[0])
                     if neighbor_id not in visited:
@@ -504,7 +577,7 @@ class GraphService:
             # 경로 시각화 데이터 생성
             elements = []
             for nid in found_path:
-                cur.execute(f"MATCH (n) WHERE id(n) = {nid} RETURN id(n), labels(n), properties(n)")
+                cur.execute(f"MATCH (n) WHERE id(n) = '{nid}' RETURN id(n), labels(n), properties(n)")
                 r = cur.fetchone()
                 if r:
                     node_id = str(r[0])
@@ -513,7 +586,7 @@ class GraphService:
             # 엣지 연결
             for i in range(len(found_path)-1):
                 u, v = found_path[i], found_path[i+1]
-                cur.execute(f"MATCH (u)-[r]-(v) WHERE id(u) = {u} AND id(v) = {v} RETURN id(r), type(r), properties(r)")
+                cur.execute(f"MATCH (u)-[r]-(v) WHERE id(u) = '{u}' AND id(v) = '{v}' RETURN id(r), type(r), properties(r)")
                 edge_res = cur.fetchone()
                 
                 if edge_res:
@@ -526,7 +599,7 @@ class GraphService:
             return True, elements
             
         except Exception as e:
-            print(f"Path Error: {e}")
+            logger.error(f"Path Error: {e}")
             return False, []
         finally:
             conn.close()
@@ -540,7 +613,7 @@ class GraphService:
         depth = min(int(depth), 5)  # 최대 5-hop
         
         try:
-            cur.execute(f"SET graph_path = {graph_path};")
+            safe_set_graph_path(cur, graph_path)
             
             elements_nodes = []
             elements_edges = []
@@ -548,7 +621,7 @@ class GraphService:
             edge_set = set()
             
             # 시작 노드 정보
-            cur.execute(f"MATCH (n) WHERE id(n) = {node_id} RETURN id(n), labels(n), properties(n)")
+            cur.execute(f"MATCH (n) WHERE id(n) = '{node_id}' RETURN id(n), labels(n), properties(n)")
             start = cur.fetchone()
             if start:
                 sid = str(start[0])
@@ -564,7 +637,7 @@ class GraphService:
                 if depth == 1:
                     query = f"""
                         MATCH (start)-[r]-(end_node)
-                        WHERE id(start) = {node_id}
+                        WHERE id(start) = '{node_id}'
                         RETURN id(end_node), labels(end_node), properties(end_node),
                                id(r), type(r), properties(r), id(start) AS prev_id
                         LIMIT {max_nodes}
@@ -574,7 +647,7 @@ class GraphService:
                     prev_hops = depth - 1
                     query = f"""
                         MATCH (start)-[*{prev_hops}..{prev_hops}]-(prev)-[r]-(end_node)
-                        WHERE id(start) = {node_id}
+                        WHERE id(start) = '{node_id}'
                         RETURN id(end_node), labels(end_node), properties(end_node),
                                id(r), type(r), properties(r), id(prev) AS prev_id
                         LIMIT {max_nodes}
@@ -652,7 +725,7 @@ class GraphService:
                         })
                             
             except Exception as hop_err:
-                print(f"Exact Hop {depth} error: {hop_err}")
+                logger.error(f"Exact Hop {depth} error: {hop_err}")
             
             stats = {
                 'total_nodes': len(elements_nodes),
@@ -667,7 +740,7 @@ class GraphService:
                 'stats': stats
             }
         except Exception as e:
-            print(f"Multi-hop Error: {e}")
+            logger.error(f"Multi-hop Error: {e}")
             return {'nodes': [], 'edges': [], 'stats': {'error': str(e)}}
         finally:
             conn.close()
@@ -679,7 +752,7 @@ class GraphService:
         if not conn: return {'nodes': [], 'edges': [], 'shared': []}
         
         try:
-            cur.execute(f"SET graph_path = {graph_path};")
+            safe_set_graph_path(cur, graph_path)
             
             elements_nodes = []
             elements_edges = []
@@ -688,7 +761,7 @@ class GraphService:
             edge_set = set()
             
             # 1. 시작 Person 노드
-            cur.execute(f"MATCH (p) WHERE id(p) = {node_id} RETURN id(p), labels(p), properties(p)")
+            cur.execute(f"MATCH (p) WHERE id(p) = '{node_id}' RETURN id(p), labels(p), properties(p)")
             start = cur.fetchone()
             if not start:
                 return {'nodes': [], 'edges': [], 'shared': [], 'error': 'Node not found'}
@@ -705,7 +778,7 @@ class GraphService:
             try:
                 cur.execute(f"""
                     MATCH (p1)-[r:accomplice_of]-(p2)
-                    WHERE id(p1) = {node_id}
+                    WHERE id(p1) = '{node_id}'
                     RETURN id(p2), labels(p2), properties(p2), id(r), properties(r)
                 """)
                 for r in cur.fetchall():
@@ -727,7 +800,7 @@ class GraphService:
                                      "label": "accomplice_of", "props": eprops}
                         })
             except Exception as e:
-                print(f"Accomplice query error: {e}")
+                logger.error(f"Accomplice query error: {e}")
             
             # 3. 공유 자원 (계좌/전화) 추적
             for rel, res_label, prop_name in [
@@ -738,7 +811,7 @@ class GraphService:
                 try:
                     cur.execute(f"""
                         MATCH (p)-[r:{rel}]->(res:{res_label})
-                        WHERE id(p) = {node_id}
+                        WHERE id(p) = '{node_id}'
                         RETURN id(res), labels(res), properties(res), id(r)
                     """)
                     for r in cur.fetchall():
@@ -771,7 +844,7 @@ class GraphService:
             try:
                 cur.execute(f"""
                     MATCH (c:vt_case)-[:involves]->(p)
-                    WHERE id(p) = {node_id}
+                    WHERE id(p) = '{node_id}'
                     RETURN id(c), labels(c), properties(c)
                 """)
                 for r in cur.fetchall():
@@ -802,7 +875,7 @@ class GraphService:
                 }
             }
         except Exception as e:
-            print(f"Accomplice Network Error: {e}")
+            logger.error(f"Accomplice Network Error: {e}")
             return {'nodes': [], 'edges': [], 'shared': [], 'error': str(e)}
         finally:
             conn.close()
@@ -814,7 +887,7 @@ class GraphService:
         if not conn: return []
         
         try:
-            cur.execute(f"SET graph_path = {graph_path};")
+            safe_set_graph_path(cur, graph_path)
             
             hubs = []
             # Person 허브
@@ -838,7 +911,7 @@ class GraphService:
                         'total': r[2] + r[3] + r[4] + r[5]
                     })
             except Exception as e:
-                print(f"Person hub error: {e}")
+                logger.error(f"Person hub error: {e}")
             
             # Account 허브
             try:
@@ -857,14 +930,14 @@ class GraphService:
                         'total': r[2] + r[3]
                     })
             except Exception as e:
-                print(f"Account hub error: {e}")
+                logger.error(f"Account hub error: {e}")
             
             # 전체 정렬
             hubs.sort(key=lambda x: x.get('total', 0), reverse=True)
             return hubs[:top_n]
             
         except Exception as e:
-            print(f"Hub Error: {e}")
+            logger.error(f"Hub Error: {e}")
             return []
         finally:
             conn.close()
@@ -884,44 +957,154 @@ class GraphService:
 
         try:
             # 1. Graph Path 설정 (AgensGraph 필수)
-            cur.execute(f"SET graph_path = {graph_path};")
+            safe_set_graph_path(cur, graph_path)
 
-            # 2. 직접 Cypher 실행 (ag_catalog 래퍼 불필요)
+            # 2. SQL Wrapper (SELECT * FROM cypher...) 형식인 경우 내부 Cypher만 추출
+            # (Native AgensGraph에서는 직접 MATCH를 선호하므로 호환성을 위해 처리)
             real_query = cypher_query.strip()
+            if real_query.upper().startswith("SELECT") and "$$" in real_query:
+                import re
+                match = re.search(r"\$\$(.*)\$\$", real_query, re.DOTALL)
+                if match:
+                    real_query = match.group(1).strip()
+                    logger.info(f"▶ [GraphService] SQL Wrapper에서 내부 Cypher 추출 완료")
             
-            print(f"▶ [GraphService] 실행 Cypher: {real_query}")
+            logger.info(f"▶ [GraphService] 실행 Cypher: {real_query}")
             cur.execute(real_query)
             
-            # 3. 결과 파싱
+            # 3. 결과 파싱 (노드와 엣지 구분 처리)
             rows = cur.fetchall()
             elements = []
             
-            for r in rows:
-                # AgensGraph 결과: (id, label, props) 또는 변형된 형태
-                if len(r) >= 3:
-                    node_id = str(r[0])
-                    # 라벨이 배열이나 문자열로 올 수 있음
-                    raw_label = r[1]
-                    if isinstance(raw_label, list):
-                        raw_label = raw_label[0] if raw_label else 'Unknown'
-                    else:
-                        raw_label = str(raw_label).replace('"', '')
-                    
-                    props = GraphService.safe_props(r[2])
-                    
-                    elements.append({
-                        "group": "nodes", 
-                        "data": { 
-                            "id": node_id, 
-                            "label": raw_label, 
-                            "props": props 
-                        }
-                    })
+            node_ids = set()
+            edge_ids = set()
             
+            import re
+            import json
+            
+            # AgensGraph raw string regex patterns
+            # Node: label[id]{props} e.g. vt_psn[4.2]{"name":"foo"}
+            # Edge: label[id][src,dst]{props} e.g. involves[19.2][3.1,4.2]{"role":"bar"}
+            node_pattern = re.compile(r'^([a-zA-Z0-9_]+)\[([\d\.]+)\](\{.*\})$')
+            edge_pattern = re.compile(r'^([a-zA-Z0-9_]+)\[([\d\.]+)\]\[([\d\.]+),([\d\.]+)\](\{.*\})$')
+            
+            def parse_item(item):
+                if not item: return
+                item_type = type(item).__name__
+                
+                # 리스트나 튜플인 경우 내부 아이템들 재귀 처리 (Variable length path 대응)
+                if isinstance(item, (list, tuple)):
+                    for sub_item in item:
+                        parse_item(sub_item)
+                    return
+
+                # 1. 노드 (Vertex) 파싱
+                if item_type in ('Vertex', 'agtype_vertex') or (isinstance(item, dict) and 'id' in item and 'label' in item and 'properties' in item) or (hasattr(item, 'id') and hasattr(item, 'label') and hasattr(item, 'properties')):
+                    try:
+                        n_id = str(item.get('id', '')) if isinstance(item, dict) else str(getattr(item, 'id', ''))
+                        if n_id and n_id not in node_ids:
+                            n_label = item.get('label', 'Unknown') if isinstance(item, dict) else getattr(item, 'label', 'Unknown')
+                            n_props = item.get('properties', {}) if isinstance(item, dict) else getattr(item, 'properties', {})
+                            node_ids.add(n_id)
+                            elements.append({
+                                "group": "nodes",
+                                "data": {"id": n_id, "label": str(n_label).replace('"', ''), "props": GraphService.safe_props(n_props)}
+                            })
+                    except Exception as e:
+                        logger.error(f"[Node Parse Error] {e}")
+                        
+                # 2. 엣지 (Edge) 파싱
+                elif item_type in ('Edge', 'agtype_edge') or (isinstance(item, dict) and 'start_id' in item and 'end_id' in item) or (hasattr(item, 'start_id') and hasattr(item, 'end_id')):
+                    try:
+                        e_id = str(item.get('id', '')) if isinstance(item, dict) else str(getattr(item, 'id', ''))
+                        if e_id and e_id not in edge_ids:
+                            e_label = item.get('label', 'Unknown') if isinstance(item, dict) else getattr(item, 'label', 'Unknown')
+                            s_id = str(item.get('start_id', '')) if isinstance(item, dict) else str(getattr(item, 'start_id', ''))
+                            t_id = str(item.get('end_id', '')) if isinstance(item, dict) else str(getattr(item, 'end_id', ''))
+                            e_props = item.get('properties', {}) if isinstance(item, dict) else getattr(item, 'properties', {})
+                            
+                            edge_ids.add(e_id)
+                            elements.append({
+                                "group": "edges",
+                                "data": {"id": e_id, "source": s_id, "target": t_id, "label": str(e_label).replace('"', ''), "props": GraphService.safe_props(e_props)}
+                            })
+                    except Exception as e:
+                        logger.error(f"[Edge Parse Error] {e}")
+                        
+                # 3. Raw String 파싱 (AgensGraph 포맷)
+                elif isinstance(item, str) and ('[' in item and ']' in item and '{' in item and '}' in item):
+                    edge_match = edge_pattern.match(item)
+                    if edge_match:
+                        try:
+                            e_label, e_id, s_id, t_id, props_str = edge_match.groups()
+                            if e_id not in edge_ids:
+                                edge_ids.add(e_id)
+                                e_props = json.loads(props_str) if props_str else {}
+                                elements.append({
+                                    "group": "edges",
+                                    "data": {"id": e_id, "source": s_id, "target": t_id, "label": e_label, "props": GraphService.safe_props(e_props)}
+                                })
+                        except: pass
+                    else:
+                        node_match = node_pattern.match(item)
+                        if node_match:
+                            try:
+                                n_label, n_id, props_str = node_match.groups()
+                                if n_id not in node_ids:
+                                    node_ids.add(n_id)
+                                    n_props = json.loads(props_str) if props_str else {}
+                                    elements.append({
+                                        "group": "nodes",
+                                        "data": {"id": n_id, "label": n_label, "props": GraphService.safe_props(n_props)}
+                                    })
+                            except: pass
+
+            for r in rows:
+                for item in r:
+                    parse_item(item)
+                            
+                # 3. 폴백 (Tuples/Lists) 또는 연속된 원시 타입 시퀀스 (id, label, props)
+                try:
+                    if len(r) >= 3:
+                        # RDB 드라이버 업데이트 후 PyGreSQL이 객체를 리턴하지 않고 [id, label(List), props(Dict)] 형태로 반환할 때 방어
+                        for i in range(len(r) - 2):
+                            item1, item2, item3 = r[i], r[i+1], r[i+2]
+                            if isinstance(item1, str) and '.' in item1 and item1.split('.')[0].isdigit() and isinstance(item2, list) and isinstance(item3, dict):
+                                # 노드 식별 성공. ex: ('9.1', ['vt_transfer'], {'amount': '0'})
+                                n_id = item1
+                                if n_id not in node_ids:
+                                    node_ids.add(n_id)
+                                    raw_label = item2[0] if item2 else 'Unknown'
+                                    elements.append({"group": "nodes", "data": {"id": n_id, "label": str(raw_label).replace('"', ''), "props": GraphService.safe_props(item3)}})
+                                    
+                    if len(r) >= 5:
+                        # 엣지 방어 [Edge_ID(str), Label(str), Source_ID(str), Target_ID(str), Props(dict)]
+                        for i in range(len(r) - 4):
+                            item1, item2, item3, item4, item5 = r[i], r[i+1], r[i+2], r[i+3], r[i+4]
+                            
+                            # Type matching for destructured PyGreSQL edge object
+                            if isinstance(item1, str) and isinstance(item2, str) and isinstance(item3, str) and isinstance(item4, str) and isinstance(item5, dict):
+                                # Verify items 1, 3, 4 are valid AgensGraph internal IDs (ex: '9.13')
+                                if '.' in item1 and '.' in item3 and '.' in item4:
+                                    # Validate they are numeric IDs safely
+                                    if not (item1.split('.')[0].isdigit() and item3.split('.')[0].isdigit() and item4.split('.')[0].isdigit()):
+                                        continue
+                                        
+                                    e_id = item1
+                                    if e_id not in edge_ids:
+                                        edge_ids.add(e_id)
+                                        raw_label = item2 if item2 else 'Unknown'
+                                        elements.append({
+                                            "group": "edges",
+                                            "data": {"id": e_id, "source": item3, "target": item4, "label": str(raw_label).replace('"', ''), "props": GraphService.safe_props(item5)}
+                                        })
+                except Exception as e:
+                    logger.error(f"[Fallback Sequence Parse Error] {e}")
+                
             return True, elements
 
         except Exception as e:
-            print(f"Query Error: {e}")
+            logger.error(f"Query Error: {e}")
             return False, str(e)
         finally:
             conn.close()
@@ -933,13 +1116,13 @@ class GraphService:
     def quick_query(question, graph_path):
         """빠른 그래프 조회 (온톨로지 인식 강화 - 노드 + 엣지 속성)"""
         target_kw = AIService.extract_keywords(question)
-        print(f"▶ [Quick Query] 키워드 추출: '{target_kw}'")
+        logger.info(f"▶ [Quick Query] 키워드 추출: '{target_kw}'")
         
         conn, cur = get_db_connection()
         if not conn: return []
         try:
             conn.autocommit = False 
-            cur.execute(f"SET graph_path = {graph_path}")
+            safe_set_graph_path(cur, graph_path)
             
             # 🎯 온톨로지 인식: 노드 + 엣지 속성 모두 검색
             q = f"""
@@ -965,12 +1148,12 @@ class GraphService:
                    id(n), labels(n), properties(n) 
             LIMIT 30
             """
-            print(f"▶ [Quick Query] 실행 Cypher:\n{q}")
+            logger.info(f"▶ [Quick Query] 실행 Cypher:\n{q}")
             cur.execute(q)
             rows = cur.fetchall()
             conn.commit()
             
-            print(f"▶ [Quick Query] 결과: {len(rows)}개 행")
+            logger.info(f"▶ [Quick Query] 결과: {len(rows)}개 행")
             
             elements = []
             for r in rows:
@@ -986,7 +1169,7 @@ class GraphService:
             
             return elements
         except Exception as e:
-            print(f"Quick Query Error: {e}")
+            logger.error(f"Quick Query Error: {e}")
             return []
         finally:
             if conn: conn.close()
@@ -995,18 +1178,21 @@ class GraphService:
     def rag_query(question, graph_path):
         """그래프 조회 + AI 보고서 생성 (온톨로지 인식 강화 - 노드 + 엣지)"""
         target_kw = AIService.extract_keywords(question)
-        print(f"▶ [RAG] 키워드 추출: '{target_kw}'")
+        logger.info(f"▶ [RAG] 키워드 추출: '{target_kw}'")
         
         conn, cur = get_db_connection()
         if not conn: return "DB Fail", []
         try:
             conn.autocommit = False 
-            cur.execute(f"SET graph_path = {graph_path}")
+            safe_set_graph_path(cur, graph_path)
             
             # 🎯 온톨로지 인식: 노드 + 엣지 속성 모두 검색
             q = f"""
-            MATCH (v)-[r]-(n) 
+            MATCH p=(v)-[*1..6]-(n) 
             WHERE v.flnm CONTAINS '{target_kw}'
+               OR v.name CONTAINS '{target_kw}'
+               OR v.nickname CONTAINS '{target_kw}'
+               OR v.org_name CONTAINS '{target_kw}'
                OR v.telno CONTAINS '{target_kw}'
                OR v.phone CONTAINS '{target_kw}'
                OR v.bacnt CONTAINS '{target_kw}'
@@ -1020,21 +1206,21 @@ class GraphService:
                OR v.ontology_type CONTAINS '{target_kw}'
                OR v.entity_subtype CONTAINS '{target_kw}'
                OR v.domain_concept CONTAINS '{target_kw}'
-               OR r.crime_type CONTAINS '{target_kw}'
-               OR r.crime_name CONTAINS '{target_kw}'
-            RETURN id(v), labels(v), properties(v), 
-                   id(r), type(r), properties(r), 
-                   id(n), labels(n), properties(n) 
-            LIMIT 30
+            UNWIND edges(p) as r
+            RETURN id(startNode(r)), label(startNode(r)), properties(startNode(r)), 
+                   id(r), label(r), properties(r), 
+                   id(endNode(r)), label(endNode(r)), properties(endNode(r)) 
+            LIMIT 50
             """
-            print(f"▶ [RAG] 실행 Cypher:\n{q}")
+            logger.info(f"▶ [RAG] 실행 Cypher:\n{q}")
             cur.execute(q)
             rows = cur.fetchall()
             conn.commit()
             
-            print(f"▶ [RAG] 결과: {len(rows)}개 행")
+            logger.info(f"▶ [RAG] 결과: {len(rows)}개 행")
             
-            if not rows: return "No Data", []
+            if not rows: 
+                return f"그래프 데이터페이스에서 '{target_kw}' 키워드와 연관된 데이터를 찾을 수 없습니다.\n검색기반(RAG) 보고서 생성을 위해서는 특정 사건번호, 피의자 이름, 또는 계좌번호 등을 프롬프트에 명시해주세요. (예: 'CASE-2025-0610 분석 보고서 작성해줘')", []
 
             context_texts = []
             elements = []
@@ -1084,5 +1270,100 @@ class GraphService:
             return report, elements
         except Exception as e:
             return str(e), []
+        finally:
+            conn.close()
+
+    @staticmethod
+    def create_manual_node(graph_name, label, properties):
+        """수동으로 노드를 생성하는 함수 (i2 기능)
+        
+        Note: AgensGraph의 ccop_fraud_graph에서 Cypher CREATE는 label ID 0으로 
+        노드를 생성하는 알려진 이슈가 있습니다. 이 경우 삭제 시 raw SQL을 사용합니다.
+        """
+        conn, cur = GraphService.get_db_connection()
+        if not conn: return False, "DB 연결 실패"
+        try:
+            conn.autocommit = True
+            safe_set_graph_path(cur, graph_name)
+            
+            # Cypher CREATE로 노드 생성
+            props_str = "{}"
+            if properties:
+                prop_list = []
+                for k, v in properties.items():
+                    k_str = str(k).replace('"', '').replace("'", "")
+                    if isinstance(v, (int, float)):
+                        prop_list.append(f"{k_str}: {v}")
+                    else:
+                        v_str = str(v).replace("'", "''")
+                        prop_list.append(f"{k_str}: '{v_str}'")
+                props_str = "{" + ", ".join(prop_list) + "}"
+                
+            cur.execute(f"CREATE (n:{label} {props_str}) RETURN id(n)")
+            new_id = cur.fetchone()[0]
+            logger.info(f"▶ [CreateNode] Cypher CREATE → {graph_name}.{label}, ID: {new_id}")
+            return True, str(new_id)
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return False, str(e)
+        finally:
+            conn.close()
+
+    @staticmethod
+    def create_manual_edge(graph_name, src_id, tgt_id, label, properties):
+        """수동으로 엣지를 생성하는 함수 (i2 기능)"""
+        conn, cur = GraphService.get_db_connection()
+        if not conn: return False, "DB 연결 실패"
+        try:
+            safe_set_graph_path(cur, graph_name)
+            
+            props_str = "{}"
+            if properties:
+                prop_list = []
+                for k, v in properties.items():
+                    k_str = str(k).replace('"', '').replace("'", "")
+                    if isinstance(v, (int, float)):
+                        prop_list.append(f"{k_str}: {v}")
+                    else:
+                        v_str = str(v).replace("'", "''") 
+                        prop_list.append(f"{k_str}: '{v_str}'")
+                props_str = "{" + ", ".join(prop_list) + "}"
+                
+            q = f"MATCH (a), (b) WHERE id(a) = '{src_id}' AND id(b) = '{tgt_id}' CREATE (a)-[r:{label} {props_str}]->(b) RETURN id(r)"
+            cur.execute(q)
+            new_id = cur.fetchone()[0]
+            conn.commit()
+            return True, str(new_id)
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            conn.rollback()
+            return False, str(e)
+        finally:
+            conn.close()
+
+    @staticmethod
+    def delete_element(graph_name, element_id, is_edge=False):
+        """수동으로 노드/엣지를 삭제하는 함수
+        
+        Cypher MATCH + DELETE를 사용합니다.
+        Note: label ID가 0인 노드(AgensGraph CREATE 버그)는 삭제 불가 → 
+        프론트엔드에서 '화면에서만 제거' 옵션을 제공합니다.
+        """
+        conn, cur = GraphService.get_db_connection()
+        if not conn: return False, "DB 연결 실패"
+        try:
+            conn.autocommit = True
+            safe_set_graph_path(cur, graph_name)
+            if is_edge:
+                cur.execute(f"MATCH ()-[r]-() WHERE id(r) = '{element_id}' DELETE r")
+            else:
+                cur.execute(f"MATCH (n) WHERE id(n) = '{element_id}' DETACH DELETE n")
+            logger.info(f"▶ [DeleteElement] Cypher DELETE, graph={graph_name}, ID: {element_id}")
+            return True, "삭제 완료"
+        except Exception as e:
+            logger.error(f"▶ [DeleteElement] ERROR: {e}")
+            return False, str(e)
         finally:
             conn.close()

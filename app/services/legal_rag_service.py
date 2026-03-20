@@ -1,5 +1,7 @@
 # app/services/legal_rag_service.py
 """
+logger = logging.getLogger(__name__)
+
 법률 RAG 서비스 - ChromaDB 기반 법률 문서 검색 및 자문 시스템
 OpenAI text-embedding-3-small 모델 사용
 """
@@ -17,6 +19,7 @@ from pypdf import PdfReader
 
 # OpenAI for embeddings and response generation
 from openai import OpenAI
+import logging
 
 
 class LegalRAGService:
@@ -339,7 +342,7 @@ class LegalRAGService:
         """
         from app.services.graph_context_extractor import GraphContextExtractor
         
-        print(f"▶ [LegalGraphRAG] 그래프 맥락 기반 질의 시작: {case_id}")
+        logger.info(f"▶ [LegalGraphRAG] 그래프 맥락 기반 질의 시작: {case_id}")
         
         try:
             # 1. 그래프 맥락 추출
@@ -403,7 +406,7 @@ class LegalRAGService:
             }
             
         except Exception as e:
-            print(f"   ⚠️ LegalGraphRAG 오류: {e}")
+            logger.error(f"   ⚠️ LegalGraphRAG 오류: {e}")
             return {
                 "answer": f"그래프 맥락 분석 중 오류 발생: {str(e)}",
                 "case_context": {},

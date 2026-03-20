@@ -9,6 +9,10 @@ from app.services.graph_service import GraphService
 from app.services.subgraph_service import SubGraphService
 from app.services.legal_rag_service import LegalRAGService
 from app.services.rdb_to_graph_service import RdbToGraphService
+from app.services.langgraph_agent import LangGraphAgent
+import logging
+
+logger = logging.getLogger(__name__)
 
 bp = Blueprint('main', __name__)
 
@@ -84,103 +88,151 @@ def delete_graph():
     else:
         return jsonify({"status": "error", "message": msg}), 500
 
+@bp.route('/api/graph/node/create', methods=['POST'])
+def create_manual_node():
+    """수동으로 그래프 노드 추가"""
+    try:
+        data = request.get_json()
+        graph_name = data.get('graph_name')
+        label = data.get('label')
+        properties = data.get('properties') or data.get('props', {})
+        if not graph_name or not label:
+            return jsonify({"status": "error", "message": "graph_name and label required"}), 400
+        success, res = GraphService.create_manual_node(graph_name, label, properties)
+        if success:
+            return jsonify({"status": "success", "node_id": res}), 200
+        else:
+            return jsonify({"status": "error", "message": res}), 400
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@bp.route('/api/graph/edge/create', methods=['POST'])
+def create_manual_edge():
+    """수동으로 그래프 엣지 추가"""
+    try:
+        data = request.get_json()
+        graph_name = data.get('graph_name')
+        src_id = data.get('src_id')
+        tgt_id = data.get('tgt_id')
+        label = data.get('label')
+        properties = data.get('properties', {})
+        if not all([graph_name, src_id, tgt_id, label]):
+            return jsonify({"status": "error", "message": "graph_name, src_id, tgt_id, label required"}), 400
+        success, res = GraphService.create_manual_edge(graph_name, src_id, tgt_id, label, properties)
+        if success:
+            return jsonify({"status": "success", "edge_id": res}), 200
+        else:
+            return jsonify({"status": "error", "message": res}), 400
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@bp.route('/api/graph/element/delete', methods=['POST'])
+def delete_manual_element():
+    """수동으로 노드/엣지 삭제"""
+    try:
+        data = request.get_json()
+        graph_name = data.get('graph_name')
+        element_id = data.get('element_id')
+        is_edge = data.get('is_edge', False)
+        if not graph_name or not element_id:
+            return jsonify({"status": "error", "message": "graph_name and element_id required"}), 400
+        success, res = GraphService.delete_element(graph_name, element_id, is_edge)
+        if success:
+            return jsonify({"status": "success", "message": res}), 200
+        else:
+            return jsonify({"status": "error", "message": res}), 400
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
 @bp.route('/api/graph/load', methods=['GET'])
 def load_graph_data():
-    """선택된 그래프의 전체 노드/엣지 로드 (최대 300 노드)"""
+    """선택된 그래프의 전체 노드/엣지 동기식 로드 (최대 N 건)"""
     graph_path = request.args.get('graph_path', 'demo_tst1')
     limit = request.args.get('limit', 300, type=int)
     
-    conn, cur = GraphService.get_db_connection()
+    # [Fix] psycopg2가 AgensGraph Vertex/Edge 객체를 직렬화 못하는 문제 해결.
+    # RETURN n, r, m → 0 rows 리턴됨 (psycopg2 직렬화 실패)
+    # RETURN id(n), labels(n), properties(n), type(r), id(m), labels(m), properties(m) → 정상 리턴
+    # 따라서 명시적 컬럼 추출 방식으로 변경하고, 직접 Cytoscape 포맷으로 조립.
+    
+    from app.services.graph_service import get_db_connection, GraphService
+    from app.database import safe_set_graph_path
+    conn, cur = get_db_connection()
     if not conn:
         return jsonify([])
     
+    elements = []
+    node_ids = set()
+    edge_counter = 0
+    
     try:
-        elements = []
-        node_ids = set()
+        conn.autocommit = False
+        safe_set_graph_path(cur, graph_path)
         
-        # 1. 모든 vertex 라벨 테이블 찾기
-        cur.execute(f"""
-            SELECT table_name 
-            FROM information_schema.tables 
-            WHERE table_schema = '{graph_path}' 
-              AND table_name LIKE 'vt_%'
-        """)
-        vertex_tables = [r[0] for r in cur.fetchall()]
+        cypher_query = f"""
+            MATCH (n)-[r]->(m) 
+            RETURN id(n), labels(n), properties(n), id(r), type(r), id(m), labels(m), properties(m) 
+            LIMIT {limit}
+        """
+        logger.info(f"▶ [GraphLoad] 실행 Cypher: {cypher_query.strip()}")
+        cur.execute(cypher_query)
+        rows = cur.fetchall()
         
-        if not vertex_tables:
-            conn.close()
-            return jsonify([])
-        
-        # 2. 각 테이블에서 노드 가져오기
-        per_table_limit = max(limit // len(vertex_tables), 10)
-        
-        for table_name in vertex_tables:
-            try:
-                cur.execute(f"""
-                    SELECT id, properties 
-                    FROM "{graph_path}"."{table_name}"
-                    LIMIT {per_table_limit}
-                """)
-                for r in cur.fetchall():
-                    node_id = str(r[0])
-                    props = r[1] if isinstance(r[1], dict) else {}
-                    node_ids.add(node_id)
-                    elements.append({
-                        "group": "nodes",
-                        "data": {"id": node_id, "label": table_name, "props": props}
-                    })
-            except Exception as e:
-                print(f"Load error in {table_name}: {e}")
+        for r in rows:
+            if len(r) < 8:
                 continue
+            
+            n_id, n_labels, n_props, r_id, r_type, m_id, m_labels, m_props = r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7]
+            
+            # 노드 n 추가
+            n_id_str = str(n_id)
+            if n_id_str not in node_ids:
+                node_ids.add(n_id_str)
+                n_label = n_labels[0] if isinstance(n_labels, list) and n_labels else str(n_labels)
+                elements.append({
+                    "group": "nodes",
+                    "data": {
+                        "id": n_id_str,
+                        "label": str(n_label).replace('"', ''),
+                        "props": GraphService.safe_props(n_props if isinstance(n_props, dict) else {})
+                    }
+                })
+            
+            # 노드 m 추가
+            m_id_str = str(m_id)
+            if m_id_str not in node_ids:
+                node_ids.add(m_id_str)
+                m_label = m_labels[0] if isinstance(m_labels, list) and m_labels else str(m_labels)
+                elements.append({
+                    "group": "nodes",
+                    "data": {
+                        "id": m_id_str,
+                        "label": str(m_label).replace('"', ''),
+                        "props": GraphService.safe_props(m_props if isinstance(m_props, dict) else {})
+                    }
+                })
+            
+            # 엣지 추가 (n → m)
+            edge_id = str(r_id)
+            elements.append({
+                "group": "edges",
+                "data": {
+                    "id": edge_id,
+                    "source": n_id_str,
+                    "target": m_id_str,
+                    "label": str(r_type).replace('"', '') if r_type else "관계",
+                    "props": {}
+                }
+            })
         
-        # 3. 엣지 찾기
-        if node_ids:
-            try:
-                cur.execute(f"""
-                    SELECT table_name 
-                    FROM information_schema.tables 
-                    WHERE table_schema = '{graph_path}' 
-                      AND table_name NOT LIKE 'vt_%'
-                      AND table_name != 'ag_label'
-                      AND table_name != 'ag_vertex'
-                """)
-                edge_tables = [r[0] for r in cur.fetchall()]
-                node_id_list = ','.join([f"'{nid}'" for nid in node_ids])
-                
-                for edge_table in edge_tables:
-                    try:
-                        cur.execute(f"""
-                            SELECT e.id, e.start, e."end", e.properties
-                            FROM "{graph_path}"."{edge_table}" e
-                            WHERE e.start IN ({node_id_list}) AND e."end" IN ({node_id_list})
-                            LIMIT 500
-                        """)
-                        for edge_row in cur.fetchall():
-                            edge_id = str(edge_row[0])
-                            src_id = str(edge_row[1])
-                            tgt_id = str(edge_row[2])
-                            edge_props = edge_row[3] if isinstance(edge_row[3], dict) else {}
-                            elements.append({
-                                "group": "edges",
-                                "data": {
-                                    "id": edge_id,
-                                    "source": src_id,
-                                    "target": tgt_id,
-                                    "label": edge_table,
-                                    "props": edge_props
-                                }
-                            })
-                    except Exception as e:
-                        continue
-            except Exception as e:
-                print(f"Edge load error: {e}")
-        
-        conn.close()
         return jsonify(elements)
         
     except Exception as e:
-        conn.close()
+        logger.error(f"[GraphLoad Error] {e}")
         return jsonify([])
+    finally:
+        conn.close()
 
 @bp.route('/api/search', methods=['GET'])
 def search_node():
@@ -415,9 +467,182 @@ def db_switch():
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
+# ============================
+# 2.6 Multi-RDB 소스 관리
+# ============================
+# 등록된 RDB 소스 저장 (in-memory, 서버 재시작 시 초기화)
+rdb_sources = {}
+
+def _init_default_rdb_source(app):
+    """앱 시작 시 기본 DB를 rdb_sources에 등록"""
+    import os
+    cfg = app.config.get('DB_CONFIG', {})
+    # DB_CONFIG에 host가 있으면 사용, 없으면 환경변수에서 직접 읽기
+    host = cfg.get('host') or os.environ.get('DB_HOST', '49.50.128.28')
+    port = cfg.get('port') or os.environ.get('DB_PORT', '5333')
+    dbname = cfg.get('dbname') or os.environ.get('DB_NAME', 'tccopdb')
+    user = cfg.get('user') or os.environ.get('DB_USER', 'ccop')
+    password = cfg.get('password') or os.environ.get('DB_PASSWORD', 'Ccop@2025')
+    
+    rdb_sources['default'] = {
+        'alias': 'default',
+        'label': f"{dbname} (기본 DB)",
+        'host': host,
+        'port': int(port),
+        'dbname': dbname,
+        'user': user,
+        'password': password
+    }
+    logger.info(f"▶ [RDB Sources] 기본 소스 초기화: {dbname}@{host}:{port}")
+
+@bp.route('/api/rdb/sources', methods=['GET', 'POST', 'DELETE'])
+def rdb_source_management():
+    """RDB 소스 관리 API
+    GET: 등록된 RDB 소스 목록
+    POST: 새 RDB 소스 등록 (연결 테스트 포함)
+    DELETE: RDB 소스 삭제
+    """
+    import psycopg2
+    
+    # 기본 DB가 없으면 초기화
+    if 'default' not in rdb_sources:
+        try:
+            _init_default_rdb_source(current_app)
+        except Exception as e:
+            logger.error(f"▶ [RDB Sources] 기본 소스 초기화 실패: {e}")
+            # 환경변수 직접 사용 fallback
+            import os
+            rdb_sources['default'] = {
+                'alias': 'default',
+                'label': os.environ.get('DB_NAME', 'tccopdb') + ' (기본 DB)',
+                'host': os.environ.get('DB_HOST', '49.50.128.28'),
+                'port': int(os.environ.get('DB_PORT', '5333')),
+                'dbname': os.environ.get('DB_NAME', 'tccopdb'),
+                'user': os.environ.get('DB_USER', 'ccop'),
+                'password': os.environ.get('DB_PASSWORD', 'Ccop@2025')
+            }
+    
+    if request.method == 'GET':
+        # 비밀번호는 마스킹
+        result = []
+        for alias, src in rdb_sources.items():
+            result.append({
+                'alias': src['alias'],
+                'label': src.get('label', src['alias']),
+                'host': src['host'],
+                'port': src['port'],
+                'dbname': src['dbname'],
+                'user': src['user'],
+                'is_default': alias == 'default'
+            })
+        return jsonify({"status": "success", "sources": result})
+    
+    elif request.method == 'POST':
+        data = request.get_json()
+        alias = data.get('alias', '').strip()
+        host = data.get('host', '').strip()
+        port = int(data.get('port', 5432))
+        dbname = data.get('dbname', '').strip()
+        user = data.get('user', '').strip()
+        password = data.get('password', '').strip()
+        label = data.get('label', '') or f"{dbname}@{host}"
+        
+        if not alias or not host or not dbname or not user:
+            return jsonify({"status": "error", "message": "alias, host, dbname, user 필수"}), 400
+        
+        # 연결 테스트
+        try:
+            test_conn = psycopg2.connect(
+                host=host, port=port, dbname=dbname,
+                user=user, password=password,
+                connect_timeout=5
+            )
+            test_conn.close()
+        except Exception as e:
+            return jsonify({"status": "error", "message": f"연결 실패: {e}"}), 400
+        
+        rdb_sources[alias] = {
+            'alias': alias, 'label': label,
+            'host': host, 'port': port,
+            'dbname': dbname, 'user': user, 'password': password
+        }
+        logger.info(f"▶ [RDB Sources] 등록: {alias} ({dbname}@{host}:{port})")
+        return jsonify({"status": "success", "message": f"'{alias}' RDB 소스 등록 완료"})
+    
+    elif request.method == 'DELETE':
+        data = request.get_json()
+        alias = data.get('alias', '')
+        if alias == 'default':
+            return jsonify({"status": "error", "message": "기본 DB는 삭제할 수 없습니다"}), 400
+        if alias in rdb_sources:
+            del rdb_sources[alias]
+            return jsonify({"status": "success", "message": f"'{alias}' 삭제됨"})
+        return jsonify({"status": "error", "message": "존재하지 않는 소스"}), 404
+
+@bp.route('/api/rdb/tables', methods=['GET'])
+def rdb_list_tables():
+    """특정 RDB 소스의 테이블 목록 조회"""
+    import psycopg2
+    
+    source_alias = request.args.get('source', 'default')
+    
+    # 기본 DB 초기화
+    if 'default' not in rdb_sources:
+        try:
+            _init_default_rdb_source(current_app)
+        except Exception as e:
+            import os
+            rdb_sources['default'] = {
+                'alias': 'default', 'label': os.environ.get('DB_NAME', 'tccopdb') + ' (기본 DB)',
+                'host': os.environ.get('DB_HOST', '49.50.128.28'),
+                'port': int(os.environ.get('DB_PORT', '5333')),
+                'dbname': os.environ.get('DB_NAME', 'tccopdb'),
+                'user': os.environ.get('DB_USER', 'ccop'),
+                'password': os.environ.get('DB_PASSWORD', 'Ccop@2025')
+            }
+    
+    src = rdb_sources.get(source_alias)
+    if not src:
+        return jsonify({"status": "error", "message": f"'{source_alias}' 소스 없음"}), 404
+    
+    try:
+        conn = psycopg2.connect(
+            host=src['host'], port=src['port'], dbname=src['dbname'],
+            user=src['user'], password=src['password'],
+            connect_timeout=5
+        )
+        cur = conn.cursor()
+        
+        # public 스키마의 일반 테이블 목록 + 행 수 (추정치)
+        cur.execute("""
+            SELECT t.table_name, 
+                   COALESCE(c.reltuples::bigint, 0) as row_estimate
+            FROM information_schema.tables t
+            LEFT JOIN pg_class c ON c.relname = t.table_name
+            WHERE t.table_schema = 'public' 
+            AND t.table_type = 'BASE TABLE'
+            ORDER BY t.table_name
+        """)
+        tables = []
+        for row in cur.fetchall():
+            tables.append({
+                "table_name": row[0],
+                "row_count": max(int(row[1]), 0)
+            })
+        
+        conn.close()
+        return jsonify({
+            "status": "success",
+            "source": source_alias,
+            "dbname": src['dbname'],
+            "tables": tables
+        })
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
 @bp.route('/api/rdb/browse', methods=['GET'])
 def rdb_browse():
-    """RDB 테이블 데이터 조회 (페이징)"""
+    """RDB 테이블 데이터 조회 (페이징, 다중 RDB 지원)"""
     try:
         from flask import current_app
         import psycopg2
@@ -426,21 +651,32 @@ def rdb_browse():
         page = int(request.args.get('page', 1))
         limit = int(request.args.get('limit', 50))
         offset = (page - 1) * limit
+        source_alias = request.args.get('source', 'default')
         
-        # 보안: rdb_ 접두사 테이블만 허용
-        if not table.startswith('rdb_'):
-            return jsonify({"status": "error", "message": "rdb_ 테이블만 조회 가능"}), 400
+        # 보안: 기본 DB는 rdb_, TB_, tb_ 접두사만 허용, 외부 DB는 모든 테이블 허용
+        if source_alias == 'default':
+            if not (table.startswith('rdb_') or table.startswith('TB_') or table.startswith('tb_')):
+                return jsonify({"status": "error", "message": "허용되지 않은 테이블"}), 400
         
-        cfg = current_app.config['DB_CONFIG']
-        conn = psycopg2.connect(**cfg)
+        # 다중 RDB 소스 연결
+        src = rdb_sources.get(source_alias)
+        if src:
+            conn = psycopg2.connect(
+                host=src['host'], port=src['port'], dbname=src['dbname'],
+                user=src['user'], password=src['password']
+            )
+        else:
+            cfg = current_app.config['DB_CONFIG']
+            conn = psycopg2.connect(**cfg)
         cur = conn.cursor()
         
         # 총 건수
         cur.execute(f'SELECT count(*) FROM {table}')
         total = cur.fetchone()[0]
         
-        # 컬럼 정보
-        cur.execute(f"SELECT column_name, data_type FROM information_schema.columns WHERE table_name='{table}' ORDER BY ordinal_position")
+        # 컬럼 정보 (information_schema는 소문자로 저장)
+        table_lower = table.lower()
+        cur.execute(f"SELECT column_name, data_type FROM information_schema.columns WHERE table_name='{table_lower}' ORDER BY ordinal_position")
         columns = [{"name": r[0], "type": r[1]} for r in cur.fetchall()]
         col_names = [c["name"] for c in columns]
         
@@ -476,18 +712,27 @@ def query_ai():
     question = data.get('question')
     graph_path = data.get('graph_path', 'demo_tst1')
 
-    # [Update] AI가 생성한 Cypher 쿼리 사용 (표준 코드 지원)
-    cypher_query = AIService.generate_cypher(question)
-    
-    if not cypher_query:
-        return jsonify({"error": "Failed to generate query"}), 500
+    # 1. AI 분석 수행 (LangGraph Agent 활용: 성찰 루프 포함)
+    try:
+        agent = LangGraphAgent()
+        agent_res = agent.run(question, graph_path)
         
-    success, elements = GraphService.execute_cypher(cypher_query, graph_path)
-    
-    if not success:
-        return jsonify({"error": str(elements)}), 500
+        if agent_res.get("status") == "error":
+            return jsonify({"error": agent_res.get("message", "에이전트 처리 오류")}), 500
         
-    return jsonify({"elements": elements, "cypher": cypher_query})
+        # 에이전트 결과에서 인텐트 추출
+        intent = agent_res.get("intent", "QUERY")
+        
+        return jsonify({
+            "elements": agent_res.get("elements", []),
+            "cypher": agent_res.get("cypher", ""),
+            "intent": intent,
+            "explanation": agent_res.get("explanation", ""),
+            "agent_status": agent_res.get("status")
+        })
+    except Exception as e:
+        logger.error(f"Agent Query Error: {e}")
+        return jsonify({"error": f"분석 오류: {str(e)}"}), 500
 
 @bp.route('/api/query/rag', methods=['POST'])
 def query_rag():
@@ -534,10 +779,120 @@ def etl_import():
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
+@bp.route('/api/rdb/analyze-csv', methods=['POST'])
+def rdb_analyze_csv():
+    """CSV 파일의 컬럼을 분석하여 RDB 매핑 초안을 반환 (2-Stage AI Mapping Step 1)"""
+    try:
+        if 'file' not in request.files:
+            return jsonify({"status": "error", "message": "No file part"}), 400
+        
+        file = request.files['file']
+        import pandas as pd
+        
+        # CSV 로드
+        df = pd.read_csv(file).fillna('')
+        sample_rows = df.head(3).to_dict('records')
+        cols = df.columns
+        
+        # --- Column Mapping 추론 (rdb_service와 동일한 방식) ---
+        from app.services.ontology_service import KICSCrimeDomainOntology
+        from app.services.ai_service import AIService
+        
+        col_map = {}
+        patterns = KICSCrimeDomainOntology.COLUMN_PATTERNS
+        type_to_rdb = KICSCrimeDomainOntology.COLUMN_TYPE_TO_RDB
+        
+        priority_order = ['caller', 'callee', 'sender', 'receiver', 'nickname']
+        sorted_patterns = {t: patterns[t] for t in priority_order if t in patterns}
+        for t, cfg in patterns.items():
+            if t not in sorted_patterns: sorted_patterns[t] = cfg
+        
+        # Pass 1: Exact matches
+        unmatched_cols = []
+        for c in cols:
+            c_lower = c.lower().strip()
+            matched = False
+            for type_name, config in sorted_patterns.items():
+                for pattern in config["patterns"]:
+                    if c_lower == pattern.lower():
+                        col_type = type_to_rdb.get(type_name, type_name)
+                        if col_type not in col_map:
+                            col_map[col_type] = c
+                            matched = True
+                        elif col_map[col_type] != c:
+                            if "actno" in c_lower or "dpstr" in c_lower:
+                                col_map[col_type] = c
+                        break
+                if matched: break
+            if not matched: unmatched_cols.append(c)
+        
+        # Pass 2: Partial matches
+        still_unmatched = []
+        for c in unmatched_cols:
+            c_lower = c.lower().strip()
+            matched = False
+            for type_name, config in sorted_patterns.items():
+                for pattern in config["patterns"]:
+                    if pattern.lower() in c_lower or c_lower in pattern.lower():
+                        col_type = type_to_rdb.get(type_name, type_name)
+                        if col_type not in col_map:
+                            col_map[col_type] = c
+                            matched = True
+                        elif col_map[col_type] != c:
+                            if "actno" in c_lower or "dpstr" in c_lower:
+                                col_map[col_type] = c
+                        break
+                if matched: break
+            if not matched: still_unmatched.append(c)
+            
+        # Pass 3: LLM Inference
+        llm_inferred_types = {}
+        if still_unmatched:
+            llm_result = AIService.infer_column_mapping_for_rdb(still_unmatched, sample_rows)
+            for c, type_name in llm_result.items():
+                if type_name and type_name != 'ignore':
+                    col_type = type_to_rdb.get(type_name, type_name)
+                    # 기존 매핑을 덮어쓰지 않고 추가
+                    if col_type not in col_map:
+                        col_map[col_type] = c
+                        llm_inferred_types[c] = col_type
+        
+        # UI 형태로 변환
+        ui_mapping = []
+        for c in cols:
+            mapped_type = None
+            method = 'unmapped'
+            for k, v in col_map.items():
+                if v == c:
+                    mapped_type = k
+                    if c in llm_inferred_types:
+                        method = 'llm'
+                    elif c not in unmatched_cols:
+                        method = 'exact'
+                    else:
+                        method = 'partial'
+                    break
+            
+            ui_mapping.append({
+                "column": c,
+                "mapped_type": mapped_type,
+                "method": method
+            })
+            
+        return jsonify({
+            "status": "success",
+            "mapping": ui_mapping,
+            "sample_data": sample_rows
+        }), 200
+        
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
 @bp.route('/api/rdb/import', methods=['POST'])
 def rdb_import():
     """CSV 파일을 RDB 테이블에 적재"""
     try:
+        import json
         if 'file' not in request.files:
             return jsonify({"status": "error", "message": "No file part"}), 400
         
@@ -550,8 +905,23 @@ def rdb_import():
         temp_path = f"/tmp/{file.filename}"
         file.save(temp_path)
         
+        clear_rdb = request.form.get('clear_rdb', 'false').lower() == 'true'
+        
+        # 프론트엔드에서 확정한 매핑 정보 (선택적)
+        frontend_mapping_str = request.form.get('column_mapping')
+        frontend_mapping = None
+        if frontend_mapping_str:
+            try:
+                frontend_mapping = json.loads(frontend_mapping_str)
+            except:
+                pass
+        
         try:
-            success, result = RDBService.import_csv_to_rdb(temp_path)
+            # 스마트 라우팅 분기: 파일명이 tbl_ 로 시작하면 사전 정의된 RDB 스키마로 간주
+            if file.filename.lower().startswith('tbl_'):
+                success, result = RDBService.import_predefined_schema_to_rdb(temp_path, file.filename, clear_existing=clear_rdb)
+            else:
+                success, result = RDBService.import_csv_to_rdb(temp_path, clear_existing=clear_rdb, custom_mapping=frontend_mapping)
         finally:
             if os.path.exists(temp_path):
                 os.remove(temp_path)
@@ -730,3 +1100,39 @@ def admin_monitoring():
         return jsonify({"status": "success", "data": stats})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
+
+
+# ------------------------------
+# 8. 그래프 분석 API (Enhancement Area 2 & 4)
+# ------------------------------
+@bp.route('/api/analysis/anomaly', methods=['GET'])
+def analysis_anomaly():
+    """이상 점수 분석"""
+    graph = request.args.get('graph', 'test_local_data')
+    from app.services.analysis_service import AnalysisService
+    result = AnalysisService.run_anomaly_scoring(graph)
+    return jsonify({"status": "success", "data": result})
+
+@bp.route('/api/analysis/centrality', methods=['GET'])
+def analysis_centrality():
+    """중심성 분석 — 핵심 노드 식별"""
+    graph = request.args.get('graph', 'test_local_data')
+    from app.services.analysis_service import AnalysisService
+    result = AnalysisService.run_centrality_analysis(graph)
+    return jsonify({"status": "success", "data": result})
+
+@bp.route('/api/analysis/inference', methods=['GET'])
+def analysis_inference():
+    """추론 엔진 — 범죄 패턴 탐지"""
+    graph = request.args.get('graph', 'test_local_data')
+    from app.services.analysis_service import AnalysisService
+    result = AnalysisService.run_inference_engine(graph)
+    return jsonify({"status": "success", "data": result})
+
+@bp.route('/api/analysis/summary', methods=['GET'])
+def analysis_summary():
+    """사건 종합 요약"""
+    graph = request.args.get('graph', 'test_local_data')
+    from app.services.analysis_service import AnalysisService
+    result = AnalysisService.get_case_summary(graph)
+    return jsonify({"status": "success", "data": result})

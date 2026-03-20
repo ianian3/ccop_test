@@ -7,6 +7,7 @@ from app.middleware.api_auth import require_api_key, require_endpoint_permission
 from app.services.ai_service import AIService
 from app.services.graph_service import GraphService
 from app.services.rdb_to_graph_service import RdbToGraphService
+from app.services.langgraph_agent import LangGraphAgent
 from app.models.api_key import get_tier_config
 import time
 
@@ -49,20 +50,30 @@ def text_to_cypher():
         question = data.get('question')
         if not question:
             return jsonify({"error": "question field is required"}), 400
+            
+        # 1. 의도 분석
+        intent_res = AIService.route_question(question)
+        intent = intent_res.get('intent', 'QUERY')
         
-        # Cypher 쿼리 생성
-        cypher = AIService.generate_cypher(question)
+        # 2. Cypher 쿼리 생성 (내부적으로 Dynamic Schema & Entity pre-matching 지원)
+        graph_path = "demo_tst1"
+        if data.get("schema") and "graph_path" in data.get("schema"):
+            graph_path = data["schema"]["graph_path"]
+            
+        cypher = AIService.generate_cypher(question, graph_path)
         
         response_time = (time.time() - start_time) * 1000  # ms
         
         current_app.logger.info(
             f"[API v1] text-to-cypher | partner={request.partner} | "
-            f"question_len={len(question)} | response_time={response_time:.2f}ms"
+            f"question_len={len(question)} | intent={intent} | response_time={response_time:.2f}ms"
         )
         
         return jsonify({
             "status": "success",
             "cypher": cypher,
+            "intent": intent,
+            "routing_info": intent_res,
             "partner": request.partner,
             "response_time_ms": round(response_time, 2)
         }), 200
@@ -204,6 +215,52 @@ def validate_cypher():
     except Exception as e:
         return jsonify({
             "error": "Validation failed",
+            "message": str(e)
+        }), 500
+
+
+# ============================================
+# 8. Agentic Text-to-Cypher (LangGraph)
+# ============================================
+
+@api_v1.route('/agentic-query', methods=['POST'])
+@require_api_key
+def agentic_query():
+    """
+    LangGraph 기반 분석 에이전트 실행 (라우팅 + 성찰 루프)
+    """
+    try:
+        start_time = time.time()
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({"error": "Request body required"}), 400
+        
+        question = data.get('question')
+        if not question:
+            return jsonify({"error": "question field is required"}), 400
+            
+        graph_path = data.get('graph_path', current_app.config.get('DEFAULT_GRAPH_PATH', 'demo_tst1'))
+        
+        # LangGraph Agent 실행
+        agent = LangGraphAgent()
+        result = agent.run(question, graph_path)
+        
+        response_time = (time.time() - start_time) * 1000
+        
+        return jsonify({
+            "status": "success",
+            "agent_response": result,
+            "partner": request.partner,
+            "response_time_ms": round(response_time, 2)
+        }), 200
+        
+    except Exception as e:
+        current_app.logger.error(f"[API v1] agentic-query error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            "error": "Agent execution failed",
             "message": str(e)
         }), 500
 
@@ -859,6 +916,62 @@ def delete_graph():
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
+@api_v1.route('/graph/node/create', methods=['POST'])
+def create_manual_node():
+    """수동으로 그래프 노드 추가"""
+    try:
+        data = request.get_json()
+        graph_name = data.get('graph_name')
+        label = data.get('label')
+        properties = data.get('properties', {})
+        if not graph_name or not label:
+            return jsonify({"status": "error", "message": "graph_name and label required"}), 400
+        success, res = GraphService.create_manual_node(graph_name, label, properties)
+        if success:
+            return jsonify({"status": "success", "node_id": res}), 200
+        else:
+            return jsonify({"status": "error", "message": res}), 400
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@api_v1.route('/graph/edge/create', methods=['POST'])
+def create_manual_edge():
+    """수동으로 그래프 엣지 추가"""
+    try:
+        data = request.get_json()
+        graph_name = data.get('graph_name')
+        src_id = data.get('src_id')
+        tgt_id = data.get('tgt_id')
+        label = data.get('label')
+        properties = data.get('properties', {})
+        if not all([graph_name, src_id, tgt_id, label]):
+            return jsonify({"status": "error", "message": "graph_name, src_id, tgt_id, label required"}), 400
+        success, res = GraphService.create_manual_edge(graph_name, src_id, tgt_id, label, properties)
+        if success:
+            return jsonify({"status": "success", "edge_id": res}), 200
+        else:
+            return jsonify({"status": "error", "message": res}), 400
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@api_v1.route('/graph/element/delete', methods=['POST'])
+def delete_manual_element():
+    """수동으로 노드/엣지 삭제"""
+    try:
+        data = request.get_json()
+        graph_name = data.get('graph_name')
+        element_id = data.get('element_id')
+        is_edge = data.get('is_edge', False)
+        if not graph_name or not element_id:
+            return jsonify({"status": "error", "message": "graph_name and element_id required"}), 400
+        success, res = GraphService.delete_element(graph_name, element_id, is_edge)
+        if success:
+            return jsonify({"status": "success", "message": res}), 200
+        else:
+            return jsonify({"status": "error", "message": res}), 400
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
 @api_v1.route('/rdb/to-graph', methods=['POST'])
 @require_api_key
 def rdb_to_graph():
@@ -900,15 +1013,30 @@ def rdb_gdb_stats():
         
         stats = {"rdb": {}, "gdb": {}}
         
-        # RDB 통계
-        rdb_tables = ['rdb_cases', 'rdb_suspects', 'rdb_accounts', 'rdb_phones', 
-                      'rdb_transfers', 'rdb_calls', 'rdb_relations']
-        for table in rdb_tables:
+        # RDB 통계 (V2 표준화 테이블)
+        rdb_v2_tables = {
+            'cases': 'TB_INCDNT_MST',
+            'suspects': 'TB_PRSN',
+            'accounts': 'TB_FIN_BACNT',
+            'phones': 'TB_TELNO_MST',
+            'transfers': 'TB_FIN_BACNT_DLNG',
+            'calls': 'TB_TELNO_CALL_DTL',
+            'ips': 'TB_SYS_LGN_EVT',
+            'reports': 'TB_FRD_VCTM_RPT',
+            'orgs': 'TB_INST',
+            'sms': 'TB_TELNO_SMS_MSG',
+            'vehicles': 'TB_VHCL_MST',
+            'locations': 'TB_GEO_MBL_LOC_EVT',
+            'domains': 'TB_WEB_DMN',
+            'files': 'TB_DGTL_FILE_INVNT',
+        }
+        for key, table in rdb_v2_tables.items():
             try:
                 cur.execute(f"SELECT count(*) FROM {table}")
-                stats["rdb"][table.replace('rdb_', '')] = cur.fetchone()[0]
+                stats["rdb"][key] = cur.fetchone()[0]
             except:
-                stats["rdb"][table.replace('rdb_', '')] = 0
+                conn.rollback()
+                stats["rdb"][key] = 0
         
         # GDB 통계 (그래프 목록 및 노드 수)
         try:
@@ -922,7 +1050,8 @@ def rdb_gdb_stats():
                 # AgensGraph에서 graph_path 설정 시 식별자(identifier)로 처리해야 함
                 # SQL injection 방지를 위해 포맷팅 사용 시 주의 필요 (graph_name은 검증 필요)
                 # 여기서는 간단히 따옴표 없이 사용 (AgensGraph 문법)
-                cur.execute(f"SET graph_path = {graph_name}")
+                from app.database import safe_set_graph_path
+                safe_set_graph_path(cur, graph_name)
                 cur.execute("MATCH (n) RETURN count(n)")
                 stats["gdb"]["nodes"] = cur.fetchone()[0]
                 cur.execute("MATCH ()-[r]->() RETURN count(r)")
@@ -953,7 +1082,8 @@ def gdb_detail_stats():
         result = {"nodes": [], "edges": [], "total_nodes": 0, "total_edges": 0}
         
         try:
-            cur.execute(f"SET graph_path = {graph_name}")
+            from app.database import safe_set_graph_path
+            safe_set_graph_path(cur, graph_name)
             
             # 노드 라벨별 카운트
             cur.execute("MATCH (n) RETURN label(n) as lbl, count(n) as cnt ORDER BY cnt DESC")
@@ -980,13 +1110,18 @@ def gdb_detail_stats():
 def list_rdb_tables():
     """RDB 테이블 목록 조회"""
     tables = [
-        {"name": "rdb_cases", "label": "사건", "icon": "folder"},
-        {"name": "rdb_suspects", "label": "피의자", "icon": "user"},
-        {"name": "rdb_accounts", "label": "계좌", "icon": "credit-card"},
-        {"name": "rdb_phones", "label": "전화번호", "icon": "phone"},
-        {"name": "rdb_transfers", "label": "이체내역", "icon": "exchange-alt"},
-        {"name": "rdb_calls", "label": "통화내역", "icon": "phone-volume"},
-        {"name": "rdb_relations", "label": "관계", "icon": "project-diagram"}
+        {"name": "TB_INCDNT_MST", "label": "사건", "icon": "folder"},
+        {"name": "TB_PRSN", "label": "인물", "icon": "user"},
+        {"name": "TB_FIN_BACNT", "label": "계좌", "icon": "credit-card"},
+        {"name": "TB_TELNO_MST", "label": "전화번호", "icon": "phone"},
+        {"name": "TB_FIN_BACNT_DLNG", "label": "이체내역", "icon": "exchange-alt"},
+        {"name": "TB_TELNO_CALL_DTL", "label": "통화내역", "icon": "phone-volume"},
+        {"name": "TB_FRD_VCTM_RPT", "label": "사기신고", "icon": "exclamation-triangle"},
+        {"name": "TB_INST", "label": "조직", "icon": "building"},
+        {"name": "TB_SYS_LGN_EVT", "label": "IP접속", "icon": "globe"},
+        {"name": "TB_TELNO_SMS_MSG", "label": "SMS", "icon": "envelope"},
+        {"name": "TB_VHCL_MST", "label": "차량", "icon": "car"},
+        {"name": "TB_GEO_MBL_LOC_EVT", "label": "위치", "icon": "map-marker-alt"},
     ]
     return jsonify({"status": "success", "tables": tables}), 200
 
@@ -996,9 +1131,14 @@ def query_rdb_table(table_name):
     """RDB 테이블 데이터 조회"""
     import psycopg2
     
-    # 허용된 테이블만 조회 (SQL Injection 방지)
-    allowed_tables = ['rdb_cases', 'rdb_suspects', 'rdb_accounts', 'rdb_phones',
-                      'rdb_transfers', 'rdb_calls', 'rdb_relations', 'rdb_ips']
+    # 허용된 테이블만 조회 (SQL Injection 방지) — V2 표준화
+    allowed_tables = [
+        'TB_INCDNT_MST', 'TB_PRSN', 'TB_FIN_BACNT', 'TB_TELNO_MST',
+        'TB_FIN_BACNT_DLNG', 'TB_TELNO_CALL_DTL', 'TB_FRD_VCTM_RPT',
+        'TB_INST', 'TB_SYS_LGN_EVT', 'TB_TELNO_SMS_MSG', 'TB_TELNO_JOIN',
+        'TB_CHAT_MSG', 'TB_VHCL_MST', 'TB_VHCL_LPR_EVT', 'TB_GEO_MBL_LOC_EVT',
+        'TB_WEB_DMN', 'TB_WEB_URL', 'TB_DGTL_FILE_INVNT',
+    ]
     
     if table_name not in allowed_tables:
         return jsonify({"status": "error", "message": "Invalid table name"}), 400
@@ -1024,7 +1164,7 @@ def query_rdb_table(table_name):
             # 첫 번째 텍스트 컬럼에서 검색
             search_col = columns[1] if len(columns) > 1 else columns[0]
             query += f" WHERE {search_col}::text ILIKE '%{search}%'"
-        query += f" ORDER BY created_at DESC LIMIT {limit} OFFSET {offset}"
+        query += f" LIMIT {limit} OFFSET {offset}"
         
         cur.execute(query)
         rows = cur.fetchall()

@@ -4,7 +4,11 @@ from typing import List, Dict, Any, Optional
 import psycopg2
 import psycopg2.extras
 from config import Config
+from app.database import safe_set_graph_path, validate_graph_path
+import logging
 
+
+logger = logging.getLogger(__name__)
 
 class CypherExecutionError(Exception):
     """Cypher 쿼리 실행 오류"""
@@ -140,7 +144,7 @@ class CypherService:
             cur = conn.cursor()
             
             # 그래프 경로 설정
-            cur.execute(f"SET graph_path = {graph_path}")
+            safe_set_graph_path(cur, graph_path)
             cur.execute(sql)
             
             rows = cur.fetchall()
@@ -166,7 +170,7 @@ class CypherService:
             # RETURN 절 누락 등 검증 오류
             raise e
         except Exception as e:
-            print(f"[Cypher Error] {str(e)}\nQuery: {query}")
+            logger.error(f"[Cypher Error] {str(e)}\nQuery: {query}")
             raise CypherExecutionError(
                 message=f"Graph Query Execution Failed: {str(e)}",
                 status_code=500
