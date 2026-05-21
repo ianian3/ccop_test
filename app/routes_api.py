@@ -1493,6 +1493,113 @@ def investigation_workflows():
                     "workflows": Ont.INVESTIGATION_WORKFLOWS_V40}), 200
 
 
+@api_v1.route('/workflows/<name>/execute', methods=['GET'])
+def execute_workflow(name):
+    """V4.0 수사 워크플로우 실행 (Phase 4.4 실제 동작 패치).
+
+    workflow name → 사전 정의된 Cypher 패턴을 현재 graph_path 에 실행하고
+    Cytoscape 호환 elements (nodes + edges) 반환. /api/graph/load 와 동일 포맷.
+
+    Query:
+        graph_path (선택): 기본 'tccop_v40_demo'
+        limit      (선택): 기본 200
+    """
+    import psycopg2 as _pg2
+    from app.services.graph_service import GraphService
+    from app.database import safe_set_graph_path
+
+    graph_path = request.args.get('graph_path') or current_app.config.get('DEFAULT_GRAPH_PATH', 'tccop_v40_demo')
+    limit = request.args.get('limit', 200, type=int)
+
+    # 워크플로우 이름 → Cypher 매핑 (V4.0 SSOT 와 정합)
+    WORKFLOWS_CYPHER = {
+        'case_to_suspects':
+            "MATCH (n:vt_case)<-[r:suspect_in]-(m:vt_psn) "
+            "RETURN id(n), labels(n), properties(n), id(r), type(r), id(m), labels(m), properties(m)",
+        'suspect_to_assets':
+            "MATCH (n:vt_psn)-[r:has_account]->(m:vt_bacnt) "
+            "RETURN id(n), labels(n), properties(n), id(r), type(r), id(m), labels(m), properties(m)",
+        'phishing_campaign_view':
+            "MATCH (n:site_cluster)<-[r:belongs_to_campaign]-(m:vt_site) "
+            "RETURN id(n), labels(n), properties(n), id(r), type(r), id(m), labels(m), properties(m)",
+        'fund_flow':
+            "MATCH (n:vt_bacnt)-[r:from_account]->(m:vt_transfer) "
+            "RETURN id(n), labels(n), properties(n), id(r), type(r), id(m), labels(m), properties(m) "
+            "UNION ALL "
+            "MATCH (n:vt_transfer)-[r:to_account]->(m:vt_bacnt) "
+            "RETURN id(n), labels(n), properties(n), id(r), type(r), id(m), labels(m), properties(m)",
+        'relay_station_network':
+            "MATCH (n:vt_dev)<-[r:used_in_device]-(m:vt_telno) "
+            "WHERE n.dev_type = 'relay_station' "
+            "RETURN id(n), labels(n), properties(n), id(r), type(r), id(m), labels(m), properties(m)",
+        'cross_graph_sameAs':
+            "MATCH (n:vt_psn)-[r:sameAs]->(m:vt_psn) "
+            "WHERE n.source_domain <> m.source_domain "
+            "RETURN id(n), labels(n), properties(n), id(r), type(r), id(m), labels(m), properties(m)",
+    }
+    if name not in WORKFLOWS_CYPHER:
+        return jsonify({"status": "error",
+                        "message": f"Unknown workflow '{name}'. "
+                                   f"Available: {sorted(WORKFLOWS_CYPHER.keys())}"}), 404
+
+    cypher_inner = WORKFLOWS_CYPHER[name] + f" LIMIT {int(limit)}"
+
+    try:
+        conn = _pg2.connect(**current_app.config['DB_CONFIG'])
+        conn.autocommit = True
+        cur = conn.cursor()
+    except Exception as e:
+        return jsonify({"status": "error", "message": f"DB 연결 실패: {e}"}), 500
+
+    elements = []
+    node_ids = set()
+    try:
+        safe_set_graph_path(cur, graph_path)
+        cur.execute(cypher_inner)
+        rows = cur.fetchall()
+        for r in rows:
+            if len(r) < 8:
+                continue
+            n_id, n_labels, n_props, r_id, r_type, m_id, m_labels, m_props = r[:8]
+            for vid, vlabels, vprops in [(n_id, n_labels, n_props), (m_id, m_labels, m_props)]:
+                vid_s = str(vid)
+                if vid_s in node_ids:
+                    continue
+                node_ids.add(vid_s)
+                vlabel = vlabels[0] if isinstance(vlabels, list) and vlabels else str(vlabels)
+                elements.append({
+                    "group": "nodes",
+                    "data": {
+                        "id": vid_s,
+                        "label": str(vlabel).replace('"', ''),
+                        "props": GraphService.safe_props(vprops if isinstance(vprops, dict) else {}),
+                    }
+                })
+            elements.append({
+                "group": "edges",
+                "data": {
+                    "id": str(r_id),
+                    "source": str(n_id),
+                    "target": str(m_id),
+                    "label": str(r_type).replace('"', '') if r_type else "관계",
+                    "props": {},
+                }
+            })
+        return jsonify({"status": "success", "workflow": name,
+                        "graph_path": graph_path,
+                        "node_count": len(node_ids),
+                        "edge_count": len(elements) - len(node_ids),
+                        "elements": elements}), 200
+    except Exception as e:
+        return jsonify({"status": "error", "workflow": name,
+                        "message": str(e), "elements": []}), 500
+    finally:
+        try: cur.close()
+        except: pass
+        try: conn.close()
+        except: pass
+
+
 @api_v1.route('/ontology/meta', methods=['GET'])
 def ontology_meta():
     """V4.0 온톨로지 메타 (NODE_ID_STANDARD / DOMAIN_USAGE / INFERENCE_RULES_V37) 통합 반환."""
