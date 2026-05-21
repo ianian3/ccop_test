@@ -44,6 +44,7 @@ debug_*.py
 check_*.py
 test_*.py
 !tests/test_*.py
+!scripts/test_*.py
 
 # Git
 .git/
