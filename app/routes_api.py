@@ -4,11 +4,11 @@ CCOP 파트너 API v1 엔드포인트
 """
 from flask import Blueprint, request, jsonify, current_app
 from app.middleware.api_auth import require_api_key, require_endpoint_permission
-from app.services.ai_service import AIService
 from app.services.graph_service import GraphService
 from app.services.rdb_to_graph_service import RdbToGraphService
 from app.services.langgraph_agent import LangGraphAgent
 from app.models.api_key import get_tier_config
+import re
 import time
 
 # Blueprint 생성
@@ -50,40 +50,36 @@ def text_to_cypher():
         question = data.get('question')
         if not question:
             return jsonify({"error": "question field is required"}), 400
-            
-        # 1. 의도 분석
-        intent_res = AIService.route_question(question)
-        intent = intent_res.get('intent', 'QUERY')
-        
-        # 2. Cypher 쿼리 생성 (내부적으로 Dynamic Schema & Entity pre-matching 지원)
-        graph_path = "demo_tst1"
+
+        graph_path = current_app.config.get('DEFAULT_GRAPH_PATH', 'tccop_graph_v6')
         if data.get("schema") and "graph_path" in data.get("schema"):
             graph_path = data["schema"]["graph_path"]
-            
-        cypher = AIService.generate_cypher(question, graph_path)
-        
+
+        # LangGraph 에이전트 실행 (Reflection 루프, Vector RAG, Schema Fetching 포함)
+        agent = LangGraphAgent()
+        result = agent.run(question, graph_path)
+
         response_time = (time.time() - start_time) * 1000  # ms
-        
+
         current_app.logger.info(
             f"[API v1] text-to-cypher | partner={request.partner} | "
-            f"question_len={len(question)} | intent={intent} | response_time={response_time:.2f}ms"
+            f"question_len={len(question)} | intent={result.get('intent', 'UNKNOWN')} | "
+            f"response_time={response_time:.2f}ms"
         )
-        
+
         return jsonify({
-            "status": "success",
-            "cypher": cypher,
-            "intent": intent,
-            "routing_info": intent_res,
+            "status": result.get("status", "error"),
+            "cypher": result.get("cypher", ""),
+            "intent": result.get("intent", "UNKNOWN"),
+            "elements": result.get("elements", []),
+            "results_count": result.get("results_count", 0),
             "partner": request.partner,
             "response_time_ms": round(response_time, 2)
         }), 200
         
     except Exception as e:
         current_app.logger.error(f"[API v1] text-to-cypher error: {e}")
-        return jsonify({
-            "error": "Internal server error",
-            "message": str(e)
-        }), 500
+        return jsonify({"error": "Internal server error"}), 500
 
 
 # ============================================
@@ -113,34 +109,43 @@ def graph_query():
     try:
         start_time = time.time()
         data = request.get_json()
-        
+
         if not data:
             return jsonify({"error": "Request body required"}), 400
-        
-        keyword = data.get('keyword')
-        graph_path = data.get('graph_path', 'demo_tst1')
-        
-        if not keyword:
-            return jsonify({"error": "keyword field is required"}), 400
-        
+
+        cypher = data.get('cypher')
+        graph_path = data.get('graph_path', current_app.config.get('DEFAULT_GRAPH_PATH', 'tccop_graph_v6'))
+
+        if not cypher:
+            return jsonify({"error": "cypher field is required"}), 400
+
+        # 읽기 전용 보안 검증 (쓰기 명령어 차단)
+        upper_cypher = cypher.upper()
+        forbidden = ["DELETE", "SET", "REMOVE", "MERGE", "DROP", "CREATE", "DETACH"]
+        for kw in forbidden:
+            if re.search(r'\b' + kw + r'\b', upper_cypher):
+                return jsonify({
+                    "error": "Read-only violation",
+                    "message": f"데이터 변경 명령어({kw})는 허용되지 않습니다."
+                }), 403
+
         # 파트너 티어에 따른 결과 제한
         tier_config = get_tier_config(request.partner_data.get('tier', 'free'))
         max_results = tier_config.get('max_results', 50)
-        
-        # GraphService를 통한 검색 (보안이 검증된 메서드)
-        results = GraphService.search_nodes(keyword, graph_path)
-        
-        # 결과 제한
+
+        success, results = GraphService.execute_cypher(cypher, graph_path)
+        if not success:
+            return jsonify({"error": "Query execution failed", "message": str(results)}), 500
+
         limited_results = results[:max_results] if isinstance(results, list) else results
-        
+
         response_time = (time.time() - start_time) * 1000
-        
+
         current_app.logger.info(
             f"[API v1] graph-query | partner={request.partner} | "
-            f"graph={graph_path} | keyword={keyword} | "
-            f"response_time={response_time:.2f}ms"
+            f"graph={graph_path} | response_time={response_time:.2f}ms"
         )
-        
+
         return jsonify({
             "status": "success",
             "results": limited_results,
@@ -240,7 +245,7 @@ def agentic_query():
         if not question:
             return jsonify({"error": "question field is required"}), 400
             
-        graph_path = data.get('graph_path', current_app.config.get('DEFAULT_GRAPH_PATH', 'demo_tst1'))
+        graph_path = data.get('graph_path', current_app.config.get('DEFAULT_GRAPH_PATH', 'tccop_graph_v6'))
         
         # LangGraph Agent 실행
         agent = LangGraphAgent()
@@ -273,37 +278,57 @@ def agentic_query():
 @require_api_key
 def get_usage():
     """
-    파트너의 API 사용량 조회
-    
+    파트너 API 사용량 조회 (TB_AUDIT_LOG 기반 실계수)
+
     Response:
         {
             "partner": "demo_partner",
             "tier": "free",
-            "current_month": {
-                "requests": 150,
-                "limit": 1000,
-                "remaining": 850
-            }
+            "current_month": { "requests": 150, "limit": 1000, "remaining": 850 },
+            "breakdown": { "QUERY": 100, "PATH": 30, "REPORT": 20 },
+            "allowed_endpoints": [...]
         }
     """
     try:
-        # 향후 구현: 데이터베이스에서 실제 사용량 조회
-        # 현재는 더미 데이터 반환
-        
         tier_config = get_tier_config(request.partner_data.get('tier', 'free'))
         rate_limit = tier_config.get('rate_limit')
-        
+
+        # TB_AUDIT_LOG 에서 이번 달 실제 호출 수 집계
+        total_requests = 0
+        breakdown = {}
+        try:
+            from app.services.rdb_to_graph_service import RdbToGraphService
+            conn = RdbToGraphService.get_db_connection()
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT ACTION_CD, COUNT(*) AS cnt
+                FROM TB_AUDIT_LOG
+                WHERE CREATED_AT >= date_trunc('month', CURRENT_DATE)
+                  AND RESULT_STATUS != 'FAIL'
+                GROUP BY ACTION_CD
+            """)
+            for row in cur.fetchall():
+                breakdown[row[0]] = int(row[1])
+                total_requests += int(row[1])
+            cur.close()
+            conn.close()
+        except Exception:
+            pass  # TB_AUDIT_LOG 없으면 0으로 유지
+
+        remaining = (rate_limit - total_requests) if rate_limit else None
+
         return jsonify({
             "partner": request.partner,
             "tier": request.partner_data.get('tier', 'free'),
             "current_month": {
-                "requests": 0,  # 임시
+                "requests": total_requests,
                 "limit": rate_limit,
-                "remaining": rate_limit if rate_limit else None
+                "remaining": max(remaining, 0) if remaining is not None else None
             },
+            "breakdown": breakdown,
             "allowed_endpoints": request.partner_data.get('allowed_endpoints', [])
         }), 200
-        
+
     except Exception as e:
         return jsonify({
             "error": "Failed to retrieve usage",
@@ -374,7 +399,7 @@ def analyze_pattern():
         if not case_id:
             return jsonify({"error": "case_id field is required"}), 400
         
-        graph_path = data.get('graph_path', current_app.config.get('DEFAULT_GRAPH_PATH', 'demo_tst1'))
+        graph_path = data.get('graph_path', current_app.config.get('DEFAULT_GRAPH_PATH', 'tccop_graph_v6'))
         
         # 패턴 분석 실행
         from app.services.pattern_analyzer import PatternAnalyzer
@@ -383,7 +408,7 @@ def analyze_pattern():
         
         if not result.get('matched_patterns'):
             return jsonify({
-                "success": false,
+                "success": False,
                 "case_id": case_id,
                 "message": "No pattern matched. Evidence may be insufficient."
             }), 200
@@ -424,7 +449,7 @@ def evidence_completeness(case_id):
         }
     """
     try:
-        graph_path = request.args.get('graph_path', current_app.config.get('DEFAULT_GRAPH_PATH', 'demo_tst1'))
+        graph_path = request.args.get('graph_path', current_app.config.get('DEFAULT_GRAPH_PATH', 'tccop_graph_v6'))
         
         # 1. 패턴 분석
         from app.services.pattern_analyzer import PatternAnalyzer
@@ -595,7 +620,7 @@ def import_with_inference():
             return jsonify({"error": "No file provided"}), 400
         
         file = request.files['file']
-        graph = request.form.get('graph', 'demo_tst1')
+        graph = request.form.get('graph', 'tccop_graph_v6')
         mapping_json = request.form.get('mapping')
         
         if not file.filename.endswith('.csv'):
@@ -768,7 +793,7 @@ def import_with_extended_schema():
             return jsonify({"error": "No file provided"}), 400
         
         file = request.files['file']
-        graph = request.form.get('graph', 'demo_tst1')
+        graph = request.form.get('graph', 'tccop_graph_v6')
         
         if not file.filename.endswith('.csv'):
             return jsonify({"error": "Only CSV files are supported"}), 400
@@ -860,7 +885,216 @@ def get_schema_layers():
 
 
 # ============================================
-# 9. Graph Management API
+# 9. Network Mode API (1-mode / 2-mode 투영)
+# ============================================
+
+@api_v1.route('/network/project', methods=['POST'])
+@require_api_key
+def network_project_1mode():
+    """
+    2-mode → 1-mode 투영 (공유 노드 기반 actor-actor 연결)
+
+    2-mode 이분 그래프에서 pivot 노드를 공유하는 actor 노드들을
+    직접 연결하는 1-mode 동질 그래프로 투영합니다.
+
+    예) vt_psn -[has_account]-> vt_bacnt <-[has_account]- vt_psn
+        → vt_psn -[co_account {via: actno, weight: N}]- vt_psn
+
+    Request:
+        {
+            "graph_path": "tccop_graph_v6",
+            "actor_label": "vt_psn",          // 투영 후 남는 노드 타입
+            "pivot_label":  "vt_bacnt",        // 공유 기준 노드 타입 (제거됨)
+            "min_shared":   1,                 // 최소 공유 수 (기본: 1)
+            "projection_edge": "co_account"    // 생성될 엣지 타입 (기본: co_{pivot})
+        }
+
+    Response:
+        {
+            "status": "success",
+            "mode": "1mode",
+            "actor_label": "vt_psn",
+            "pivot_label": "vt_bacnt",
+            "nodes": [...],   // actor 노드 목록
+            "edges": [...],   // 투영된 actor-actor 엣지 목록
+            "stats": { "actors": N, "pivots": N, "projected_edges": N }
+        }
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "Request body required"}), 400
+
+        graph_path   = data.get('graph_path', current_app.config.get('DEFAULT_GRAPH_PATH', 'tccop_graph_v6'))
+        actor_label  = data.get('actor_label', 'vt_psn')
+        pivot_label  = data.get('pivot_label', 'vt_bacnt')
+        min_shared   = int(data.get('min_shared', 1))
+        proj_edge    = data.get('projection_edge') or f"co_{pivot_label.replace('vt_', '')}"
+
+        # 입력 검증 — 허용된 레이블만 사용
+        allowed_labels = {
+            'vt_psn','vt_org','vt_case','vt_petition',
+            'vt_bacnt','vt_crypto','vt_telno','vt_ip','vt_site',
+            'vt_file','vt_id','vt_email','vt_vhcl','vt_dev','vt_atm',
+            'vt_loc','vt_transfer','vt_call','vt_msg','vt_access',
+            'vt_movement','vt_impersonation','vt_src'
+        }
+        if actor_label not in allowed_labels or pivot_label not in allowed_labels:
+            return jsonify({"error": "Invalid label"}), 400
+        if actor_label == pivot_label:
+            return jsonify({"error": "actor_label and pivot_label must be different"}), 400
+
+        # Cypher: 공유 pivot 노드를 통한 actor 쌍 조회
+        # actor1 → pivot ← actor2  형태의 경로에서 actor 쌍 추출
+        cypher = f"""
+MATCH (a1:{actor_label})-[]-(pivot:{pivot_label})-[]-(a2:{actor_label})
+WHERE id(a1) < id(a2)
+WITH a1, a2, collect(DISTINCT pivot) AS shared_pivots
+WHERE size(shared_pivots) >= {min_shared}
+RETURN
+    a1,
+    a2,
+    size(shared_pivots)   AS weight,
+    [p IN shared_pivots | properties(p)][0..5] AS pivot_samples
+ORDER BY weight DESC
+LIMIT 200
+"""
+        success, rows = GraphService.execute_cypher(cypher, graph_path)
+
+        if not success:
+            return jsonify({"error": "Projection query failed", "detail": str(rows)}), 500
+
+        # 노드 / 엣지 수집
+        node_map = {}
+        edges    = []
+
+        for row in (rows or []):
+            try:
+                a1_data = dict(row[0]) if row[0] else {}
+                a2_data = dict(row[1]) if row[1] else {}
+                weight  = int(row[2]) if row[2] else 1
+                pivots  = list(row[3]) if row[3] else []
+
+                a1_id = a1_data.get('id') or str(id(tuple(sorted(a1_data.items()))))
+                a2_id = a2_data.get('id') or str(id(tuple(sorted(a2_data.items()))))
+
+                node_map[a1_id] = {"id": a1_id, "label": actor_label, **a1_data}
+                node_map[a2_id] = {"id": a2_id, "label": actor_label, **a2_data}
+
+                edges.append({
+                    "source": a1_id,
+                    "target": a2_id,
+                    "type":   proj_edge,
+                    "weight": weight,
+                    "pivot_label": pivot_label,
+                    "shared_samples": pivots[:3],
+                })
+            except Exception:
+                continue
+
+        nodes = list(node_map.values())
+
+        return jsonify({
+            "status": "success",
+            "mode": "1mode",
+            "actor_label": actor_label,
+            "pivot_label": pivot_label,
+            "projection_edge": proj_edge,
+            "nodes": nodes,
+            "edges": edges,
+            "stats": {
+                "actors": len(nodes),
+                "projected_edges": len(edges),
+                "min_shared_filter": min_shared,
+            }
+        }), 200
+
+    except Exception as e:
+        current_app.logger.error(f"[API v1] network/project error: {e}")
+        return jsonify({"error": "Projection failed", "detail": str(e)}), 500
+
+
+@api_v1.route('/network/bipartite', methods=['POST'])
+@require_api_key
+def network_bipartite_stats():
+    """
+    2-mode 이분 그래프 통계 — actor ↔ pivot 연결 분포
+
+    Request:
+        {
+            "graph_path":   "tccop_graph_v6",
+            "actor_label":  "vt_psn",
+            "pivot_label":  "vt_bacnt"
+        }
+
+    Response:
+        {
+            "status": "success",
+            "mode": "2mode",
+            "actor_count": N,
+            "pivot_count": N,
+            "edge_count":  N,
+            "top_actors":  [...],   // pivot 연결 수 Top 10 actor
+            "top_pivots":  [...]    // actor 연결 수 Top 10 pivot
+        }
+    """
+    try:
+        data        = request.get_json() or {}
+        graph_path  = data.get('graph_path', current_app.config.get('DEFAULT_GRAPH_PATH', 'tccop_graph_v6'))
+        actor_label = data.get('actor_label', 'vt_psn')
+        pivot_label = data.get('pivot_label', 'vt_bacnt')
+
+        allowed = {
+            'vt_psn','vt_org','vt_bacnt','vt_telno','vt_ip',
+            'vt_site','vt_file','vt_id','vt_email','vt_dev','vt_atm'
+        }
+        if actor_label not in allowed or pivot_label not in allowed:
+            return jsonify({"error": "Invalid label"}), 400
+
+        # Actor degree 분포
+        cypher_actors = f"""
+MATCH (a:{actor_label})-[]-(p:{pivot_label})
+WITH a, count(DISTINCT p) AS degree
+RETURN properties(a) AS actor_props, degree
+ORDER BY degree DESC LIMIT 10
+"""
+        # Pivot degree 분포
+        cypher_pivots = f"""
+MATCH (a:{actor_label})-[]-(p:{pivot_label})
+WITH p, count(DISTINCT a) AS degree
+RETURN properties(p) AS pivot_props, degree
+ORDER BY degree DESC LIMIT 10
+"""
+        # 전체 카운트
+        cypher_count = f"""
+MATCH (a:{actor_label})-[]-(p:{pivot_label})
+RETURN count(DISTINCT a) AS actors, count(DISTINCT p) AS pivots, count(*) AS edges
+"""
+        ok1, actors = GraphService.execute_cypher(cypher_actors, graph_path)
+        ok2, pivots = GraphService.execute_cypher(cypher_pivots, graph_path)
+        ok3, counts = GraphService.execute_cypher(cypher_count,  graph_path)
+
+        count_row   = counts[0] if ok3 and counts else [0, 0, 0]
+
+        return jsonify({
+            "status":       "success",
+            "mode":         "2mode",
+            "actor_label":  actor_label,
+            "pivot_label":  pivot_label,
+            "actor_count":  int(count_row[0]) if count_row else 0,
+            "pivot_count":  int(count_row[1]) if count_row else 0,
+            "edge_count":   int(count_row[2]) if count_row else 0,
+            "top_actors":   [{"props": dict(r[0]) if r[0] else {}, "degree": int(r[1])} for r in (actors or [])],
+            "top_pivots":   [{"props": dict(r[0]) if r[0] else {}, "degree": int(r[1])} for r in (pivots or [])],
+        }), 200
+
+    except Exception as e:
+        current_app.logger.error(f"[API v1] network/bipartite error: {e}")
+        return jsonify({"error": "Bipartite stats failed", "detail": str(e)}), 500
+
+
+# ============================================
+# 10. Graph Management API
 # ============================================
 
 @api_v1.route('/graph/list', methods=['GET'])
@@ -1199,3 +1433,74 @@ def query_rdb_table(table_name):
         
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
+
+
+# ============================================
+# V4.0 시각화 SSOT API (Phase 4.1)
+# ============================================
+# 프론트엔드가 ontology_service.py 의 VISUAL_STYLE_V40 / EDGE_STYLE_V40 /
+# LAYOUT_PRESETS_V40 / INVESTIGATION_WORKFLOWS_V40 을 단일 출처(SSOT)로 참조하도록 노출
+
+@api_v1.route('/visual-style', methods=['GET'])
+def visual_style():
+    """V4.0 노드 시각화 표준 (색상/모양/크기/아이콘) 전체 반환."""
+    from app.services.ontology_service import KICSCrimeDomainOntology as Ont
+    label = request.args.get('label')
+    if label:
+        return jsonify({"status": "success", "label": label,
+                        "style": Ont.get_visual_style(label)}), 200
+    return jsonify({"status": "success", "version": "v4.0",
+                    "count": len(Ont.VISUAL_STYLE_V40),
+                    "styles": Ont.VISUAL_STYLE_V40}), 200
+
+
+@api_v1.route('/edge-style', methods=['GET'])
+def edge_style():
+    """V4.0 엣지 시각화 표준 (색상/굵기/화살표/선종류) 전체 반환."""
+    from app.services.ontology_service import KICSCrimeDomainOntology as Ont
+    edge = request.args.get('edge')
+    if edge:
+        return jsonify({"status": "success", "edge": edge,
+                        "style": Ont.get_edge_style(edge)}), 200
+    return jsonify({"status": "success", "version": "v4.0",
+                    "count": len(Ont.EDGE_STYLE_V40),
+                    "styles": Ont.EDGE_STYLE_V40}), 200
+
+
+@api_v1.route('/layout-presets', methods=['GET'])
+def layout_presets():
+    """V4.0 그래프 레이아웃 프리셋 5종 반환."""
+    from app.services.ontology_service import KICSCrimeDomainOntology as Ont
+    name = request.args.get('name')
+    if name:
+        return jsonify({"status": "success", "name": name,
+                        "preset": Ont.get_layout_preset(name)}), 200
+    return jsonify({"status": "success", "version": "v4.0",
+                    "count": len(Ont.LAYOUT_PRESETS_V40),
+                    "presets": Ont.LAYOUT_PRESETS_V40}), 200
+
+
+@api_v1.route('/workflows', methods=['GET'])
+def investigation_workflows():
+    """V4.0 수사 워크플로 6종 반환."""
+    from app.services.ontology_service import KICSCrimeDomainOntology as Ont
+    name = request.args.get('name')
+    if name:
+        return jsonify({"status": "success", "name": name,
+                        "workflow": Ont.get_workflow(name)}), 200
+    return jsonify({"status": "success", "version": "v4.0",
+                    "count": len(Ont.INVESTIGATION_WORKFLOWS_V40),
+                    "workflows": Ont.INVESTIGATION_WORKFLOWS_V40}), 200
+
+
+@api_v1.route('/ontology/meta', methods=['GET'])
+def ontology_meta():
+    """V4.0 온톨로지 메타 (NODE_ID_STANDARD / DOMAIN_USAGE / INFERENCE_RULES_V37) 통합 반환."""
+    from app.services.ontology_service import KICSCrimeDomainOntology as Ont
+    return jsonify({
+        "status": "success",
+        "version": "v4.0",
+        "node_id_standard": getattr(Ont, 'NODE_ID_STANDARD', {}),
+        "domain_usage": getattr(Ont, 'DOMAIN_USAGE', {}),
+        "inference_rules": getattr(Ont, 'INFERENCE_RULES_V37', {}),
+    }), 200

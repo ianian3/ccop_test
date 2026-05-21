@@ -357,10 +357,20 @@ class ETLService:
                     # 온톨로지 메타데이터 추가
                     from app.services.ontology_service import OntologyEnricher
                     enriched_props = OntologyEnricher.enrich_node(dynamic_label, node_props)
-                    
+
                     # 표준 코드 자동 매핑 (StandardCodeMapper)
                     enriched_props = StandardCodeMapper.auto_enrich(dynamic_label, enriched_props)
-                    
+
+                    # V4.0 메타 6 컬럼 주입 (Phase 2.1)
+                    # source_domain 우선순위: node_data 명시 > ETL 컨텍스트 > 기본 'KICS'(investigation)
+                    from app.services.rdb_to_graph_service import RdbToGraphService
+                    enriched_props = RdbToGraphService.make_node_props_v40(
+                        dynamic_label,
+                        enriched_props,
+                        source_domain=node_data.get('source_domain', 'KICS'),
+                        source_id=node_data.get('source_id'),
+                    )
+
                     label_stats[dynamic_label] = label_stats.get(dynamic_label, 0) + 1
                     
                     # MERGE 로직: 노드 존재 확인 후 CREATE 또는 UPDATE
@@ -428,7 +438,16 @@ class ETLService:
                     # 온톨로지 메타데이터 추가 (엣지)
                     from app.services.ontology_service import OntologyEnricher
                     enriched_edge_props = OntologyEnricher.enrich_edge(edge_type, edge_props)
-                    
+
+                    # V4.0 엣지 메타 4 컬럼 주입 (Phase 2.1.D)
+                    from app.services.rdb_to_graph_service import RdbToGraphService
+                    enriched_edge_props = RdbToGraphService.make_edge_props_v40(
+                        edge_type,
+                        enriched_edge_props,
+                        source_domain=edge_data.get('source_domain', 'KICS'),
+                        source_id=edge_data.get('source_id'),
+                    )
+
                     # 엣지 속성 문자열 생성
                     props_list = [f"{k}: '{str(v).replace(chr(39), chr(39)+chr(39))}'" for k, v in enriched_edge_props.items()]
                     edge_props_str = ", ".join(props_list) if props_list else ""
@@ -727,18 +746,24 @@ class ETLService:
                     
                     # 온톨로지 메타데이터 추가
                     enriched = OntologyEnricher.enrich_node(label, props)
-                    
+
                     # 표준 코드 자동 매핑
                     enriched = StandardCodeMapper.auto_enrich(label, enriched)
-                    
-                    props_list = [f"{k}: '{str(v).replace(chr(39), chr(39)+chr(39))}'" 
+
+                    # V4.0 메타 6 컬럼 주입 (Phase 2.1)
+                    from app.services.rdb_to_graph_service import RdbToGraphService
+                    enriched = RdbToGraphService.make_node_props_v40(
+                        label, enriched, source_domain='KICS',
+                    )
+
+                    props_list = [f"{k}: '{str(v).replace(chr(39), chr(39)+chr(39))}'"
                                  for k, v in enriched.items() if v]
                     props_str = ", ".join(props_list)
-                    
+
                     create_query = f"CREATE (:{label} {{{props_str}}})"
                     cur.execute(create_query)
                     count += 1
-                    
+
                 except Exception as e:
                     continue
         
@@ -808,13 +833,22 @@ class ETLService:
                     # SQL Escape
                     from_val_esc = from_val.replace("'", "''")
                     to_val_esc = to_val.replace("'", "''")
-                    
+
+                    # V4.0 엣지 메타 4 컬럼 (Phase 2.1.D)
+                    from app.services.rdb_to_graph_service import RdbToGraphService
+                    v40_edge_props = RdbToGraphService.make_edge_props_v40(
+                        edge_type, source_domain='KICS',
+                    )
+                    edge_props_list = [f"{k}: '{str(v).replace(chr(39), chr(39)+chr(39))}'"
+                                       for k, v in v40_edge_props.items()]
+                    edge_props_str = ", ".join(edge_props_list)
+
                     # 엣지 생성 (MATCH + CREATE) - 속성 키 수정됨
                     # ag_vertex 사용으로 더 안정적인 매칭
                     edge_query = f"""
                     MATCH (a:{from_label}), (b:{to_label})
                     WHERE a.{from_prop_key} = '{from_val_esc}' AND b.{to_prop_key} = '{to_val_esc}'
-                    CREATE (a)-[:{edge_type}]->(b)
+                    CREATE (a)-[:{edge_type} {{{edge_props_str}}}]->(b)
                     """
                     
                     try:
@@ -843,7 +877,7 @@ class ETLService:
                                 edge_fallback = f"""
                                 MATCH (v1), (v2)
                                 WHERE id(v1) = '{src_result[0]}' AND id(v2) = '{tgt_result[0]}'
-                                CREATE (v1)-[:{edge_type}]->(v2)
+                                CREATE (v1)-[:{edge_type} {{{edge_props_str}}}]->(v2)
                                 """
                                 cur.execute(edge_fallback)
                                 count += 1
