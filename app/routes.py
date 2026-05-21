@@ -1,20 +1,85 @@
 # app/routes.py
-from flask import Blueprint, render_template, request, jsonify
+from flask import Blueprint, render_template, request, jsonify, current_app
+from collections import defaultdict
+from datetime import datetime, timezone
 import json
+
+# 메인 API Rate Limiter: {ip: {minute_bucket: count}}
+_ip_counters: dict = defaultdict(lambda: defaultdict(int))
+_MAIN_API_RATE_LIMIT = 60  # 분당 60회
+
+
+def _check_ip_rate_limit(ip: str) -> bool:
+    """IP 기반 Rate Limit. True=허용, False=초과"""
+    bucket = datetime.now(timezone.utc).strftime("%Y%m%d%H%M")
+    _ip_counters[ip][bucket] += 1
+    # 현재 버킷 카운트만 사용 (오래된 버킷 정리)
+    for old_bucket in list(_ip_counters[ip]):
+        if old_bucket != bucket:
+            del _ip_counters[ip][old_bucket]
+    return _ip_counters[ip][bucket] <= _MAIN_API_RATE_LIMIT
 
 # [서비스 모듈들 Import]
 from app.services.ai_service import AIService
 from app.services.etl_service import ETLService
 from app.services.graph_service import GraphService
 from app.services.subgraph_service import SubGraphService
-from app.services.legal_rag_service import LegalRAGService
 from app.services.rdb_to_graph_service import RdbToGraphService
-from app.services.langgraph_agent import LangGraphAgent
+from app.services.langgraph_agent import LangGraphAgent, InvestigationSession
 import logging
 
 logger = logging.getLogger(__name__)
 
 bp = Blueprint('main', __name__)
+
+# ── 수사 세션 저장소 (서버 메모리, 최대 200개 LRU) ──────────────────
+_MAX_SESSIONS = 200
+_sessions: dict = {}          # session_id → InvestigationSession
+_session_order: list = []     # 삽입 순서 추적 (LRU)
+
+def _get_or_create_session(session_id: str, graph_path: str) -> InvestigationSession:
+    if session_id and session_id in _sessions:
+        return _sessions[session_id]
+    sess = InvestigationSession(graph_path=graph_path)
+    if session_id:
+        if len(_sessions) >= _MAX_SESSIONS:
+            oldest = _session_order.pop(0)
+            _sessions.pop(oldest, None)
+        _sessions[session_id] = sess
+        _session_order.append(session_id)
+    return sess
+
+
+def _save_session_db(session_id: str, sess: InvestigationSession, question: str):
+    """TB_INVEST_SESSION 에 세션 스냅샷 UPSERT (실패 시 조용히 무시)"""
+    if not session_id:
+        return
+    try:
+        import json
+        from app.services.rdb_to_graph_service import RdbToGraphService
+        snap = sess.snapshot()
+        conn = RdbToGraphService.get_db_connection()
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO TB_INVEST_SESSION
+                (SESSION_ID, GRAPH_PATH, STATUS_CD, QUESTION_CN, ENTITY_CTX, UPDATED_AT)
+            VALUES (%s, %s, 'IN_PROGRESS', %s, %s, CURRENT_TIMESTAMP)
+            ON CONFLICT (SESSION_ID) DO UPDATE SET
+                STATUS_CD  = 'IN_PROGRESS',
+                QUESTION_CN = EXCLUDED.QUESTION_CN,
+                ENTITY_CTX  = EXCLUDED.ENTITY_CTX,
+                UPDATED_AT  = CURRENT_TIMESTAMP
+        """, (
+            session_id,
+            snap.get("graph_path"),
+            question[:500],
+            json.dumps(snap.get("entity_context", []), ensure_ascii=False)
+        ))
+        conn.commit()
+        cur.close()
+        conn.close()
+    except Exception:
+        pass
 
 # ------------------------------
 # 1. 기본 페이지
@@ -148,7 +213,7 @@ def delete_manual_element():
 @bp.route('/api/graph/load', methods=['GET'])
 def load_graph_data():
     """선택된 그래프의 전체 노드/엣지 동기식 로드 (최대 N 건)"""
-    graph_path = request.args.get('graph_path', 'demo_tst1')
+    graph_path = request.args.get('graph_path', current_app.config.get('DEFAULT_GRAPH_PATH', 'tccop_graph_v6'))
     limit = request.args.get('limit', 300, type=int)
     
     # [Fix] psycopg2가 AgensGraph Vertex/Edge 객체를 직렬화 못하는 문제 해결.
@@ -156,35 +221,39 @@ def load_graph_data():
     # RETURN id(n), labels(n), properties(n), type(r), id(m), labels(m), properties(m) → 정상 리턴
     # 따라서 명시적 컬럼 추출 방식으로 변경하고, 직접 Cytoscape 포맷으로 조립.
     
-    from app.services.graph_service import get_db_connection, GraphService
+    import psycopg2 as _pg2
+    from app.services.graph_service import GraphService
     from app.database import safe_set_graph_path
-    conn, cur = get_db_connection()
-    if not conn:
-        return jsonify([])
-    
+
     elements = []
     node_ids = set()
-    edge_counter = 0
-    
+
     try:
-        conn.autocommit = False
+        conn = _pg2.connect(**current_app.config['DB_CONFIG'])
+        conn.autocommit = True
+        cur = conn.cursor()
+    except Exception as e:
+        logger.error(f"[GraphLoad] DB 연결 실패: {e}")
+        return jsonify([])
+
+    try:
         safe_set_graph_path(cur, graph_path)
-        
+
         cypher_query = f"""
-            MATCH (n)-[r]->(m) 
-            RETURN id(n), labels(n), properties(n), id(r), type(r), id(m), labels(m), properties(m) 
+            MATCH (n)-[r]->(m)
+            RETURN id(n), labels(n), properties(n), id(r), type(r), id(m), labels(m), properties(m)
             LIMIT {limit}
         """
-        logger.info(f"▶ [GraphLoad] 실행 Cypher: {cypher_query.strip()}")
+        logger.info(f"▶ [GraphLoad] graph={graph_path} Cypher: MATCH (n)-[r]->(m) RETURN ... LIMIT {limit}")
         cur.execute(cypher_query)
         rows = cur.fetchall()
-        
+
         for r in rows:
             if len(r) < 8:
                 continue
-            
+
             n_id, n_labels, n_props, r_id, r_type, m_id, m_labels, m_props = r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7]
-            
+
             # 노드 n 추가
             n_id_str = str(n_id)
             if n_id_str not in node_ids:
@@ -198,7 +267,7 @@ def load_graph_data():
                         "props": GraphService.safe_props(n_props if isinstance(n_props, dict) else {})
                     }
                 })
-            
+
             # 노드 m 추가
             m_id_str = str(m_id)
             if m_id_str not in node_ids:
@@ -212,7 +281,7 @@ def load_graph_data():
                         "props": GraphService.safe_props(m_props if isinstance(m_props, dict) else {})
                     }
                 })
-            
+
             # 엣지 추가 (n → m)
             edge_id = str(r_id)
             elements.append({
@@ -225,11 +294,12 @@ def load_graph_data():
                     "props": {}
                 }
             })
-        
+
+        logger.info(f"▶ [GraphLoad] 결과: 노드 {len(node_ids)}개, 엣지 {len(elements)-len(node_ids)}개")
         return jsonify(elements)
-        
+
     except Exception as e:
-        logger.error(f"[GraphLoad Error] {e}")
+        logger.error(f"[GraphLoad Error] graph={graph_path}: {e}")
         return jsonify([])
     finally:
         conn.close()
@@ -237,7 +307,7 @@ def load_graph_data():
 @bp.route('/api/search', methods=['GET'])
 def search_node():
     keyword = request.args.get('keyword', '').strip()
-    graph_path = request.args.get('graph_path', 'demo_tst1')
+    graph_path = request.args.get('graph_path', current_app.config.get('DEFAULT_GRAPH_PATH', 'tccop_graph_v6'))
     
     # 서비스 호출
     elements = GraphService.search_nodes(keyword, graph_path)
@@ -247,7 +317,7 @@ def search_node():
 def expand_node():
     # 'id' 또는 'node_id' 둘 다 지원
     node_id = request.args.get('id') or request.args.get('node_id')
-    graph_path = request.args.get('graph_path', 'demo_tst1')
+    graph_path = request.args.get('graph_path', current_app.config.get('DEFAULT_GRAPH_PATH', 'tccop_graph_v6'))
     
     if not node_id: return jsonify([])
     
@@ -260,7 +330,7 @@ def find_path():
     data = request.get_json()
     src = data.get('source')
     tgt = data.get('target')
-    graph_path = data.get('graph_path', 'demo_tst1')
+    graph_path = data.get('graph_path', current_app.config.get('DEFAULT_GRAPH_PATH', 'tccop_graph_v6'))
     
     found, elements = GraphService.find_shortest_path(src, tgt, graph_path)
     
@@ -275,7 +345,7 @@ def multi_hop_expand():
     """N-hop 다단계 확장"""
     node_id = request.args.get('id') or request.args.get('node_id')
     depth = request.args.get('depth', 2, type=int)
-    graph_path = request.args.get('graph_path', 'demo_tst1')
+    graph_path = request.args.get('graph_path', current_app.config.get('DEFAULT_GRAPH_PATH', 'tccop_graph_v6'))
     
     if not node_id:
         return jsonify({"error": "node id required"}), 400
@@ -287,7 +357,7 @@ def multi_hop_expand():
 def accomplice_network():
     """공범 네트워크 조회"""
     node_id = request.args.get('id') or request.args.get('node_id')
-    graph_path = request.args.get('graph_path', 'demo_tst1')
+    graph_path = request.args.get('graph_path', current_app.config.get('DEFAULT_GRAPH_PATH', 'tccop_graph_v6'))
     
     if not node_id:
         return jsonify({"error": "node id required"}), 400
@@ -298,7 +368,7 @@ def accomplice_network():
 @bp.route('/api/network/hubs', methods=['GET'])
 def hub_nodes():
     """허브 노드 탐지"""
-    graph_path = request.args.get('graph_path', 'demo_tst1')
+    graph_path = request.args.get('graph_path', current_app.config.get('DEFAULT_GRAPH_PATH', 'tccop_graph_v6'))
     top_n = request.args.get('top_n', 10, type=int)
     
     hubs = GraphService.find_hub_nodes(graph_path, top_n)
@@ -330,6 +400,30 @@ def rdb_to_graph():
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
+@bp.route('/api/rdb/transfer-case', methods=['POST'])
+def rdb_transfer_case():
+    """특정 사건번호에 속한 노드·엣지만 부분 ETL (수사 세션 시작용)"""
+    try:
+        data = request.get_json() or {}
+        case_no = data.get('case_no', '').strip()
+        graph_name = data.get('graph_name', current_app.config.get('DEFAULT_GRAPH_PATH', 'tccop_graph_v6'))
+        if not case_no:
+            return jsonify({"status": "error", "message": "case_no 필드가 필요합니다"}), 400
+
+        success, stats = RdbToGraphService.transfer_case(case_no, graph_name)
+
+        if success:
+            return jsonify({
+                "status": "success",
+                "message": f"사건 {case_no} 부분 ETL 완료",
+                "stats": stats
+            })
+        else:
+            return jsonify({"status": "error", "message": str(stats)}), 500
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
 @bp.route('/api/rdb/conversion-preview', methods=['GET'])
 def rdb_conversion_preview():
     """변환 전 미리보기 (각 테이블의 레코드 수 확인)"""
@@ -341,6 +435,153 @@ def rdb_conversion_preview():
             return jsonify({"status": "error", "message": "미리보기 생성 실패"}), 500
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
+
+# ============================================================
+# 2.6  온톨로지 변환 마법사 (Wizard) API  — v3.5 POLE 6-Layer
+# ============================================================
+
+# 진행 중인 wizard 작업 저장소
+_wizard_jobs: dict = {}
+
+@bp.route('/api/ontology/wizard/preview', methods=['GET'])
+def ontology_wizard_preview():
+    """선택한 RDB 스키마의 테이블 레코드 수 + v3.5 온톨로지 매핑 반환"""
+    schema = request.args.get('schema', 'test_ccop')
+    try:
+        import psycopg2, re
+        if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', schema):
+            return jsonify({"status": "error", "message": "유효하지 않은 스키마명"}), 400
+
+        conn = psycopg2.connect(**current_app.config['DB_CONFIG'])
+        cur = conn.cursor()
+
+        # v3.5 POLE 6계층 매핑 정의
+        layer_map = [
+            {
+                "layer": "Case",    "layer_ko": "사건 (Case)",    "color": "#e17055",
+                "items": [
+                    {"table": "tb_incdnt_mst", "label": "vt_case",     "desc": "수사 사건", "key": "incdnt_no",  "pk": "flnm"},
+                ]
+            },
+            {
+                "layer": "Person",  "layer_ko": "인물/조직 (Person)", "color": "#a29bfe",
+                "items": [
+                    {"table": "tb_prsn",  "label": "vt_psn", "desc": "인물",  "key": "prsn_id",  "pk": "psn_id"},
+                    {"table": "tb_inst",  "label": "vt_org", "desc": "조직",  "key": "inst_id",  "pk": "org_id"},
+                ]
+            },
+            {
+                "layer": "Object",  "layer_ko": "객체/증거 (Object)", "color": "#00cec9",
+                "items": [
+                    {"table": "tb_fin_bacnt",       "label": "vt_bacnt",  "desc": "계좌",     "key": "bacnt_no",   "pk": "account_no"},
+                    {"table": "tb_telno_mst",       "label": "vt_telno",  "desc": "전화번호", "key": "telno",      "pk": "telno"},
+                    {"table": "tb_vhcl_mst",        "label": "vt_vhcl",   "desc": "차량",     "key": "vhclno",     "pk": "vhclno"},
+                    {"table": "tb_dgtl_file_invnt", "label": "vt_file",   "desc": "파일",     "key": "file_nm",    "pk": "hash_val"},
+                    {"table": "tb_web_mlgn_idc",    "label": "vt_site",   "desc": "악성사이트","key": "url",        "pk": "url_addr"},
+                ]
+            },
+            {
+                "layer": "Event",   "layer_ko": "이벤트 (Event)",    "color": "#fdcb6e",
+                "items": [
+                    {"table": "tb_fin_bacnt_dlng",   "label": "vt_transfer", "desc": "이체",        "key": "dlng_sn",     "pk": "event_id"},
+                    {"table": "tb_telno_call_dtl",   "label": "vt_call",     "desc": "통화",        "key": "call_sn",     "pk": "event_id"},
+                    {"table": "tb_telno_sms_msg",    "label": "vt_msg",      "desc": "SMS",         "key": "sms_sn",      "pk": "event_id"},
+                    {"table": "tb_chat_msg",         "label": "vt_msg",      "desc": "채팅메시지",   "key": "msg_sn",      "pk": "event_id"},
+                    {"table": "tb_geo_mbl_loc_evt",  "label": "vt_movement", "desc": "기지국이동",   "key": "loc_evt_sn",  "pk": "mov_id"},
+                    {"table": "tb_vhcl_lpr_evt",     "label": "vt_movement", "desc": "LPR이동",     "key": "lpr_sn",      "pk": "mov_id"},
+                ]
+            },
+        ]
+
+        # 엣지 규칙 정의
+        edge_rules = [
+            {"from": "vt_psn",     "rel": "suspect_in",  "to": "vt_case",     "source": "tb_incdnt_mst.incdnt_no + tb_prsn", "desc": "피의자 역할"},
+            {"from": "vt_psn",     "rel": "victim_in",   "to": "vt_case",     "source": "tb_frd_vctm_rpt",                   "desc": "피해자 역할"},
+            {"from": "vt_psn",     "rel": "has_account", "to": "vt_bacnt",    "source": "tb_fin_bacnt.dpstr_nm",             "desc": "계좌 소유"},
+            {"from": "vt_psn",     "rel": "owns_phone",  "to": "vt_telno",    "source": "tb_telno_join.join_psnnm",          "desc": "전화 가입"},
+            {"from": "vt_psn",     "rel": "owns_vehicle","to": "vt_vhcl",     "source": "tb_vhcl_mst.ownr_nm",              "desc": "차량 소유"},
+            {"from": "vt_bacnt",   "rel": "sent_from",   "to": "vt_transfer", "source": "tb_fin_bacnt_dlng.bacnt_no",        "desc": "이체 출금계좌"},
+            {"from": "vt_transfer","rel": "sent_to",     "to": "vt_bacnt",    "source": "tb_fin_bacnt_dlng.trrc_bacnt_no",   "desc": "이체 입금계좌"},
+            {"from": "vt_telno",   "rel": "made_call",   "to": "vt_call",     "source": "tb_telno_call_dtl.dsptch_telno",    "desc": "발신 통화"},
+            {"from": "vt_call",    "rel": "received_by", "to": "vt_telno",    "source": "tb_telno_call_dtl.rcptn_telno",     "desc": "수신 통화"},
+            {"from": "vt_org",     "rel": "belongs_to",  "to": "vt_psn",      "source": "tb_inst.inst_id ↔ tb_prsn",         "desc": "기관 소속"},
+        ]
+
+        # 레코드 수 조회
+        for layer in layer_map:
+            for item in layer["items"]:
+                try:
+                    cur.execute(f'SELECT count(*) FROM {schema}."{item["table"]}"')
+                    item["count"] = cur.fetchone()[0]
+                except:
+                    conn.rollback()
+                    item["count"] = 0
+
+        conn.close()
+        return jsonify({
+            "status": "success",
+            "schema": schema,
+            "layers": layer_map,
+            "edge_rules": edge_rules
+        })
+    except Exception as e:
+        logger.error(f"[Wizard Preview] {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@bp.route('/api/ontology/wizard/run', methods=['POST'])
+def ontology_wizard_run():
+    """온톨로지 변환 마법사 실행 — 백그라운드 스레드 + 폴링"""
+    import threading, uuid, re
+    data = request.get_json() or {}
+    graph_name = data.get('graph_name', '').strip()
+    schema     = data.get('schema', 'test_ccop').strip()
+    layers     = data.get('layers', [])   # ['Case','Person','Object','Event']
+
+    if not graph_name or not re.match(r'^[a-zA-Z][a-zA-Z0-9_]*$', graph_name):
+        return jsonify({"status": "error", "message": "유효한 그래프 이름을 입력하세요 (영문 시작, 영문/숫자/언더스코어)"}), 400
+    if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', schema):
+        return jsonify({"status": "error", "message": "유효하지 않은 스키마명"}), 400
+    if not layers:
+        return jsonify({"status": "error", "message": "변환할 레이어를 하나 이상 선택하세요"}), 400
+
+    job_id = str(uuid.uuid4())[:8]
+    _wizard_jobs[job_id] = {
+        "status": "running",
+        "logs": [],
+        "stats": {"nodes": 0, "edges": 0},
+        "graph_name": graph_name,
+    }
+
+    def _run():
+        try:
+            RdbToGraphService.transfer_v35(
+                graph_name, schema, layers,
+                log_cb=lambda msg: _wizard_jobs[job_id]["logs"].append(msg),
+                stats_ref=_wizard_jobs[job_id]["stats"]
+            )
+            _wizard_jobs[job_id]["status"] = "done"
+        except Exception as ex:
+            _wizard_jobs[job_id]["logs"].append(f"[ERROR] {ex}")
+            _wizard_jobs[job_id]["status"] = "error"
+
+    threading.Thread(target=_run, daemon=True).start()
+    return jsonify({"status": "started", "job_id": job_id})
+
+
+@bp.route('/api/ontology/wizard/status/<job_id>', methods=['GET'])
+def ontology_wizard_status(job_id):
+    """마법사 작업 진행 상태 폴링"""
+    job = _wizard_jobs.get(job_id)
+    if not job:
+        return jsonify({"status": "error", "message": "작업을 찾을 수 없습니다"}), 404
+    return jsonify({
+        "status":     job["status"],
+        "logs":       job["logs"],
+        "stats":      job["stats"],
+        "graph_name": job["graph_name"],
+    })
+
 
 # DB 정보 조회
 @bp.route('/api/db/info', methods=['GET'])
@@ -602,39 +843,42 @@ def rdb_list_tables():
             }
     
     src = rdb_sources.get(source_alias)
-    if not src:
-        return jsonify({"status": "error", "message": f"'{source_alias}' 소스 없음"}), 404
-    
+    cfg = current_app.config['DB_CONFIG']
+
     try:
-        conn = psycopg2.connect(
-            host=src['host'], port=src['port'], dbname=src['dbname'],
-            user=src['user'], password=src['password'],
-            connect_timeout=5
-        )
+        if src:
+            conn = psycopg2.connect(
+                host=src['host'], port=src['port'], dbname=src['dbname'],
+                user=src['user'], password=src['password'],
+                connect_timeout=5
+            )
+            dbname = src['dbname']
+        else:
+            conn = psycopg2.connect(**cfg)
+            dbname = cfg.get('dbname', '')
         cur = conn.cursor()
-        
-        # public 스키마의 일반 테이블 목록 + 행 수 (추정치)
+        rdb_schema = current_app.config.get('RDB_SCHEMA', 'test_ccop')
+
         cur.execute("""
-            SELECT t.table_name, 
-                   COALESCE(c.reltuples::bigint, 0) as row_estimate
+            SELECT t.table_name,
+                   GREATEST(COALESCE(c.reltuples::bigint, 0), 0) AS row_estimate
             FROM information_schema.tables t
-            LEFT JOIN pg_class c ON c.relname = t.table_name
-            WHERE t.table_schema = 'public' 
-            AND t.table_type = 'BASE TABLE'
+            LEFT JOIN pg_class c
+                ON c.relname = t.table_name
+                AND c.relnamespace = (
+                    SELECT oid FROM pg_namespace WHERE nspname = %s
+                )
+            WHERE t.table_schema = %s
+              AND t.table_type = 'BASE TABLE'
             ORDER BY t.table_name
-        """)
-        tables = []
-        for row in cur.fetchall():
-            tables.append({
-                "table_name": row[0],
-                "row_count": max(int(row[1]), 0)
-            })
-        
+        """, (rdb_schema, rdb_schema))
+        tables = [{"table_name": row[0], "row_count": int(row[1])} for row in cur.fetchall()]
+
         conn.close()
         return jsonify({
             "status": "success",
             "source": source_alias,
-            "dbname": src['dbname'],
+            "dbname": dbname,
             "tables": tables
         })
     except Exception as e:
@@ -668,25 +912,36 @@ def rdb_browse():
         else:
             cfg = current_app.config['DB_CONFIG']
             conn = psycopg2.connect(**cfg)
+        conn.autocommit = True
         cur = conn.cursor()
-        
-        # 총 건수
-        cur.execute(f'SELECT count(*) FROM {table}')
-        total = cur.fetchone()[0]
-        
-        # 컬럼 정보 (information_schema는 소문자로 저장)
+        rdb_schema = current_app.config.get('RDB_SCHEMA', 'test_ccop')
+
         table_lower = table.lower()
-        cur.execute(f"SELECT column_name, data_type FROM information_schema.columns WHERE table_name='{table_lower}' ORDER BY ordinal_position")
+
+        # 컬럼 정보 먼저 확인 (스키마 명시 — AgensGraph 그래프 스키마 충돌 방지)
+        cur.execute(
+            "SELECT column_name, data_type FROM information_schema.columns "
+            "WHERE table_schema = %s AND table_name = %s ORDER BY ordinal_position",
+            (rdb_schema, table_lower)
+        )
         columns = [{"name": r[0], "type": r[1]} for r in cur.fetchall()]
+        if not columns:
+            return jsonify({"status": "error", "message": f"테이블 '{table}'을 찾을 수 없습니다. (스키마: {rdb_schema})"}), 404
         col_names = [c["name"] for c in columns]
-        
-        # 데이터 조회
-        cur.execute(f'SELECT * FROM {table} ORDER BY 1 LIMIT {limit} OFFSET {offset}')
+
+        # 총 건수
+        cur.execute(f'SELECT count(*) FROM {rdb_schema}.{table_lower}')
+        total = cur.fetchone()[0]
+
+        # 데이터 조회 (명시적 컬럼 목록 사용 — SELECT * 순서 의존 방지)
+        col_list = ', '.join(f'"{c}"' for c in col_names)
+        cur.execute(
+            f'SELECT {col_list} FROM {rdb_schema}.{table_lower} ORDER BY 1 LIMIT %s OFFSET %s',
+            (limit, offset)
+        )
         rows = []
         for r in cur.fetchall():
-            row = {}
-            for i, val in enumerate(r):
-                row[col_names[i]] = str(val) if val is not None else None
+            row = {col_names[i]: (str(val) if val is not None else None) for i, val in enumerate(r)}
             rows.append(row)
         
         conn.close()
@@ -704,47 +959,36 @@ def rdb_browse():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 # ------------------------------
-# 3. AI 관련 기능 (RAG, Query) -> AIService + GraphService 협업
+# 3. Text2Cypher AI 질의 기능
 # ------------------------------
 @bp.route('/api/query/ai', methods=['POST'])
 def query_ai():
+    if not _check_ip_rate_limit(request.remote_addr):
+        return jsonify({"error": f"요청이 너무 많습니다. 분당 {_MAIN_API_RATE_LIMIT}회 제한."}), 429
     data = request.get_json()
     question = data.get('question')
-    graph_path = data.get('graph_path', 'demo_tst1')
+    graph_path = data.get('graph_path', current_app.config.get('DEFAULT_GRAPH_PATH', 'tccop_graph_v6'))
+    session_id = data.get('session_id')
 
-    # 1. AI 분석 수행 (LangGraph Agent 활용: 성찰 루프 포함)
     try:
-        agent = LangGraphAgent()
-        agent_res = agent.run(question, graph_path)
-        
+        sess = _get_or_create_session(session_id, graph_path)
+        agent_res = sess.ask(question)
+        _save_session_db(session_id, sess, question)
+
         if agent_res.get("status") == "error":
             return jsonify({"error": agent_res.get("message", "에이전트 처리 오류")}), 500
-        
-        # 에이전트 결과에서 인텐트 추출
-        intent = agent_res.get("intent", "QUERY")
-        
+
         return jsonify({
             "elements": agent_res.get("elements", []),
             "cypher": agent_res.get("cypher", ""),
-            "intent": intent,
-            "explanation": agent_res.get("explanation", ""),
-            "agent_status": agent_res.get("status")
+            "intent": agent_res.get("intent", "QUERY"),
+            "hints": agent_res.get("hints", []),
+            "session_id": session_id,
+            "entity_count": len(sess.entity_context)
         })
     except Exception as e:
         logger.error(f"Agent Query Error: {e}")
-        return jsonify({"error": f"분석 오류: {str(e)}"}), 500
-
-@bp.route('/api/query/rag', methods=['POST'])
-def query_rag():
-    data = request.get_json()
-    question = data.get('question')
-    graph_path = data.get('graph_path', 'demo_tst1')
-    
-    # GraphService.rag_query가 report와 elements를 모두 반환
-    report, elements = GraphService.rag_query(question, graph_path)
-    
-    return jsonify({"explanation": report, "elements": elements})
-
+        return jsonify({"error": "분석 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요."}), 500
 
 # ------------------------------
 # 4. ETL 관련 기능 -> ETLService 사용
@@ -768,7 +1012,7 @@ def etl_import():
     try:
         file = request.files['file']
         mapping = json.loads(request.form.get('mapping'))
-        graph_path = request.form.get('graph_path', 'demo_tst1')
+        graph_path = request.form.get('graph_path', current_app.config.get('DEFAULT_GRAPH_PATH', 'tccop_graph_v6'))
         
         success, nodes, edges, msg = ETLService.import_csv(file, mapping, graph_path)
         
@@ -906,7 +1150,7 @@ def rdb_import():
         file.save(temp_path)
         
         clear_rdb = request.form.get('clear_rdb', 'false').lower() == 'true'
-        
+
         # 프론트엔드에서 확정한 매핑 정보 (선택적)
         frontend_mapping_str = request.form.get('column_mapping')
         frontend_mapping = None
@@ -915,13 +1159,33 @@ def rdb_import():
                 frontend_mapping = json.loads(frontend_mapping_str)
             except:
                 pass
-        
+
+        # V4.0 메타 — SOURCE_DOMAIN / SOURCE_ID (Phase 2.1.E)
+        ALLOWED_DOMAINS = {'KICS', 'OSINT', 'DIGITAL', 'EXT',
+                           'INVESTIGATION', 'PARTNER', 'INFERENCE'}
+        source_domain = (request.form.get('source_domain') or 'KICS').upper()
+        if source_domain not in ALLOWED_DOMAINS:
+            return jsonify({"status": "error",
+                            "message": f"Invalid source_domain '{source_domain}'. "
+                                       f"Allowed: {sorted(ALLOWED_DOMAINS)}"}), 400
+        source_id = request.form.get('source_id') or None
+        current_app.logger.info(
+            f"[V4.0] /api/rdb/import source_domain={source_domain} source_id={source_id}"
+        )
+
         try:
             # 스마트 라우팅 분기: 파일명이 tbl_ 로 시작하면 사전 정의된 RDB 스키마로 간주
             if file.filename.lower().startswith('tbl_'):
-                success, result = RDBService.import_predefined_schema_to_rdb(temp_path, file.filename, clear_existing=clear_rdb)
+                success, result = RDBService.import_predefined_schema_to_rdb(
+                    temp_path, file.filename, clear_existing=clear_rdb,
+                    source_domain=source_domain, source_id=source_id,
+                )
             else:
-                success, result = RDBService.import_csv_to_rdb(temp_path, clear_existing=clear_rdb, custom_mapping=frontend_mapping)
+                success, result = RDBService.import_csv_to_rdb(
+                    temp_path, clear_existing=clear_rdb,
+                    custom_mapping=frontend_mapping,
+                    source_domain=source_domain, source_id=source_id,
+                )
         finally:
             if os.path.exists(temp_path):
                 os.remove(temp_path)
@@ -939,157 +1203,7 @@ def rdb_import():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 # ------------------------------
-# 5. 법률 RAG 관련 기능 -> LegalRAGService 사용
-# ------------------------------
-@bp.route('/api/legal/upload', methods=['POST'])
-def legal_upload():
-    """법률 PDF 업로드 및 벡터화"""
-    try:
-        if 'file' not in request.files:
-            return jsonify({"status": "error", "message": "파일이 없습니다."}), 400
-        
-        file = request.files['file']
-        if not file.filename.endswith('.pdf'):
-            return jsonify({"status": "error", "message": "PDF 파일만 지원합니다."}), 400
-        
-        success, message, chunk_count = LegalRAGService.add_pdf(file, file.filename)
-        
-        if success:
-            return jsonify({
-                "status": "success",
-                "message": message,
-                "chunks": chunk_count
-            })
-        else:
-            return jsonify({"status": "error", "message": message}), 500
-            
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
-
-@bp.route('/api/legal/query', methods=['POST'])
-def legal_query():
-    """법률 질의응답"""
-    try:
-        data = request.get_json()
-        question = data.get('question', '').strip()
-        
-        if not question:
-            return jsonify({"status": "error", "message": "질문을 입력해주세요."}), 400
-        
-        result = LegalRAGService.query(question)
-        
-        return jsonify({
-            "status": "success" if result['success'] else "error",
-            "answer": result['answer'],
-            "sources": result['sources']
-        })
-        
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
-
-@bp.route('/api/legal/documents', methods=['GET'])
-def legal_documents():
-    """업로드된 법률 문서 목록"""
-    try:
-        documents = LegalRAGService.get_documents()
-        return jsonify({
-            "status": "success",
-            "documents": documents
-        })
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
-
-@bp.route('/api/legal/delete', methods=['POST'])
-def legal_delete():
-    """문서 삭제"""
-    try:
-        data = request.get_json()
-        filename = data.get('filename', '')
-        
-        if not filename:
-            return jsonify({"status": "error", "message": "파일명이 필요합니다."}), 400
-        
-        success, message = LegalRAGService.delete_document(filename)
-        
-        if success:
-            return jsonify({"status": "success", "message": message})
-        else:
-            return jsonify({"status": "error", "message": message}), 404
-            
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
-
-
-# ------------------------------
-# 6. LegalGraphRAG - 그래프 맥락 기반 법률 자문 (Phase 2)
-# ------------------------------
-@bp.route('/api/legal/graph-query', methods=['POST'])
-def legal_graph_query():
-    """
-    그래프 맥락 기반 법률 질의 (LegalGraphRAG)
-    
-    Request:
-        {
-            "question": "이 사건에서 기소에 필요한 증거는?",
-            "case_id": "2024-001",
-            "graph_path": "demo_tst1"  (선택)
-        }
-    
-    Response:
-        {
-            "status": "success",
-            "answer": "맥락 반영 법률 자문...",
-            "case_context": {...},
-            "evidence_analysis": {...},
-            "prosecution_readiness": {...}
-        }
-    """
-    try:
-        data = request.get_json()
-        
-        question = data.get('question', '').strip()
-        case_id = data.get('case_id', '').strip()
-        graph_path = data.get('graph_path', 'demo_tst1')
-        
-        if not question:
-            return jsonify({
-                "status": "error", 
-                "message": "질문을 입력해주세요."
-            }), 400
-        
-        if not case_id:
-            return jsonify({
-                "status": "error", 
-                "message": "사건번호(case_id)가 필요합니다."
-            }), 400
-        
-        # LegalGraphRAG 호출
-        result = LegalRAGService.query_with_context(
-            question=question,
-            case_id=case_id,
-            graph_path=graph_path
-        )
-        
-        if result.get('success'):
-            return jsonify({
-                "status": "success",
-                **result
-            })
-        else:
-            return jsonify({
-                "status": "error",
-                "message": result.get('answer', '분석 중 오류 발생')
-            }), 500
-        
-    except Exception as e:
-        return jsonify({
-            "status": "error", 
-            "message": str(e)
-        }), 500
-
-
-# ------------------------------
-# 7. 시스템 모니터링 (Hybrid DB Monitoring)
+# 5. 시스템 모니터링 (Hybrid DB Monitoring)
 # ------------------------------
 @bp.route('/api/admin/monitoring', methods=['GET'])
 def admin_monitoring():
@@ -1102,37 +1216,396 @@ def admin_monitoring():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
-# ------------------------------
-# 8. 그래프 분석 API (Enhancement Area 2 & 4)
-# ------------------------------
-@bp.route('/api/analysis/anomaly', methods=['GET'])
-def analysis_anomaly():
-    """이상 점수 분석"""
-    graph = request.args.get('graph', 'test_local_data')
-    from app.services.analysis_service import AnalysisService
-    result = AnalysisService.run_anomaly_scoring(graph)
-    return jsonify({"status": "success", "data": result})
+# -------------------------------------------------------
+# 그래프 모델러
+# -------------------------------------------------------
+@bp.route('/api/modeler/rdb/columns', methods=['GET'])
+def modeler_rdb_columns():
+    """테이블 컬럼 목록 + 샘플 데이터 조회 (Modeler 역공학용)"""
+    import psycopg2, re as _re
+    source_alias = request.args.get('source', 'default')
+    table = request.args.get('table', '').strip()
+    if not table or not _re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', table):
+        return jsonify({"status": "error", "message": "유효하지 않은 테이블명"}), 400
 
-@bp.route('/api/analysis/centrality', methods=['GET'])
-def analysis_centrality():
-    """중심성 분석 — 핵심 노드 식별"""
-    graph = request.args.get('graph', 'test_local_data')
-    from app.services.analysis_service import AnalysisService
-    result = AnalysisService.run_centrality_analysis(graph)
-    return jsonify({"status": "success", "data": result})
+    src = rdb_sources.get(source_alias)
+    rdb_schema = current_app.config.get('RDB_SCHEMA', 'test_ccop')
 
-@bp.route('/api/analysis/inference', methods=['GET'])
-def analysis_inference():
-    """추론 엔진 — 범죄 패턴 탐지"""
-    graph = request.args.get('graph', 'test_local_data')
-    from app.services.analysis_service import AnalysisService
-    result = AnalysisService.run_inference_engine(graph)
-    return jsonify({"status": "success", "data": result})
+    try:
+        if src:
+            conn = psycopg2.connect(host=src['host'], port=src['port'], dbname=src['dbname'],
+                                    user=src['user'], password=src['password'], connect_timeout=5)
+        else:
+            conn = psycopg2.connect(**current_app.config['DB_CONFIG'])
+        conn.autocommit = True
+        cur = conn.cursor()
 
-@bp.route('/api/analysis/summary', methods=['GET'])
-def analysis_summary():
-    """사건 종합 요약"""
-    graph = request.args.get('graph', 'test_local_data')
-    from app.services.analysis_service import AnalysisService
-    result = AnalysisService.get_case_summary(graph)
-    return jsonify({"status": "success", "data": result})
+        # 컬럼 정보 (RDB_SCHEMA 스키마 명시)
+        cur.execute("""
+            SELECT column_name, data_type, is_nullable, column_default
+            FROM information_schema.columns
+            WHERE table_schema = %s AND table_name = %s
+            ORDER BY ordinal_position
+        """, (rdb_schema, table))
+        cols = [{"name": r[0], "db_type": r[1], "nullable": r[2] == 'YES'} for r in cur.fetchall()]
+
+        # 샘플 3행
+        samples = []
+        if cols:
+            col_names = [c['name'] for c in cols]
+            quoted_cols = ", ".join(f'"{c}"' for c in col_names)
+            cur.execute(f'SELECT {quoted_cols} FROM {rdb_schema}."{table}" LIMIT 3')
+            rows = cur.fetchall()
+            samples = [dict(zip(col_names, [str(v) if v is not None else None for v in row])) for row in rows]
+            for col in cols:
+                col['sample'] = str(samples[0].get(col['name'], '')) if samples else ''
+
+        conn.close()
+        return jsonify({"status": "success", "table": table, "columns": cols, "samples": samples,
+                        "schema": rdb_schema})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+@bp.route('/modeler')
+def modeler():
+    """그래프 스키마 모델러 페이지"""
+    return render_template('modeler.html')
+
+
+@bp.route('/api/modeler/generate-cypher', methods=['POST'])
+def modeler_generate_cypher():
+    """스키마 정의 → AgensGraph Cypher CREATE 문 생성"""
+    import re as _re
+    data = request.get_json()
+    schema = data.get('schema', {})
+    graph_path = data.get('graph_path', 'new_graph').strip()
+
+    if not _re.match(r'^[a-zA-Z][a-zA-Z0-9_]*$', graph_path):
+        return jsonify({"status": "error", "message": "유효하지 않은 그래프 이름입니다."}), 400
+
+    nodes = schema.get('nodes', [])
+    edges = schema.get('edges', [])
+
+    lines = [f"-- 그래프 생성 (이미 존재하면 skip)\nSELECT create_graph('{graph_path}');\n"]
+
+    node_map = {n['id']: n for n in nodes}
+
+    for node in nodes:
+        label = node.get('label', '')
+        props = node.get('properties', [])
+        if not props:
+            props_str = ""
+        else:
+            sample = ", ".join(
+                f"{p['name']}: '{p.get('sample', p['name']+'_값')}'"
+                for p in props
+            )
+            props_str = f" {{{sample}}}"
+        lines.append(
+            f"-- [{node.get('display_name', label)}] 노드 생성 예시\n"
+            f"SELECT * FROM cypher('{graph_path}', $$\n"
+            f"  MERGE (n:{label}{props_str})\n"
+            f"  RETURN n\n"
+            f"$$) AS (n agtype);\n"
+        )
+
+    for edge in edges:
+        src = node_map.get(edge.get('source_id', ''), {})
+        tgt = node_map.get(edge.get('target_id', ''), {})
+        edge_type = edge.get('type', 'RELATED_TO')
+        src_label = src.get('label', 'SRC')
+        tgt_label = tgt.get('label', 'TGT')
+        src_key = src.get('key_property', 'name')
+        tgt_key = tgt.get('key_property', 'name')
+
+        eprops = edge.get('properties', [])
+        if eprops:
+            ep_str = " {" + ", ".join(
+                f"{p['name']}: '{p.get('sample', p['name']+'_값')}'"
+                for p in eprops
+            ) + "}"
+        else:
+            ep_str = ""
+
+        lines.append(
+            f"-- [{src_label}]-[:{edge_type}]->[ {tgt_label}] 관계 생성 예시\n"
+            f"SELECT * FROM cypher('{graph_path}', $$\n"
+            f"  MATCH (a:{src_label}), (b:{tgt_label})\n"
+            f"  WHERE a->>'{src_key}' = '값1' AND b->>'{tgt_key}' = '값2'\n"
+            f"  MERGE (a)-[r:{edge_type}{ep_str}]->(b)\n"
+            f"  RETURN r\n"
+            f"$$) AS (r agtype);\n"
+        )
+
+    return jsonify({"status": "success", "cypher": "\n".join(lines)})
+
+
+@bp.route('/api/modeler/execute', methods=['POST'])
+def modeler_execute():
+    """스키마 정의로 그래프 생성 실행 (그래프 생성만)"""
+    import re as _re
+    data = request.get_json()
+    graph_path = data.get('graph_path', '').strip()
+
+    if not graph_path or not _re.match(r'^[a-zA-Z][a-zA-Z0-9_]*$', graph_path):
+        return jsonify({"status": "error", "message": "유효하지 않은 그래프 이름입니다."}), 400
+
+    success, msg = GraphService.create_graph(graph_path)
+    return jsonify({"status": "success" if success else "error", "message": msg})
+
+
+@bp.route('/api/modeler/join-preview', methods=['POST'])
+def modeler_join_preview():
+    """두 테이블 조인 컬럼 매칭 건수 및 샘플 반환"""
+    import re as _re
+    import psycopg2
+
+    data = request.get_json()
+    src_table = (data.get('src_table') or '').strip()
+    src_col   = (data.get('src_col') or '').strip()
+    tgt_table = (data.get('tgt_table') or '').strip()
+    tgt_col   = (data.get('tgt_col') or '').strip()
+
+    # 화이트리스트 검증
+    pat = r'^[a-zA-Z_][a-zA-Z0-9_]*$'
+    if not all(_re.match(pat, v) for v in [src_table, src_col, tgt_table, tgt_col]):
+        return jsonify({"status": "error", "message": "유효하지 않은 테이블/컬럼명"}), 400
+
+    rdb_schema = current_app.config.get('RDB_SCHEMA', 'test_ccop')
+    try:
+        conn = psycopg2.connect(**current_app.config['DB_CONFIG'])
+        conn.autocommit = True
+        cur = conn.cursor()
+
+        cur.execute(
+            f'SELECT count(*) FROM {rdb_schema}."{src_table}" s '
+            f'JOIN {rdb_schema}."{tgt_table}" t '
+            f'ON s."{src_col}" = t."{tgt_col}"'
+        )
+        match_count = cur.fetchone()[0]
+
+        cur.execute(
+            f'SELECT DISTINCT s."{src_col}", t."{tgt_col}" '
+            f'FROM {rdb_schema}."{src_table}" s '
+            f'JOIN {rdb_schema}."{tgt_table}" t '
+            f'ON s."{src_col}" = t."{tgt_col}" '
+            f'LIMIT 5'
+        )
+        samples = [[str(r[0]), str(r[1])] for r in cur.fetchall()]
+        conn.close()
+
+        return jsonify({"status": "success", "match_count": match_count, "samples": samples})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@bp.route('/api/modeler/load-data', methods=['POST'])
+def modeler_load_data():
+    """모델러 스키마 → RDB 데이터 읽어 AgensGraph에 적재"""
+    import re as _re
+    import psycopg2
+    from app.services.etl_service import StandardCodeMapper
+
+    data = request.get_json()
+    graph_path = (data.get('graph_path') or '').strip()
+    schema = data.get('schema', {})
+
+    if not graph_path or not _re.match(r'^[a-zA-Z][a-zA-Z0-9_]*$', graph_path):
+        return jsonify({"status": "error", "message": "유효하지 않은 그래프 이름입니다."}), 400
+
+    nodes = schema.get('nodes', [])
+    mappable = [n for n in nodes if n.get('rdb_table') and n.get('properties')]
+    if not mappable:
+        return jsonify({"status": "error", "message": "RDB 테이블이 매핑된 노드가 없습니다. RDB 가져오기 마법사를 사용해 테이블을 매핑하세요."}), 400
+
+    # AgensGraph + RDB 연결 (동일 DB 사용)
+    from app.database import get_db_connection
+    ag_conn, ag_cur = get_db_connection()
+    if not ag_conn:
+        return jsonify({"status": "error", "message": "AgensGraph DB 연결 실패"}), 500
+
+    # 그래프 생성 (없으면)
+    GraphService.create_graph(graph_path)
+
+    rdb_schema = current_app.config.get('RDB_SCHEMA', 'test_ccop')
+    total_nodes = 0
+    total_errors = 0
+    node_stats = []
+
+    try:
+        rdb_conn = psycopg2.connect(**current_app.config['DB_CONFIG'])
+        rdb_conn.autocommit = True
+        rdb_cur = rdb_conn.cursor()
+
+        # AgensGraph 네이티브 방식: graph_path 먼저 설정
+        from app.database import safe_set_graph_path
+        safe_set_graph_path(ag_cur, graph_path)
+
+        for node_def in mappable:
+            label = node_def.get('label', '').strip()
+            table = node_def.get('rdb_table', '').strip()
+            key_prop = node_def.get('key_property', '').strip()
+            props_def = node_def.get('properties', [])  # [{name, type, rdb_column, ...}]
+
+            # 유효성 검사
+            if not label or not _re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', label):
+                continue
+            if not table or not _re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', table):
+                continue
+
+            # rdb_column 매핑이 있는 속성만 사용
+            col_map = [(p['rdb_column'], p['name'], p.get('type', 'string'))
+                       for p in props_def if p.get('rdb_column')]
+            if not col_map:
+                continue
+
+            # key_property 가 없으면 첫 번째 속성 사용
+            if not key_prop and col_map:
+                key_prop = col_map[0][1]
+
+            quoted_cols = ", ".join(f'"{rdb_col}"' for rdb_col, _, _ in col_map)
+            try:
+                rdb_cur.execute(f'SELECT {quoted_cols} FROM {rdb_schema}."{table}" LIMIT 5000')
+                rows = rdb_cur.fetchall()
+            except Exception as e:
+                node_stats.append({"label": label, "table": table, "loaded": 0, "error": str(e)})
+                total_errors += 1
+                rdb_conn.rollback()
+                continue
+
+            loaded = 0
+            for row in rows:
+                prop_kv = {}
+                for idx, (rdb_col, prop_name, prop_type) in enumerate(col_map):
+                    val = row[idx]
+                    if val is None:
+                        continue
+                    val_str = str(val).replace("'", "\\'")
+
+                    # StandardCodeMapper 정규화
+                    if prop_name in ('bank_cd', 'bank_code', 'bcode'):
+                        val_str = StandardCodeMapper.map_bank_code(val_str) or val_str
+                    elif prop_name in ('bank_name', 'bank_nm', 'bname'):
+                        normalized = StandardCodeMapper.map_bank_code(val_str)
+                        if normalized:
+                            prop_kv['bank_cd'] = normalized
+                    elif prop_name in ('carrier_cd', 'tele_cmpn_cd'):
+                        val_str = StandardCodeMapper.map_carrier_code(val_str) or val_str
+                    elif prop_name in ('carrier_nm', 'tele_cmpn_nm'):
+                        normalized = StandardCodeMapper.map_carrier_code(val_str)
+                        if normalized:
+                            prop_kv['carrier_cd'] = normalized
+
+                    prop_kv[prop_name] = val_str
+
+                if not prop_kv or key_prop not in prop_kv:
+                    continue
+
+                props_str = ", ".join(f"{k}: '{v}'" for k, v in prop_kv.items())
+                key_val = prop_kv[key_prop]
+                cypher = (
+                    f"MERGE (n:{label} {{{key_prop}: '{key_val}'}})"
+                    f" ON CREATE SET n = {{{props_str}}}"
+                    f" RETURN n"
+                )
+                try:
+                    ag_cur.execute(cypher)
+                    loaded += 1
+                except Exception:
+                    pass
+
+            total_nodes += loaded
+            node_stats.append({"label": label, "table": table, "loaded": loaded, "error": None})
+
+        # ── 엣지 적재 ──────────────────────────────────────────
+        edges = schema.get('edges', [])
+        total_edges = 0
+        edge_stats = []
+
+        # 노드 id → schema node 매핑
+        node_by_id = {n['id']: n for n in nodes}
+        rdb_schema = current_app.config.get('RDB_SCHEMA', 'test_ccop')
+
+        for edge_def in edges:
+            edge_type = edge_def.get('type', '').strip()
+            src_join_col = edge_def.get('src_join_col', '').strip()
+            tgt_join_col = edge_def.get('tgt_join_col', '').strip()
+
+            if not edge_type or not src_join_col or not tgt_join_col:
+                continue
+
+            src_node = node_by_id.get(edge_def.get('source_id', ''))
+            tgt_node = node_by_id.get(edge_def.get('target_id', ''))
+
+            if not src_node or not tgt_node:
+                continue
+
+            src_label = src_node.get('label', '').strip()
+            tgt_label = tgt_node.get('label', '').strip()
+            src_table = src_node.get('rdb_table', '').strip()
+            tgt_table = tgt_node.get('rdb_table', '').strip()
+            src_key = src_node.get('key_property', '')
+            tgt_key = tgt_node.get('key_property', '')
+
+            if not src_table or not tgt_table or not src_key or not tgt_key:
+                edge_stats.append({"type": edge_type, "loaded": 0, "error": "노드에 RDB 테이블 또는 키 속성 미설정"})
+                continue
+
+            # RDB JOIN → (src_key_val, tgt_key_val) 쌍 추출
+            try:
+                rdb_conn3 = psycopg2.connect(**current_app.config['DB_CONFIG'])
+                rdb_conn3.autocommit = True
+                rdb_cur3 = rdb_conn3.cursor()
+                # src_key, src_join, tgt_key, tgt_join 모두 가져오기
+                src_key_col = next((p.get('rdb_column') or p['name'] for p in src_node.get('properties', []) if p['name'] == src_key), src_join_col)
+                tgt_key_col = next((p.get('rdb_column') or p['name'] for p in tgt_node.get('properties', []) if p['name'] == tgt_key), tgt_join_col)
+
+                rdb_cur3.execute(
+                    f'SELECT DISTINCT s."{src_key_col}", t."{tgt_key_col}" '
+                    f'FROM {rdb_schema}."{src_table}" s '
+                    f'JOIN {rdb_schema}."{tgt_table}" t '
+                    f'ON s."{src_join_col}" = t."{tgt_join_col}" '
+                    f'LIMIT 10000'
+                )
+                key_pairs = rdb_cur3.fetchall()
+                rdb_conn3.close()
+            except Exception as e:
+                edge_stats.append({"type": edge_type, "loaded": 0, "error": str(e)})
+                continue
+
+            loaded_edges = 0
+            for src_val, tgt_val in key_pairs:
+                if src_val is None or tgt_val is None:
+                    continue
+                sv = str(src_val).replace("'", "\\'")
+                tv = str(tgt_val).replace("'", "\\'")
+                cypher = (
+                    f"MATCH (s:{src_label} {{{src_key}: '{sv}'}}), (t:{tgt_label} {{{tgt_key}: '{tv}'}})"
+                    f" MERGE (s)-[r:{edge_type}]->(t)"
+                    f" RETURN r"
+                )
+                try:
+                    ag_cur.execute(cypher)
+                    loaded_edges += 1
+                except Exception:
+                    pass
+
+            total_edges += loaded_edges
+            edge_stats.append({"type": edge_type, "src": src_label, "tgt": tgt_label, "loaded": loaded_edges, "error": None})
+
+        rdb_conn.close()
+    except Exception as e:
+        return jsonify({"status": "error", "message": f"RDB 연결 실패: {e}"}), 500
+    finally:
+        try:
+            ag_cur.close()
+            ag_conn.close()
+        except Exception:
+            pass
+
+    return jsonify({
+        "status": "success",
+        "graph_path": graph_path,
+        "stats": {"nodes": total_nodes, "edges": total_edges, "errors": total_errors},
+        "node_stats": node_stats,
+        "edge_stats": edge_stats,
+    })

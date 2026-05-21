@@ -25,11 +25,15 @@ class RDBService:
             return None, None
 
     @staticmethod
-    def import_predefined_schema_to_rdb(file_path, filename, clear_existing=False):
+    def import_predefined_schema_to_rdb(file_path, filename, clear_existing=False,
+                                         source_domain='KICS', source_id=None):
+        # V4.0 메타: source_domain/source_id 는 Phase 2.1.E 에서 수신만 하고
+        # 실제 SOURCE_DOMAIN/SOURCE_ID 컬럼 적재는 DA팀 V3.7 DDL 운영 적용(D+8) 이후 활성화.
         import pandas as pd
         import psycopg2
         import uuid
         from flask import current_app
+        logger.info(f"[V4.0] import_predefined_schema source_domain={source_domain} source_id={source_id}")
         
         db_config = current_app.config['DB_CONFIG']
         count_stats = {'cases':0, 'suspects':0, 'accounts':0, 'phones':0, 'transfers':0, 'calls':0, 'relations':0}
@@ -291,12 +295,18 @@ class RDBService:
             if 'conn' in locals() and conn: conn.close()
 
     @staticmethod
-    def import_csv_to_rdb(file_path, clear_existing=False, custom_mapping=None):
-        """CSV 파일을 분석하여 RDB 테이블(V2 - 27개 구조)에 적재"""
+    def import_csv_to_rdb(file_path, clear_existing=False, custom_mapping=None,
+                          source_domain='KICS', source_id=None):
+        """CSV 파일을 분석하여 RDB 테이블(V2 - 27개 구조)에 적재.
+
+        V4.0 메타: source_domain/source_id 는 Phase 2.1.E 에서 수신만 하고
+        실제 SOURCE_DOMAIN/SOURCE_ID 컬럼 적재는 DA팀 V3.7 DDL 운영 적용(D+8) 이후 활성화.
+        """
         import time
         import random
         from datetime import datetime
         logger.info(f"▶ [RDB] CSV 적재 시작 (V2): {file_path} (기존 데이터 초기화: {clear_existing})")
+        logger.info(f"[V4.0] import_csv source_domain={source_domain} source_id={source_id}")
         
         conn, cur = RDBService.get_db_connection()
         if not conn: return False, "DB 연결 실패"
