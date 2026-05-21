@@ -1565,6 +1565,19 @@
                 </button>
             </div>
 
+            <!-- V4.0 스칼라 결과 패널 (Phase 4.6) — RETURN n.prop 패턴 결과 표시 -->
+            <div id="v40ScalarPanel"
+                style="display:none; position:absolute; bottom:16px; left:16px; z-index:9; background:rgba(26,32,53,0.96); border:1px solid rgba(116,185,255,0.35); border-radius:8px; padding:10px; min-width:280px; max-width:480px; max-height:280px; overflow:auto; box-shadow:0 4px 16px rgba(0,0,0,0.4);">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                    <div style="font-size:11px; color:#74b9ff; font-weight:bold;">
+                        <i class="fas fa-table"></i> V4.0 스칼라 결과
+                    </div>
+                    <span onclick="document.getElementById('v40ScalarPanel').style.display='none'"
+                        style="cursor:pointer; color:#8e9abf; font-size:10px; padding:0 4px;">×</span>
+                </div>
+                <div id="v40ScalarBody"></div>
+            </div>
+
             <!-- V4.0 툴바 (레이아웃 프리셋 + 수사 워크플로우) — Phase 4.3 + 4.4 -->
             <div id="v40Toolbar"
                 style="position: absolute; top: 56px; right: 16px; z-index: 9; background: rgba(26,32,53,0.96); border: 1px solid rgba(116,185,255,0.35); border-radius: 8px; padding: 10px; min-width: 240px; max-width: 280px; box-shadow: 0 4px 16px rgba(0,0,0,0.4);">
@@ -2571,6 +2584,36 @@
                 console.warn('[V4.0] 툴바 로드 실패:', err);
             }
         }
+
+        // ============================================================
+        // V4.0 Phase 4.6 — Scalar 결과 표시 (RETURN n.prop 패턴)
+        // ============================================================
+        // GraphService.execute_cypher 가 group='scalar' 원소를 생성하지만
+        // Cytoscape 는 nodes/edges 만 인식하므로 별도 패널로 렌더.
+        function renderV40Scalars(elements) {
+            if (!Array.isArray(elements)) return;
+            const scalars = elements.filter(e => e && e.group === 'scalar');
+            const panel = document.getElementById('v40ScalarPanel');
+            const body = document.getElementById('v40ScalarBody');
+            if (!panel || !body) return;
+            if (!scalars.length) { panel.style.display = 'none'; body.innerHTML = ''; return; }
+            // 컬럼 추출
+            const cols = Array.from(new Set(scalars.flatMap(s => Object.keys((s.data && s.data.props) || {}))));
+            const rows = scalars.map(s => s.data && s.data.props || {});
+            const thead = `<tr>${cols.map(c => `<th style="padding:4px 8px; border-bottom:1px solid #555; color:#74b9ff; text-align:left; font-size:11px;">${c}</th>`).join('')}</tr>`;
+            const tbody = rows.map(r => `<tr>${cols.map(c => `<td style="padding:4px 8px; border-bottom:1px solid #333; font-size:11px; color:#dfe6e9;">${(r[c] !== undefined && r[c] !== null) ? r[c] : ''}</td>`).join('')}</tr>`).join('');
+            body.innerHTML = `<div style="font-size:10px; color:#8e9abf; margin-bottom:6px;">스칼라 결과 ${scalars.length}건 · ${cols.length}컬럼</div><table style="width:100%; border-collapse:collapse;">${thead}${tbody}</table>`;
+            panel.style.display = 'block';
+        }
+
+        // 전역 cy.add 후크 — 모든 cy.add 호출 시 자동 스칼라 감지
+        (function hookCyAddForScalar() {
+            const origAdd = cy.add.bind(cy);
+            cy.add = function(arg) {
+                try { if (Array.isArray(arg)) renderV40Scalars(arg); } catch (e) {}
+                return origAdd(arg);
+            };
+        })();
 
         // 페이지 로드 후 V4.0 SSOT 비동기 오버레이
         document.addEventListener('DOMContentLoaded', () => {
