@@ -2526,21 +2526,36 @@
             });
         }
 
-        function runV40Workflow(name) {
+        async function runV40Workflow(name) {
             if (!window.V40_WORKFLOWS || !window.V40_WORKFLOWS[name]) return;
             const wf = window.V40_WORKFLOWS[name];
-            // 워크플로우는 자연어 질의창에 설명을 채워 사용자가 실행할 수 있게 (가벼운 통합)
-            const composed = `[${name}] ${wf.description}\n시작: ${wf.start || '-'}\n홉: ${(wf.hops || []).map(h => h.join(' ')).join(' → ')}\n도착: ${wf.end || '(open)'}`;
-            const inputBoxes = ['questionInput', 'queryInput', 'naturalQuery', 'cypherInput'];
-            let filled = false;
-            for (const id of inputBoxes) {
-                const el = document.getElementById(id);
-                if (el) { el.value = composed; el.focus(); filled = true; break; }
-            }
-            if (!filled) {
-                // 입력창이 없으면 콘솔/알림으로 안내
-                console.info('[V4.0 워크플로우]', name, wf);
-                alert(`V4.0 워크플로우: ${name}\n\n${composed}`);
+            // 현재 선택된 그래프 가져오기 (그래프 셀렉터 또는 기본값)
+            const sel = document.getElementById('graphSelector') || document.getElementById('graphList');
+            const graphPath = (sel && sel.value) || window.currentGraphPath || 'tccop_v40_demo';
+            try {
+                showToast?.(`▶ 워크플로우 실행 중: ${wf.description || name}…`, 'info');
+                const res = await fetch(`/api/v1/workflows/${encodeURIComponent(name)}/execute?graph_path=${encodeURIComponent(graphPath)}&limit=300`);
+                const data = await res.json();
+                if (data.status !== 'success') {
+                    showToast?.(`워크플로우 실패: ${data.message || '오류'}`, 'error');
+                    console.warn('[V4.0 workflow]', data);
+                    return;
+                }
+                const els = data.elements || [];
+                cy.elements().remove();
+                cy.add(els);
+                // 결과 후 적절한 레이아웃 선택
+                const fallbackLayout = (name === 'fund_flow' || name === 'case_to_suspects') ? 'breadthfirst' : 'cose';
+                try {
+                    cy.layout({ name: fallbackLayout, animate: true, animationDuration: 600, padding: 40, fit: true }).run();
+                } catch (e) {
+                    cy.layout({ name: 'cose', animate: true, fit: true }).run();
+                }
+                if (typeof updateFilterCounts === 'function') updateFilterCounts();
+                showToast?.(`✅ ${wf.description || name} — 노드 ${data.node_count}개 · 엣지 ${data.edge_count}개`, 'success');
+            } catch (err) {
+                console.error('[V4.0 workflow]', err);
+                showToast?.(`워크플로우 실행 실패: ${err}`, 'error');
             }
         }
 
