@@ -1,0 +1,556 @@
+{
+  "graph": "tccop_v40_demo",
+  "model": "qwen25_t2c_v39_v1",
+  "passed": 38,
+  "total": 45,
+  "category_stats": {
+    "A.단일": {
+      "pass": 4,
+      "total": 4,
+      "time_sum": 11730.732917785645
+    },
+    "B.V3.7": {
+      "pass": 5,
+      "total": 5,
+      "time_sum": 9817.611932754517
+    },
+    "C.1hop": {
+      "pass": 7,
+      "total": 8,
+      "time_sum": 18179.370164871216
+    },
+    "D.2hop": {
+      "pass": 3,
+      "total": 4,
+      "time_sum": 8753.062963485718
+    },
+    "E.3hop": {
+      "pass": 1,
+      "total": 3,
+      "time_sum": 11267.425537109375
+    },
+    "F.메타": {
+      "pass": 4,
+      "total": 5,
+      "time_sum": 13451.799154281616
+    },
+    "G.집계": {
+      "pass": 4,
+      "total": 4,
+      "time_sum": 7627.532005310059
+    },
+    "H.정렬": {
+      "pass": 3,
+      "total": 3,
+      "time_sum": 5327.898740768433
+    },
+    "I.복합": {
+      "pass": 3,
+      "total": 4,
+      "time_sum": 9937.207221984863
+    },
+    "J.변형": {
+      "pass": 4,
+      "total": 5,
+      "time_sum": 9816.725254058838
+    }
+  },
+  "total_time_sec": 105.91413903236389,
+  "results": [
+    {
+      "cat": "A.단일",
+      "q": "vt_psn 노드 5개 보여줘",
+      "cypher": "SELECT * FROM cypher('tccop_v40_demo', $$ MATCH (p:vt_psn) RETURN p LIMIT 5 $$) AS (p agtype);",
+      "elements": 5,
+      "ok": true,
+      "kw_ok": true,
+      "res_ok": true,
+      "elapsed_ms": 3342.229127883911,
+      "err": null
+    },
+    {
+      "cat": "A.단일",
+      "q": "vt_bacnt 노드 전부 출력",
+      "cypher": "SELECT * FROM cypher('tccop_v40_demo', $$ MATCH (b:vt_bacnt) RETURN b $$) AS (b agtype);",
+      "elements": 25,
+      "ok": true,
+      "kw_ok": true,
+      "res_ok": true,
+      "elapsed_ms": 4602.740049362183,
+      "err": null
+    },
+    {
+      "cat": "A.단일",
+      "q": "사건 노드 보여줘",
+      "cypher": "SELECT * FROM cypher('tccop_v40_demo', $$ MATCH (c:vt_case) RETURN c $$) AS (c agtype);",
+      "elements": 3,
+      "ok": true,
+      "kw_ok": true,
+      "res_ok": true,
+      "elapsed_ms": 1781.3136577606201,
+      "err": null
+    },
+    {
+      "cat": "A.단일",
+      "q": "중계기 노드 보여줘",
+      "cypher": "SELECT * FROM cypher('tccop_v40_demo', $$ MATCH (d:vt_dev) WHERE d.dev_type = 'relay_station' RETURN d $$) AS (d agtype);",
+      "elements": 2,
+      "ok": true,
+      "kw_ok": true,
+      "res_ok": true,
+      "elapsed_ms": 2004.4500827789307,
+      "err": null
+    },
+    {
+      "cat": "B.V3.7",
+      "q": "dev_type 이 'relay_station' 인 기기 보여줘",
+      "cypher": "SELECT * FROM cypher('tccop_v40_demo', $$ MATCH (d:vt_dev) WHERE d.dev_type = 'relay_station' RETURN d $$) AS (d agtype);",
+      "elements": 2,
+      "ok": true,
+      "kw_ok": true,
+      "res_ok": true,
+      "elapsed_ms": 1808.6671829223633,
+      "err": null
+    },
+    {
+      "cat": "B.V3.7",
+      "q": "is_anonymous 가 true 인 인물 보여줘",
+      "cypher": "SELECT * FROM cypher('tccop_v40_demo', $$ MATCH (p:vt_psn) WHERE p.is_anonymous = true RETURN p $$) AS (p agtype);",
+      "elements": 4,
+      "ok": true,
+      "kw_ok": true,
+      "res_ok": true,
+      "elapsed_ms": 2132.423162460327,
+      "err": null
+    },
+    {
+      "cat": "B.V3.7",
+      "q": "site_cluster 노드 보여줘",
+      "cypher": "SELECT * FROM cypher('tccop_v40_demo', $$ MATCH (c:site_cluster) RETURN c $$) AS (c agtype);",
+      "elements": 2,
+      "ok": true,
+      "kw_ok": true,
+      "res_ok": true,
+      "elapsed_ms": 1665.4789447784424,
+      "err": null
+    },
+    {
+      "cat": "B.V3.7",
+      "q": "pt_cluster 노드 보여줘",
+      "cypher": "SELECT * FROM cypher('tccop_v40_demo', $$ MATCH (c:pt_cluster) RETURN c $$) AS (c agtype);",
+      "elements": 1,
+      "ok": true,
+      "kw_ok": true,
+      "res_ok": true,
+      "elapsed_ms": 2351.4816761016846,
+      "err": null
+    },
+    {
+      "cat": "B.V3.7",
+      "q": "belongs_to_campaign 엣지 보여줘",
+      "cypher": "SELECT * FROM cypher('tccop_v40_demo', $$ MATCH (r:vt_site)-[:belongs_to_campaign]->(c:site_cluster) RETURN r, c $$) AS (r agtype, c agtype);",
+      "elements": 10,
+      "ok": true,
+      "kw_ok": true,
+      "res_ok": true,
+      "elapsed_ms": 1859.5609664916992,
+      "err": null
+    },
+    {
+      "cat": "C.1hop",
+      "q": "사건의 피의자 목록",
+      "cypher": "SELECT * FROM cypher('tccop_v40_demo', $$ MATCH (p:vt_psn)-[:suspect_in]->(c:vt_case) RETURN p, c $$) AS (p agtype, c agtype);",
+      "elements": 9,
+      "ok": true,
+      "kw_ok": true,
+      "res_ok": true,
+      "elapsed_ms": 2109.1110706329346,
+      "err": null
+    },
+    {
+      "cat": "C.1hop",
+      "q": "사건의 피해자 목록",
+      "cypher": "SELECT * FROM cypher('tccop_v40_demo', $$ MATCH (p:vt_psn { role_cd:  'victim'}) RETURN p $$) AS (p agtype);",
+      "elements": 5,
+      "ok": false,
+      "kw_ok": false,
+      "res_ok": true,
+      "elapsed_ms": 1810.0841045379639,
+      "err": null
+    },
+    {
+      "cat": "C.1hop",
+      "q": "피의자가 보유한 계좌 보여줘",
+      "cypher": "SELECT * FROM cypher('tccop_v40_demo', $$ MATCH (p:vt_psn)-[:has_account]->(b:vt_bacnt) RETURN p, b $$) AS (p agtype, b agtype);",
+      "elements": 31,
+      "ok": true,
+      "kw_ok": true,
+      "res_ok": true,
+      "elapsed_ms": 2028.4030437469482,
+      "err": null
+    },
+    {
+      "cat": "C.1hop",
+      "q": "인물이 소유한 전화 보여줘",
+      "cypher": "SELECT * FROM cypher('tccop_v40_demo', $$ MATCH (p:vt_psn)-[:owns_phone]->(t:vt_telno) RETURN p, t $$) AS (p agtype, t agtype);",
+      "elements": 24,
+      "ok": true,
+      "kw_ok": true,
+      "res_ok": true,
+      "elapsed_ms": 2204.7040462493896,
+      "err": null
+    },
+    {
+      "cat": "C.1hop",
+      "q": "전화가 발신한 통화 보여줘",
+      "cypher": "SELECT * FROM cypher('tccop_v40_demo', $$ MATCH (t:vt_telno)-[:caller]->(c:vt_call) RETURN t, c $$) AS (t agtype, c agtype);",
+      "elements": 50,
+      "ok": true,
+      "kw_ok": true,
+      "res_ok": true,
+      "elapsed_ms": 2962.6009464263916,
+      "err": null
+    },
+    {
+      "cat": "C.1hop",
+      "q": "사이트에 호스팅된 IP 보여줘",
+      "cypher": "SELECT * FROM cypher('tccop_v40_demo', $$ MATCH (ip:vt_ip)-[:hosts]->(s:vt_site) RETURN ip, s $$) AS (ip agtype, s agtype);",
+      "elements": 16,
+      "ok": true,
+      "kw_ok": true,
+      "res_ok": true,
+      "elapsed_ms": 2284.337043762207,
+      "err": null
+    },
+    {
+      "cat": "C.1hop",
+      "q": "진정서에서 전환된 사건",
+      "cypher": "SELECT * FROM cypher('tccop_v40_demo', $$ MATCH (p:vt_petition)-[:filed_as]->(c:vt_case) RETURN p, c $$) AS (p agtype, c agtype);",
+      "elements": 2,
+      "ok": true,
+      "kw_ok": true,
+      "res_ok": true,
+      "elapsed_ms": 2534.1579914093018,
+      "err": null
+    },
+    {
+      "cat": "C.1hop",
+      "q": "중계기를 경유한 전화 보여줘",
+      "cypher": "SELECT * FROM cypher('tccop_v40_demo', $$ MATCH (t:vt_telno)-[:used_in_device]->(d:vt_dev) WHERE d.dev_type = 'relay_station' RETURN t, d $$) AS (t agtype, d agtype);",
+      "elements": 7,
+      "ok": true,
+      "kw_ok": true,
+      "res_ok": true,
+      "elapsed_ms": 2245.971918106079,
+      "err": null
+    },
+    {
+      "cat": "D.2hop",
+      "q": "사건과 관련된 피의자가 보유한 계좌",
+      "cypher": "SELECT * FROM cypher('tccop_v40_demo', $$ MATCH (p:vt_psn)-[:suspect_in]->(c:vt_case)<-[:has_account]-(b:vt_bacnt) RETURN p, c, b $$) AS (p agtype, c agtype, b agtype);",
+      "elements": 0,
+      "ok": true,
+      "kw_ok": true,
+      "res_ok": true,
+      "elapsed_ms": 2405.0140380859375,
+      "err": null
+    },
+    {
+      "cat": "D.2hop",
+      "q": "피의자가 소유한 전화의 통화 기록",
+      "cypher": "SELECT * FROM cypher('tccop_v40_demo', $$ MATCH (p:vt_psn)-[:owns_phone]->(t:vt_telno)-[:caller]->(c:vt_call) RETURN p, t, c $$) AS (p agtype, t agtype, c agtype);",
+      "elements": 42,
+      "ok": true,
+      "kw_ok": true,
+      "res_ok": true,
+      "elapsed_ms": 2217.0050144195557,
+      "err": null
+    },
+    {
+      "cat": "D.2hop",
+      "q": "사이트 클러스터에 속한 사이트의 IP",
+      "cypher": "SELECT * FROM cypher('tccop_v40_demo', $$ MATCH (c:site_cluster)<-[:belongs_to_campaign]-(s:vt_site)-[:hosts]->(ip:vt_ip) RETURN c, s, ip $$) AS (c agtype, s agtype, ip agtype);",
+      "elements": 0,
+      "ok": false,
+      "kw_ok": true,
+      "res_ok": false,
+      "elapsed_ms": 2081.2909603118896,
+      "err": null
+    },
+    {
+      "cat": "D.2hop",
+      "q": "익명 인물이 소유한 계좌 보여줘",
+      "cypher": "SELECT * FROM cypher('tccop_v40_demo', $$ MATCH (p:vt_psn)-[:has_account]->(b:vt_bacnt) WHERE p.is_anonymous = true RETURN p, b $$) AS (p agtype, b agtype);",
+      "elements": 0,
+      "ok": true,
+      "kw_ok": true,
+      "res_ok": true,
+      "elapsed_ms": 2049.752950668335,
+      "err": null
+    },
+    {
+      "cat": "E.3hop",
+      "q": "계좌간 자금 이체 흐름 추적",
+      "cypher": "",
+      "elements": 0,
+      "ok": false,
+      "kw_ok": false,
+      "res_ok": false,
+      "elapsed_ms": 3599.9128818511963,
+      "err": null
+    },
+    {
+      "cat": "E.3hop",
+      "q": "사건 피의자가 보유한 계좌의 이체 내역",
+      "cypher": "SELECT * FROM cypher('tccop_v40_demo', $$ MATCH (p:vt_psn)-[:suspect_in]->(c:vt_case)<-[:from_account]-(b:vt_bacnt)<-[:to_account]-(t:vt_transfer) RETURN p, c, b, t $$) AS (p agtype, c agtype, b agtype, t agtype);",
+      "elements": 0,
+      "ok": true,
+      "kw_ok": true,
+      "res_ok": true,
+      "elapsed_ms": 3484.302759170532,
+      "err": null
+    },
+    {
+      "cat": "E.3hop",
+      "q": "피싱 캠페인의 사이트의 호스팅 IP",
+      "cypher": "SELECT * FROM cypher('tccop_v40_demo', $$ MATCH (c:site_cluster { is_phishing:  true})<-[:belongs_to_campaign]-(s:vt_site)<-[:hosts]-(ip:vt_ip) RETURN c, s, ip $$) AS (c agtype, s agtype, ip agtype);",
+      "elements": 0,
+      "ok": false,
+      "kw_ok": true,
+      "res_ok": false,
+      "elapsed_ms": 4183.2098960876465,
+      "err": null
+    },
+    {
+      "cat": "F.메타",
+      "q": "source_domain 이 'osint' 인 노드 보여줘",
+      "cypher": "SELECT * FROM cypher('tccop_v40_demo', $$ MATCH (n) WHERE n.source_domain = 'osint' RETURN n $$) AS (n agtype);",
+      "elements": 30,
+      "ok": true,
+      "kw_ok": true,
+      "res_ok": true,
+      "elapsed_ms": 1923.6717224121094,
+      "err": null
+    },
+    {
+      "cat": "F.메타",
+      "q": "source_domain 이 'investigation' 인 계좌",
+      "cypher": "SELECT * FROM cypher('tccop_v40_demo', $$ MATCH (a:vt_access) WHERE a.source_domain = 'investigation' RETURN a $$) AS (a agtype);",
+      "elements": 10,
+      "ok": false,
+      "kw_ok": false,
+      "res_ok": true,
+      "elapsed_ms": 1812.3469352722168,
+      "err": null
+    },
+    {
+      "cat": "F.메타",
+      "q": "reliability_tier 가 1 인 노드",
+      "cypher": "SELECT * FROM cypher('tccop_v40_demo', $$ MATCH (n) WHERE n.reliability_tier = 1 RETURN n $$) AS (n agtype);",
+      "elements": 128,
+      "ok": true,
+      "kw_ok": true,
+      "res_ok": true,
+      "elapsed_ms": 2668.931245803833,
+      "err": null
+    },
+    {
+      "cat": "F.메타",
+      "q": "reliability_tier 4 이상 노드 보여줘",
+      "cypher": "SELECT * FROM cypher('tccop_v40_demo', $$ MATCH (n) WHERE n.reliability_tier >= 4 RETURN n $$) AS (n agtype);",
+      "elements": 30,
+      "ok": true,
+      "kw_ok": true,
+      "res_ok": true,
+      "elapsed_ms": 4601.462125778198,
+      "err": null
+    },
+    {
+      "cat": "F.메타",
+      "q": "OSINT 도메인 계좌의 이체 내역",
+      "cypher": "SELECT * FROM cypher('tccop_v40_demo', $$ MATCH (b:vt_bacnt)-[:from_account]->(t:vt_transfer) WHERE b.source_domain = 'osint' RETURN b, t $$) AS (b agtype, t agtype);",
+      "elements": 10,
+      "ok": true,
+      "kw_ok": true,
+      "res_ok": true,
+      "elapsed_ms": 2445.387125015259,
+      "err": null
+    },
+    {
+      "cat": "G.집계",
+      "q": "사건별 피의자 수 세어줘",
+      "cypher": "SELECT * FROM cypher('tccop_v40_demo', $$ MATCH (c:vt_case)<-[:suspect_in]-(p:vt_psn) RETURN c.flnm AS case, count(p) AS suspects ORDER BY suspects DESC $$) AS (case agtype, suspects agtype);",
+      "elements": 3,
+      "ok": true,
+      "kw_ok": true,
+      "res_ok": true,
+      "elapsed_ms": 1861.379861831665,
+      "err": null
+    },
+    {
+      "cat": "G.집계",
+      "q": "도메인별 노드 수",
+      "cypher": "SELECT * FROM cypher('tccop_v40_demo', $$ MATCH (n) RETURN n.source_domain AS domain, count(n) AS cnt ORDER BY cnt DESC $$) AS (domain agtype, cnt agtype);",
+      "elements": 4,
+      "ok": true,
+      "kw_ok": true,
+      "res_ok": true,
+      "elapsed_ms": 1919.2869663238525,
+      "err": null
+    },
+    {
+      "cat": "G.집계",
+      "q": "신뢰도 등급별 노드 수",
+      "cypher": "SELECT * FROM cypher('tccop_v40_demo', $$ MATCH (n) RETURN n.reliability_tier AS tier, count(n) AS cnt ORDER BY tier $$) AS (tier agtype, cnt agtype);",
+      "elements": 4,
+      "ok": true,
+      "kw_ok": true,
+      "res_ok": true,
+      "elapsed_ms": 2301.509141921997,
+      "err": null
+    },
+    {
+      "cat": "G.집계",
+      "q": "이체 총 금액 합계",
+      "cypher": "SELECT * FROM cypher('tccop_v40_demo', $$ MATCH (t:vt_transfer) RETURN sum(t.amount) AS total_amount $$) AS (total_amount agtype);",
+      "elements": 1,
+      "ok": true,
+      "kw_ok": true,
+      "res_ok": true,
+      "elapsed_ms": 1545.356035232544,
+      "err": null
+    },
+    {
+      "cat": "H.정렬",
+      "q": "금액이 큰 순으로 이체 5건",
+      "cypher": "SELECT * FROM cypher('tccop_v40_demo', $$ MATCH (t:vt_transfer) RETURN t, t.amount AS _ord_0 ORDER BY _ord_0 DESC LIMIT 5 $$) AS (t agtype, _ord_0 agtype);",
+      "elements": 5,
+      "ok": true,
+      "kw_ok": true,
+      "res_ok": true,
+      "elapsed_ms": 1864.1178607940674,
+      "err": null
+    },
+    {
+      "cat": "H.정렬",
+      "q": "통화 시간 긴 순으로 10건",
+      "cypher": "SELECT * FROM cypher('tccop_v40_demo', $$ MATCH (c:vt_call) RETURN c, c.duration AS _ord_0 ORDER BY _ord_0 DESC LIMIT 10 $$) AS (c agtype, _ord_0 agtype);",
+      "elements": 10,
+      "ok": true,
+      "kw_ok": true,
+      "res_ok": true,
+      "elapsed_ms": 1531.1830043792725,
+      "err": null
+    },
+    {
+      "cat": "H.정렬",
+      "q": "최근 이체 5건",
+      "cypher": "SELECT * FROM cypher('tccop_v40_demo', $$ MATCH (t:vt_transfer) RETURN t, t.occurred_at AS _ord_0 ORDER BY _ord_0 DESC LIMIT 5 $$) AS (t agtype, _ord_0 agtype);",
+      "elements": 5,
+      "ok": true,
+      "kw_ok": true,
+      "res_ok": true,
+      "elapsed_ms": 1932.5978755950928,
+      "err": null
+    },
+    {
+      "cat": "I.복합",
+      "q": "익명이면서 OSINT 출처인 인물 보여줘",
+      "cypher": "SELECT * FROM cypher('tccop_v40_demo', $$ MATCH (p:vt_psn) WHERE p.is_anonymous = true AND p.source_domain = 'osint' RETURN p $$) AS (p agtype);",
+      "elements": 4,
+      "ok": true,
+      "kw_ok": true,
+      "res_ok": true,
+      "elapsed_ms": 1922.217845916748,
+      "err": null
+    },
+    {
+      "cat": "I.복합",
+      "q": "VOIP 통신사이면서 중계기 경유 전화",
+      "cypher": "SELECT * FROM cypher('tccop_v40_demo', $$ MATCH (t:vt_telno)-[:used_in_device]->(d:vt_dev) WHERE t.carr_cd = 'VOIP' AND d.dev_type = 'relay_station' RETURN t, d $$) AS (t agtype, d agtype);",
+      "elements": 7,
+      "ok": true,
+      "kw_ok": true,
+      "res_ok": true,
+      "elapsed_ms": 3387.0320320129395,
+      "err": null
+    },
+    {
+      "cat": "I.복합",
+      "q": "사건번호 'CASE-2026-A-001' 의 피의자",
+      "cypher": "SELECT * FROM cypher('tccop_v40_demo', $$ MATCH (p:vt_psn)-[:suspect_in]->(c:vt_case { case_no:  'CASE-2026-A-001'}) RETURN p, c $$) AS (p agtype, c agtype);",
+      "elements": 4,
+      "ok": true,
+      "kw_ok": true,
+      "res_ok": true,
+      "elapsed_ms": 2551.2940883636475,
+      "err": null
+    },
+    {
+      "cat": "I.복합",
+      "q": "금액 100만원 이상 이체",
+      "cypher": "SELECT * FROM cypher('tccop_v40_demo', $$ MATCH (t:vt_transfer) WHERE t.amount >= 1000000 RETURN t $$) AS (t agtype);",
+      "elements": 0,
+      "ok": false,
+      "kw_ok": true,
+      "res_ok": false,
+      "elapsed_ms": 2076.6632556915283,
+      "err": null
+    },
+    {
+      "cat": "J.변형",
+      "q": "계좌가 몇 개 있어?",
+      "cypher": "SELECT * FROM cypher('tccop_v40_demo', $$ MATCH (p:vt_psn)-[:has_account]->(b:vt_bacnt) RETURN count(DISTINCT b) AS account_cnt $$) AS (account_cnt agtype);",
+      "elements": 1,
+      "ok": true,
+      "kw_ok": true,
+      "res_ok": true,
+      "elapsed_ms": 1911.8480682373047,
+      "err": null
+    },
+    {
+      "cat": "J.변형",
+      "q": "계좌 총 개수 알려줘",
+      "cypher": "SELECT * FROM cypher('tccop_v40_demo', $$ MATCH (b:vt_bacnt) RETURN count(b) AS cnt $$) AS (cnt agtype);",
+      "elements": 1,
+      "ok": true,
+      "kw_ok": true,
+      "res_ok": true,
+      "elapsed_ms": 1748.6040592193604,
+      "err": null
+    },
+    {
+      "cat": "J.변형",
+      "q": "강남 사건의 피의자가 누군지 보여줘",
+      "cypher": "SELECT * FROM cypher('tccop_v40_demo', $$ MATCH (p:vt_psn)-[:suspect_in]->(c:vt_case) WHERE c.flnm CONTAINS '강남' RETURN p, c $$) AS (p agtype, c agtype);",
+      "elements": 4,
+      "ok": true,
+      "kw_ok": true,
+      "res_ok": true,
+      "elapsed_ms": 2044.1169738769531,
+      "err": null
+    },
+    {
+      "cat": "J.변형",
+      "q": "강남 보이스피싱 일당",
+      "cypher": "SELECT * FROM cypher('tccop_v40_demo', $$ MATCH (p:vt_psn)-[:suspect_in]->(c:vt_case { flnm:  '강남 보이스피싱 일당'}) RETURN p, c $$) AS (p agtype, c agtype);",
+      "elements": 0,
+      "ok": false,
+      "kw_ok": true,
+      "res_ok": false,
+      "elapsed_ms": 2489.5081520080566,
+      "err": null
+    },
+    {
+      "cat": "J.변형",
+      "q": "익명 사용자 누구야?",
+      "cypher": "SELECT * FROM cypher('tccop_v40_demo', $$ MATCH (p:vt_psn) WHERE p.is_anonymous = true RETURN p $$) AS (p agtype);",
+      "elements": 4,
+      "ok": true,
+      "kw_ok": true,
+      "res_ok": true,
+      "elapsed_ms": 1622.648000717163,
+      "err": null
+    }
+  ]
+}
