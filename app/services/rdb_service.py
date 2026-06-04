@@ -33,15 +33,22 @@ class RDBService:
         import psycopg2
         import uuid
         from flask import current_app
-        logger.info(f"[V4.0] import_predefined_schema source_domain={source_domain} source_id={source_id}")
+        # V4.0 격리 스키마 (test_v40) 기본 사용 — public 충돌 회피
+        target_schema = current_app.config.get('_V40_TARGET_SCHEMA', 'test_v40')
+        logger.info(f"[V4.0] import_predefined_schema source_domain={source_domain} source_id={source_id} target_schema={target_schema}")
         
         db_config = current_app.config['DB_CONFIG']
         count_stats = {'cases':0, 'suspects':0, 'accounts':0, 'phones':0, 'transfers':0, 'calls':0, 'relations':0}
         
         try:
             conn = psycopg2.connect(**db_config)
+            conn.autocommit = True
             cur = conn.cursor()
-            
+
+            # V4.0 격리 스키마로 search_path 설정 — INSERT/TRUNCATE 가 target_schema 로 향함
+            cur.execute(f'SET search_path = "{target_schema}", public;')
+            logger.info(f"   [V4.0] search_path = {target_schema}, public")
+
             if clear_existing:
                 logger.info("   [DB] 기존 RDB 데이터 전체 초기화 (TRUNCATE V2, 사전정의 스크립트)...")
                 tables_to_clear = [
@@ -58,34 +65,35 @@ class RDBService:
                     cur.execute(f"TRUNCATE TABLE {table} CASCADE;")
                 logger.info("   [DB] 초기화 완료.")
             
-            df = pd.read_csv(file_path).fillna('')
+            df = pd.read_csv(file_path, encoding='utf-8-sig').fillna('')
             fname = filename.lower()
-            
-            import time, random
-            def gen_sn(): return int(time.time() * 1e7) + random.randint(0, 9999999)
 
+            import time, random, uuid as _uuid
+            def gen_id(prefix='id'): return f"{prefix}_{_uuid.uuid4().hex[:16]}"
+
+            # ─── test_v40 표준 스키마 핸들러 (V4.0 6컬럼 메타 자동 부여) ───
             if 'tbl_vt_psn' in fname:
                 for _, row in df.iterrows():
                     flnm = str(row.get('flnm', '')).strip()
                     if flnm:
                         cur.execute("""
-                            INSERT INTO TB_PRSN (PRSN_ID, KORN_FLNM, PRSN_SE_CD)
-                            VALUES (%s, %s, '99')
-                            ON CONFLICT (PRSN_ID) DO NOTHING
-                        """, (flnm, flnm))
+                            INSERT INTO tb_prsn (prsn_id, korn_flnm, prsn_se_cd, source_domain, source_id, reliability_tier)
+                            VALUES (%s, %s, '99', %s, %s, 1)
+                            ON CONFLICT (prsn_id) DO NOTHING
+                        """, (flnm, flnm, source_domain, source_id))
                         if cur.rowcount > 0: count_stats['suspects'] += 1
-                        
+
             elif 'tbl_vt_telno' in fname:
                 for _, row in df.iterrows():
                     telno = str(row.get('telno', '')).strip()
                     if telno:
                         cur.execute("""
-                            INSERT INTO TB_TELNO_MST (TELNO, JOIN_TYP_CD)
-                            VALUES (%s, '01')
-                            ON CONFLICT (TELNO) DO NOTHING
-                        """, (telno,))
+                            INSERT INTO tb_telno_mst (telno, source_domain, source_id, reliability_tier)
+                            VALUES (%s, %s, %s, 1)
+                            ON CONFLICT (telno) DO NOTHING
+                        """, (telno, source_domain, source_id))
                         if cur.rowcount > 0: count_stats['phones'] += 1
-                        
+
             elif 'tbl_vt_bacnt' in fname:
                 for _, row in df.iterrows():
                     actno = str(row.get('actno', '')).strip()
@@ -93,14 +101,15 @@ class RDBService:
                     bank = str(row.get('bank', '')).strip()
                     if actno:
                         cur.execute("""
-                            INSERT INTO TB_FIN_BACNT (BACNT_NO, BANK_CD, BANK_NM, DPSTR_NM)
-                            VALUES (%s, '999', %s, %s)
-                            ON CONFLICT (BACNT_NO, BANK_CD) DO NOTHING
-                        """, (actno, bank, dpstr))
+                            INSERT INTO tb_fin_bacnt (bacnt_id, bacnt_no, bnk_cd, bank_nm, dpstr, source_domain, source_id, reliability_tier)
+                            VALUES (%s, %s, %s, NULLIF(%s,''), NULLIF(%s,''), %s, %s, 1)
+                            ON CONFLICT (bacnt_no, COALESCE(bnk_cd,'')) DO UPDATE SET
+                                bank_nm = COALESCE(EXCLUDED.bank_nm, tb_fin_bacnt.bank_nm),
+                                dpstr   = COALESCE(EXCLUDED.dpstr,   tb_fin_bacnt.dpstr)
+                        """, (gen_id('bacnt'), actno, '999', bank, dpstr, source_domain, source_id))
                         if cur.rowcount > 0: count_stats['accounts'] += 1
-                        
+
             elif 'tbl_eg_call' in fname:
-                # 실제 CSV 컬럼: id, snerpn, dsptch_no, rcvr, rcptn_no, bgng_ymdhm, end_ymdhm, tlcmco, se, rmrk
                 from datetime import datetime as dt_parse
                 for _, row in df.iterrows():
                     caller = str(row.get('dsptch_no', '')).strip()
@@ -108,150 +117,132 @@ class RDBService:
                     start_dt = str(row.get('bgng_ymdhm', '')).strip()
                     end_dt = str(row.get('end_ymdhm', '')).strip()
                     tlcmco = str(row.get('tlcmco', '')).strip()
-                    call_type = str(row.get('se', '')).strip()
-                    # 통화시간(초) 계산
                     dur_sec = 0
                     try:
                         t1 = dt_parse.strptime(start_dt, '%Y-%m-%d %H:%M:%S')
                         t2 = dt_parse.strptime(end_dt, '%Y-%m-%d %H:%M:%S')
                         dur_sec = int((t2 - t1).total_seconds())
-                    except: pass
-                    
+                    except Exception: pass
                     if caller and callee:
-                        # 발신/수신 전화번호 자동 upsert
+                        cur.execute("INSERT INTO tb_telno_mst (telno, carr_cd, source_domain, source_id, reliability_tier) VALUES (%s, NULLIF(%s,''), %s, %s, 1) ON CONFLICT (telno) DO NOTHING",
+                                    (caller, tlcmco, source_domain, source_id))
+                        cur.execute("INSERT INTO tb_telno_mst (telno, source_domain, source_id, reliability_tier) VALUES (%s, %s, %s, 1) ON CONFLICT (telno) DO NOTHING",
+                                    (callee, source_domain, source_id))
                         cur.execute("""
-                            INSERT INTO TB_TELNO_MST (TELNO, TELCO_NM, JOIN_TYP_CD) VALUES (%s, NULLIF(%s,''), '01') ON CONFLICT DO NOTHING;
-                        """, (caller, tlcmco))
-                        cur.execute("""
-                            INSERT INTO TB_TELNO_MST (TELNO, JOIN_TYP_CD) VALUES (%s, '01') ON CONFLICT DO NOTHING;
-                        """, (callee,))
-                        # 통화내역 적재
-                        call_typ_cd = '01' if call_type == '음성' else '02'  # 02=인터넷접속 등
-                        cur.execute("""
-                            INSERT INTO TB_TELNO_CALL_DTL (CALL_SN, DSPTCH_TELNO, RCPTN_TELNO, CALL_STRT_DT, CALL_DUR_SEC, CALL_TYP_CD)
-                            VALUES (%s, %s, %s, NULLIF(%s, '')::timestamp, %s, %s)
-                            ON CONFLICT (CALL_SN) DO NOTHING
-                        """, (gen_sn(), caller, callee, start_dt, dur_sec, call_typ_cd))
+                            INSERT INTO tb_telno_call_dtl
+                                (call_id, caller_telno, callee_telno, bgng_dt, end_dt, duration, carr_cd, source_domain, source_id, reliability_tier)
+                            VALUES (%s, %s, %s, NULLIF(%s,'')::timestamp, NULLIF(%s,'')::timestamp, %s, NULLIF(%s,''), %s, %s, 1)
+                            ON CONFLICT (call_id) DO NOTHING
+                        """, (gen_id('call'), caller, callee, start_dt, end_dt, dur_sec, tlcmco, source_domain, source_id))
                         if cur.rowcount > 0: count_stats['calls'] += 1
-                        
+
             elif 'tbl_eg_rmt' in fname:
-                # 실제 CSV 컬럼: id, se, dpstr, bank, actno, rmt_se, dpst_amt, abstr, tkmny_amt, rlt_bank, rlt_dpstr, rlt_actno, Ip, rcptn_trmnlno, rmt_ymdhm
                 for _, row in df.iterrows():
-                    se = str(row.get('se', '')).strip()           # 입금/출금
-                    dpstr = str(row.get('dpstr', '')).strip()     # 예금주
-                    bank = str(row.get('bank', '')).strip()       # 은행
-                    actno = str(row.get('actno', '')).strip()     # 출금계좌
-                    rmt_se = str(row.get('rmt_se', '')).strip()   # 이체/현금인출
+                    se = str(row.get('se', '')).strip()
+                    dpstr = str(row.get('dpstr', '')).strip()
+                    bank = str(row.get('bank', '')).strip()
+                    actno = str(row.get('actno', '')).strip()
                     rlt_bank = str(row.get('rlt_bank', '')).strip()
                     rlt_dpstr = str(row.get('rlt_dpstr', '')).strip()
-                    rlt_actno = str(row.get('rlt_actno', '')).strip()  # 입금계좌
-                    ip_val = str(row.get('Ip', row.get('ip', ''))).strip()
+                    rlt_actno = str(row.get('rlt_actno', '')).strip()
                     date_val = str(row.get('rmt_ymdhm', '')).strip()
-                    
-                    # 금액: 입금이면 dpst_amt, 출금이면 tkmny_amt
                     try:
                         dpst_amt = int(float(str(row.get('dpst_amt', '0')).replace(',', '') or '0'))
-                    except: dpst_amt = 0
+                    except Exception: dpst_amt = 0
                     try:
                         tkmny_amt = int(float(str(row.get('tkmny_amt', '0')).replace(',', '') or '0'))
-                    except: tkmny_amt = 0
+                    except Exception: tkmny_amt = 0
                     amount = dpst_amt if dpst_amt > 0 else tkmny_amt
-                    
-                    # 출금계좌 자동 upsert
                     if actno:
                         cur.execute("""
-                            INSERT INTO TB_FIN_BACNT (BACNT_NO, BANK_CD, BANK_NM, DPSTR_NM)
-                            VALUES (%s, '999', NULLIF(%s,''), NULLIF(%s,''))
-                            ON CONFLICT (BACNT_NO, BANK_CD) DO UPDATE SET
-                                BANK_NM = COALESCE(EXCLUDED.BANK_NM, TB_FIN_BACNT.BANK_NM),
-                                DPSTR_NM = COALESCE(EXCLUDED.DPSTR_NM, TB_FIN_BACNT.DPSTR_NM)
-                        """, (actno, bank, dpstr))
-                    # 입금계좌 자동 upsert
+                            INSERT INTO tb_fin_bacnt (bacnt_id, bacnt_no, bnk_cd, bank_nm, dpstr, source_domain, source_id, reliability_tier)
+                            VALUES (%s, %s, %s, NULLIF(%s,''), NULLIF(%s,''), %s, %s, 1)
+                            ON CONFLICT (bacnt_no, COALESCE(bnk_cd,'')) DO UPDATE SET
+                                bank_nm = COALESCE(EXCLUDED.bank_nm, tb_fin_bacnt.bank_nm),
+                                dpstr   = COALESCE(EXCLUDED.dpstr,   tb_fin_bacnt.dpstr)
+                        """, (gen_id('bacnt'), actno, '999', bank, dpstr, source_domain, source_id))
                     if rlt_actno:
                         cur.execute("""
-                            INSERT INTO TB_FIN_BACNT (BACNT_NO, BANK_CD, BANK_NM, DPSTR_NM)
-                            VALUES (%s, '999', NULLIF(%s,''), NULLIF(%s,''))
-                            ON CONFLICT (BACNT_NO, BANK_CD) DO UPDATE SET
-                                BANK_NM = COALESCE(EXCLUDED.BANK_NM, TB_FIN_BACNT.BANK_NM),
-                                DPSTR_NM = COALESCE(EXCLUDED.DPSTR_NM, TB_FIN_BACNT.DPSTR_NM)
-                        """, (rlt_actno, rlt_bank, rlt_dpstr))
-                    
-                    # 이체 내역 적재
+                            INSERT INTO tb_fin_bacnt (bacnt_id, bacnt_no, bnk_cd, bank_nm, dpstr, source_domain, source_id, reliability_tier)
+                            VALUES (%s, %s, %s, NULLIF(%s,''), NULLIF(%s,''), %s, %s, 1)
+                            ON CONFLICT (bacnt_no, COALESCE(bnk_cd,'')) DO UPDATE SET
+                                bank_nm = COALESCE(EXCLUDED.bank_nm, tb_fin_bacnt.bank_nm),
+                                dpstr   = COALESCE(EXCLUDED.dpstr,   tb_fin_bacnt.dpstr)
+                        """, (gen_id('bacnt'), rlt_actno, '999', rlt_bank, rlt_dpstr, source_domain, source_id))
                     if actno and rlt_actno:
-                        dlng_se = '01' if se == '입금' else '02'  # 01=입금, 02=출금
+                        if se == '입금':
+                            src_act, tgt_act, dlng_type = rlt_actno, actno, 'deposit'
+                        else:
+                            src_act, tgt_act, dlng_type = actno, rlt_actno, 'withdraw'
                         cur.execute("""
-                            INSERT INTO TB_FIN_BACNT_DLNG (DLNG_SN, BACNT_NO, BANK_CD, DLNG_DT, DLNG_SE_CD, DLNG_AMT, TRRC_PSNNM, TRRC_BACNT_NO)
-                            VALUES (%s, %s, '999', NULLIF(%s, '')::timestamp, %s, %s, NULLIF(%s, ''), %s)
-                            ON CONFLICT (DLNG_SN) DO NOTHING
-                        """, (gen_sn(), actno, date_val, dlng_se, amount, rlt_dpstr, rlt_actno))
+                            INSERT INTO tb_fin_bacnt_dlng
+                                (dlng_id, src_bacnt_no, tgt_bacnt_no, amount, dlng_dt, dlng_type, source_domain, source_id, reliability_tier)
+                            VALUES (%s, %s, %s, %s, NULLIF(%s,'')::timestamp, %s, %s, %s, 1)
+                            ON CONFLICT (dlng_id) DO NOTHING
+                        """, (gen_id('dlng'), src_act, tgt_act, amount, date_val, dlng_type, source_domain, source_id))
                         if cur.rowcount > 0: count_stats['transfers'] += 1
-                    
-                    # IP 주소가 있으면 접속 로그도 적재
-                    if ip_val:
-                        cur.execute("""
-                            INSERT INTO TB_SYS_LGN_EVT (LGN_EVT_SN, USER_ID, CNNT_IP_ADDR, LGN_DT, LGN_RESULT_CD)
-                            VALUES (%s, %s, %s, NULLIF(%s, '')::timestamp, 'S')
-                            ON CONFLICT (LGN_EVT_SN) DO NOTHING
-                        """, (gen_sn(), dpstr or 'UNKNOWN', ip_val, date_val))
 
             elif 'tbl_eg_bactno_poss' in fname:
-                # 계좌 소유관계: CSV 컬럼 flnm, actno
                 for _, row in df.iterrows():
                     flnm = str(row.get('flnm', '')).strip()
                     actno = str(row.get('actno', '')).strip()
                     if flnm and actno:
-                        # 인물 upsert
                         cur.execute("""
-                            INSERT INTO TB_PRSN (PRSN_ID, KORN_FLNM, PRSN_SE_CD)
-                            VALUES (%s, %s, '99')
-                            ON CONFLICT (PRSN_ID) DO NOTHING
-                        """, (flnm, flnm))
-                        # 계좌 upsert
+                            INSERT INTO tb_prsn (prsn_id, korn_flnm, prsn_se_cd, source_domain, source_id, reliability_tier)
+                            VALUES (%s, %s, '99', %s, %s, 1)
+                            ON CONFLICT (prsn_id) DO NOTHING
+                        """, (flnm, flnm, source_domain, source_id))
                         cur.execute("""
-                            INSERT INTO TB_FIN_BACNT (BACNT_NO, BANK_CD, DPSTR_NM)
-                            VALUES (%s, '999', %s)
-                            ON CONFLICT (BACNT_NO, BANK_CD) DO UPDATE SET
-                                DPSTR_NM = COALESCE(EXCLUDED.DPSTR_NM, TB_FIN_BACNT.DPSTR_NM)
-                        """, (actno, flnm))
+                            INSERT INTO tb_fin_bacnt (bacnt_id, bacnt_no, bnk_cd, dpstr, source_domain, source_id, reliability_tier)
+                            VALUES (%s, %s, %s, %s, %s, %s, 1)
+                            ON CONFLICT (bacnt_no, COALESCE(bnk_cd,'')) DO UPDATE SET
+                                dpstr = COALESCE(EXCLUDED.dpstr, tb_fin_bacnt.dpstr)
+                        """, (gen_id('bacnt'), actno, '999', flnm, source_domain, source_id))
+                        cur.execute("""
+                            INSERT INTO tb_fin_extrc_bacnt
+                                (extrc_id, bacnt_no, prsn_id, source_domain, source_id, reliability_tier)
+                            VALUES (%s, %s, %s, %s, %s, 1)
+                            ON CONFLICT (extrc_id) DO NOTHING
+                        """, (gen_id('extrc'), actno, flnm, source_domain, source_id))
                         count_stats['relations'] += 1
                         count_stats['accounts'] += 1
 
             elif 'tbl_eg_telno_poss' in fname:
-                # 전화번호 소유관계: CSV 컬럼 flnm, telno
                 for _, row in df.iterrows():
                     flnm = str(row.get('flnm', '')).strip()
                     telno = str(row.get('telno', '')).strip()
                     if flnm and telno:
-                        # 인물 upsert
                         cur.execute("""
-                            INSERT INTO TB_PRSN (PRSN_ID, KORN_FLNM, PRSN_SE_CD)
-                            VALUES (%s, %s, '99')
-                            ON CONFLICT (PRSN_ID) DO NOTHING
-                        """, (flnm, flnm))
-                        # 전화번호 upsert
+                            INSERT INTO tb_prsn (prsn_id, korn_flnm, prsn_se_cd, source_domain, source_id, reliability_tier)
+                            VALUES (%s, %s, '99', %s, %s, 1)
+                            ON CONFLICT (prsn_id) DO NOTHING
+                        """, (flnm, flnm, source_domain, source_id))
                         cur.execute("""
-                            INSERT INTO TB_TELNO_MST (TELNO, JOIN_TYP_CD)
-                            VALUES (%s, '01')
-                            ON CONFLICT (TELNO) DO NOTHING
-                        """, (telno,))
-                        # 가입(소유) 관계 적재
+                            INSERT INTO tb_telno_mst (telno, holder_nm, source_domain, source_id, reliability_tier)
+                            VALUES (%s, %s, %s, %s, 1)
+                            ON CONFLICT (telno) DO UPDATE SET
+                                holder_nm = COALESCE(EXCLUDED.holder_nm, tb_telno_mst.holder_nm)
+                        """, (telno, flnm, source_domain, source_id))
                         cur.execute("""
-                            INSERT INTO TB_TELNO_JOIN (JOIN_SN, TELNO, JOIN_PSNNM)
-                            VALUES (%s, %s, %s)
-                            ON CONFLICT (JOIN_SN) DO NOTHING
-                        """, (gen_sn(), telno, flnm))
+                            INSERT INTO tb_telno_join
+                                (join_id, prsn_id, telno, join_type, source_domain, source_id, reliability_tier)
+                            VALUES (%s, %s, %s, '01', %s, %s, 1)
+                            ON CONFLICT (prsn_id, telno) DO NOTHING
+                        """, (gen_id('join'), flnm, telno, source_domain, source_id))
                         count_stats['relations'] += 1
                         count_stats['phones'] += 1
 
             elif 'tbl_eg_case_prsn' in fname:
-                # 사건-인물 관계: CSV 컬럼 incdnt_no, prsn_id, role
-                # → 임시 테이블에 저장 (GDB ETL에서 involves 엣지 생성)
                 cur.execute("""
-                    CREATE TABLE IF NOT EXISTS TB_INCDNT_PRSN (
-                        INCDNT_NO VARCHAR(100),
-                        PRSN_ID VARCHAR(100),
-                        ROLE_CD VARCHAR(50),
-                        PRIMARY KEY (INCDNT_NO, PRSN_ID)
+                    CREATE TABLE IF NOT EXISTS tb_incdnt_prsn (
+                        incdnt_no VARCHAR(100),
+                        prsn_id VARCHAR(100),
+                        role_cd VARCHAR(50),
+                        source_domain VARCHAR(50) DEFAULT 'investigation',
+                        source_id VARCHAR(100),
+                        reliability_tier SMALLINT DEFAULT 1,
+                        rec_created TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        PRIMARY KEY (incdnt_no, prsn_id)
                     )
                 """)
                 for _, row in df.iterrows():
@@ -260,28 +251,28 @@ class RDBService:
                     role = str(row.get('role', '')).strip()
                     if incdnt_no and prsn_id:
                         cur.execute("""
-                            INSERT INTO TB_INCDNT_PRSN (INCDNT_NO, PRSN_ID, ROLE_CD)
-                            VALUES (%s, %s, %s)
-                            ON CONFLICT (INCDNT_NO, PRSN_ID) DO UPDATE SET ROLE_CD = EXCLUDED.ROLE_CD
-                        """, (incdnt_no, prsn_id, role))
+                            INSERT INTO tb_incdnt_prsn (incdnt_no, prsn_id, role_cd, source_domain, source_id)
+                            VALUES (%s, %s, %s, %s, %s)
+                            ON CONFLICT (incdnt_no, prsn_id) DO UPDATE SET role_cd = EXCLUDED.role_cd
+                        """, (incdnt_no, prsn_id, role, source_domain, source_id))
                         count_stats['relations'] += 1
 
             elif 'tbl_eg_case' in fname:
-                # 사건 정보: CSV 컬럼 incdnt_no, incdnt_nm, incdnt_typ_cd, occrn_dt, chrgdp_nm, chrg_plcmn_nm, incdnt_smry_cn
                 for _, row in df.iterrows():
                     incdnt_no = str(row.get('incdnt_no', '')).strip()
                     incdnt_nm = str(row.get('incdnt_nm', '')).strip()
                     typ_cd = str(row.get('incdnt_typ_cd', '')).strip()
                     occrn_dt = str(row.get('occrn_dt', '')).strip()
-                    chrgdp = str(row.get('chrgdp_nm', '')).strip()
-                    plcmn = str(row.get('chrg_plcmn_nm', '')).strip()
                     smry = str(row.get('incdnt_smry_cn', '')).strip()
                     if incdnt_no:
                         cur.execute("""
-                            INSERT INTO TB_INCDNT_MST (INCDNT_NO, INCDNT_NM, INCDNT_TYP_CD, OCCRN_DT, CHRGDP_NM, CHRG_PLCMN_NM, INCDNT_SMRY_CN)
-                            VALUES (%s, %s, NULLIF(%s,''), NULLIF(%s,'')::timestamp, NULLIF(%s,''), NULLIF(%s,''), NULLIF(%s,''))
-                            ON CONFLICT DO NOTHING
-                        """, (incdnt_no, incdnt_nm, typ_cd, occrn_dt, chrgdp, plcmn, smry))
+                            INSERT INTO tb_incdnt_mst
+                                (incdnt_no, flnm, crime_type, occurred_at, source_domain, source_id, reliability_tier)
+                            VALUES (%s, NULLIF(%s,''), NULLIF(%s,''), NULLIF(%s,'')::date, %s, %s, 1)
+                            ON CONFLICT (incdnt_no) DO UPDATE SET
+                                flnm       = COALESCE(EXCLUDED.flnm, tb_incdnt_mst.flnm),
+                                crime_type = COALESCE(EXCLUDED.crime_type, tb_incdnt_mst.crime_type)
+                        """, (incdnt_no, incdnt_nm or smry[:200], typ_cd, occrn_dt, source_domain, source_id))
                         if cur.rowcount > 0: count_stats['cases'] = count_stats.get('cases', 0) + 1
                         
             conn.commit()

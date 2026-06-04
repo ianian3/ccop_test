@@ -128,14 +128,25 @@ class RdbToGraphService:
         """
         RDB V3(49개 테이블) 데이터를 POLE 6계층 온톨로지 기반으로 GDB(AgensGraph)에 변환 적재
         """
+        from flask import current_app
+        # V4.0 격리 스키마 — RDB 데이터 읽을 스키마 (기본 test_v40)
+        source_schema = current_app.config.get('_V40_TARGET_SCHEMA', 'test_v40')
+
         logger.info(f"\n{'='*60}")
         logger.info(f"🚀 [RDB → GDB] V3.2 POLE 6계층 온톨로지 기반 변환 시작")
-        logger.info(f"   Graph: {graph_name}")
+        logger.info(f"   Graph: {graph_name} | RDB source_schema: {source_schema}")
         logger.info(f"{'='*60}")
 
         conn, cur = RdbToGraphService.get_db_connection()
         if not conn:
             return False, "DB 연결 실패"
+
+        # V4.0 격리 — RDB SELECT 가 source_schema 의 테이블을 향함
+        try:
+            cur.execute(f'SET search_path = "{source_schema}", public;')
+            logger.info(f"   [V4.0] RDB SELECT search_path = {source_schema}, public")
+        except Exception as e:
+            logger.warning(f"   search_path 설정 실패: {e}")
 
         stats = {
             "nodes": 0, "edges": 0,
@@ -213,14 +224,22 @@ class RdbToGraphService:
                 try: cur.execute(f"CREATE ELABEL IF NOT EXISTS {el}"); conn.commit()
                 except: conn.rollback(); safe_set_graph_path(cur, graph_name)
 
-            # --- 3. 스키마 감지 ---
+            # --- 3. 스키마 감지 (source_schema 우선, public fallback) ---
             cur.execute("""
                 SELECT EXISTS (
                     SELECT FROM information_schema.tables
-                    WHERE table_schema = 'public' AND table_name = 'tb_incdnt_mst'
+                    WHERE table_schema = %s AND table_name = 'tb_prsn'
                 )
-            """)
+            """, (source_schema,))
             use_kics_schema = cur.fetchone()[0]
+            if not use_kics_schema:
+                cur.execute("""
+                    SELECT EXISTS (
+                        SELECT FROM information_schema.tables
+                        WHERE table_schema = 'public' AND table_name = 'tb_incdnt_mst'
+                    )
+                """)
+                use_kics_schema = cur.fetchone()[0]
             logger.info(f"   스키마: {'KICS 표준(TB_)' if use_kics_schema else 'rdb_* 레거시 fallback'}")
 
             # --- 4. 노드 적재 ---
@@ -418,9 +437,15 @@ class RdbToGraphService:
                 return True, stats
 
             # ── KICS 표준 스키마 (TB_ 테이블) ────────────────────────────────────
+            # search_path 재설정 (CREATE VLABEL 롤백 영향 방어)
+            try:
+                cur.execute(f'SET search_path = "{source_schema}", public;')
+                conn.commit()
+            except Exception:
+                conn.rollback()
 
             # 3-1. Case (TB_INCDNT_MST)
-            cur.execute("SELECT INCDNT_NO, INCDNT_NM, OCCRN_DT FROM TB_INCDNT_MST")
+            cur.execute(f'SELECT incdnt_no, COALESCE(flnm, incdnt_no), COALESCE(occurred_at::text, %s) FROM "{source_schema}".tb_incdnt_mst', ('',))
             rows = cur.fetchall()
             for r in rows:
                 try:
@@ -432,7 +457,7 @@ class RdbToGraphService:
             conn.commit()
 
             # 3-2. Person (TB_PRSN)
-            cur.execute("SELECT PRSN_ID, KORN_FLNM, RMK_CN FROM TB_PRSN")
+            cur.execute("SELECT prsn_id, COALESCE(korn_flnm,''), COALESCE(role_cd,'') FROM tb_prsn")
             rows = cur.fetchall()
             for r in rows:
                 try:
@@ -445,7 +470,7 @@ class RdbToGraphService:
 
             # 3-3. Account (TB_FIN_BACNT) — ATM/현금인출은 vt_atm으로 분류
             from app.services.etl_service import StandardCodeMapper
-            cur.execute("SELECT BACNT_NO, BANK_CD, BANK_NM FROM TB_FIN_BACNT")
+            cur.execute("SELECT bacnt_no, COALESCE(bnk_cd,''), COALESCE(bank_nm,'') FROM tb_fin_bacnt WHERE bacnt_no IS NOT NULL")
             rows = cur.fetchall()
             for r in rows:
                 try:
@@ -473,10 +498,10 @@ class RdbToGraphService:
 
             # 3-4. Phone (TB_TELNO_MST) — 통신사 코드 정규화 포함
             try:
-                cur.execute("SELECT TELNO, TELE_CMPN_NM, TELE_CMPN_CD FROM TB_TELNO_MST")
+                cur.execute("SELECT telno, COALESCE(holder_nm,''), COALESCE(carr_cd,'') FROM tb_telno_mst")
             except Exception:
                 conn.rollback()
-                cur.execute("SELECT TELNO FROM TB_TELNO_MST")
+                cur.execute("SELECT telno FROM tb_telno_mst")
             rows = cur.fetchall()
             for r in rows:
                 try:
@@ -493,13 +518,18 @@ class RdbToGraphService:
                 except: pass
             conn.commit()
 
-            # 3-5. IP + 접속이벤트 (TB_SYS_LGN_EVT) → vt_ip MERGE + vt_access 생성 + accessed_from 엣지
-            cur.execute("""
-                SELECT LGN_SN, CNNT_IP_ADDR, USER_ID, LGN_DT, LGN_RSLT_CD, SVC_NM
-                FROM TB_SYS_LGN_EVT
-                WHERE CNNT_IP_ADDR IS NOT NULL AND CNNT_IP_ADDR != ''
-            """)
-            rows = cur.fetchall()
+            # 3-5. IP + 접속이벤트 (TB_SYS_LGN_EVT) — test_v40 미존재시 skip
+            try:
+                cur.execute("""
+                    SELECT LGN_SN, CNNT_IP_ADDR, USER_ID, LGN_DT, LGN_RSLT_CD, SVC_NM
+                    FROM TB_SYS_LGN_EVT
+                    WHERE CNNT_IP_ADDR IS NOT NULL AND CNNT_IP_ADDR != ''
+                """)
+                rows = cur.fetchall()
+            except Exception:
+                conn.rollback(); rows = []
+                try: cur.execute(f'SET search_path = "{source_schema}", public;'); conn.commit()
+                except Exception: conn.rollback()
             for r in rows:
                 try:
                     lgn_sn, ip = safe_str(r[0]), safe_str(r[1])
@@ -522,18 +552,16 @@ class RdbToGraphService:
             logger.info(f"\n🔗 Phase 2: V2 액션/이벤트 및 엣지 변환")
             
             # 4-1. 이체 (TB_FIN_BACNT_DLNG) -> Action Node & Edges
-            cur.execute("SELECT DLNG_SN, BACNT_NO, DLNG_DT, DLNG_AMT, TRRC_BACNT_NO, DLNG_SE_CD FROM TB_FIN_BACNT_DLNG")
+            cur.execute("SELECT dlng_id, COALESCE(src_bacnt_no,''), COALESCE(dlng_dt::text,''), COALESCE(amount::text,''), COALESCE(tgt_bacnt_no,''), CASE WHEN dlng_type='deposit' THEN '01' ELSE '02' END FROM tb_fin_bacnt_dlng")
             rows = cur.fetchall()
             for r in rows:
                 try:
-                    eid, base_act, dt, amt, other_act, se_cd = safe_str(r[0]), safe_str(r[1]), safe_str(r[2]), safe_str(r[3]), safe_str(r[4]), safe_str(r[5])
+                    eid, src_act, dt, amt, tgt_act, se_cd = safe_str(r[0]), safe_str(r[1]), safe_str(r[2]), safe_str(r[3]), safe_str(r[4]), safe_str(r[5])
                     props = f"{{event_id: '{eid}', event_type: 'transfer', amount: '{amt}', timestamp: '{dt}', type: '이체'}}"
                     cur.execute(f"MERGE (n:vt_transfer {{event_id: '{eid}'}}) SET n = {props}")
                     stats["nodes"] += 1; stats["transfers"] += 1
-                    
-                    # 01(입금)이면 돈이 상대(TRRC)에서 기준(BACNT)으로 들어왔음을 의미. 02(출금)은 그 반대.
-                    sender = other_act if se_cd == '01' else base_act
-                    receiver = base_act if se_cd == '01' else other_act
+
+                    sender, receiver = src_act, tgt_act
                     
                     if sender:
                         is_atm = sender.upper().startswith('ATM') or sender == '현금인출'
@@ -554,7 +582,7 @@ class RdbToGraphService:
             conn.commit()
 
             # 4-2. 통화 (TB_TELNO_CALL_DTL)
-            cur.execute("SELECT CALL_SN, DSPTCH_TELNO, RCPTN_TELNO, CALL_STRT_DT, CALL_DUR_SEC FROM TB_TELNO_CALL_DTL")
+            cur.execute("SELECT call_id, COALESCE(caller_telno,''), COALESCE(callee_telno,''), COALESCE(bgng_dt::text,''), COALESCE(duration::text,'0') FROM tb_telno_call_dtl")
             rows = cur.fetchall()
             for r in rows:
                 try:
@@ -572,14 +600,18 @@ class RdbToGraphService:
                 except: pass
             conn.commit()
 
-            # 4-3. 사기 신고 (TB_FRD_VCTM_RPT) - Case to Evidence Edge 생성
-            # CSV 적재 시 DAM_CN 에 '사건참조:INCDNT_NO' 형태로 넣은 것을 파싱하여 조인
-            cur.execute("""
-                SELECT R.DCLR_SN, substring(R.DAM_CN from '사건참조:(.*)'), R.SUSPCT_BACNT_NO, R.SUSPCT_TELNO 
-                FROM TB_FRD_VCTM_RPT R
-                WHERE R.DAM_CN LIKE '사건참조:%'
-            """)
-            rows = cur.fetchall()
+            # 4-3. 사기 신고 (TB_FRD_VCTM_RPT) — test_v40 미존재시 skip
+            try:
+                cur.execute("""
+                    SELECT R.DCLR_SN, substring(R.DAM_CN from '사건참조:(.*)'), R.SUSPCT_BACNT_NO, R.SUSPCT_TELNO
+                    FROM TB_FRD_VCTM_RPT R
+                    WHERE R.DAM_CN LIKE '사건참조:%'
+                """)
+                rows = cur.fetchall()
+            except Exception:
+                conn.rollback(); rows = []
+                try: cur.execute(f'SET search_path = "{source_schema}", public;'); conn.commit()
+                except Exception: conn.rollback()
             for r in rows:
                 try:
                     case_no, actno, telno = safe_str(r[1]), safe_str(r[2]), safe_str(r[3])
@@ -595,13 +627,18 @@ class RdbToGraphService:
             # 4-4. 인물과 계좌/전화 소유관계 추론 (Person <-> Evidence)
             # 여기서는 TB_FRD_VCTM_RPT로 엮인 증거와 케이스를 인물과 엮어 소유를 만들거나, PRSN 테이블 기반 간단 맾핑 조인
             # 현재 스크립트에는 명시적인 소유 매핑이 적재되지 않으므로, V1 호환을 위해 피의자와 사건의 증거를 연결
-            cur.execute("""
-                SELECT P.PRSN_ID, R.SUSPCT_BACNT_NO, R.SUSPCT_TELNO
-                FROM TB_PRSN P, TB_FRD_VCTM_RPT R 
-                WHERE R.DAM_CN LIKE '사건참조:%'
-                LIMIT 1000
-            """) # 매우 간단화된 룰 
-            rows = cur.fetchall()
+            try:
+                cur.execute("""
+                    SELECT P.PRSN_ID, R.SUSPCT_BACNT_NO, R.SUSPCT_TELNO
+                    FROM TB_PRSN P, TB_FRD_VCTM_RPT R
+                    WHERE R.DAM_CN LIKE '사건참조:%'
+                    LIMIT 1000
+                """)
+                rows = cur.fetchall()
+            except Exception:
+                conn.rollback(); rows = []
+                try: cur.execute(f'SET search_path = "{source_schema}", public;'); conn.commit()
+                except Exception: conn.rollback()
             for r in rows:
                 try:
                     pid, actno, telno = safe_str(r[0]), safe_str(r[1]), safe_str(r[2])
@@ -617,9 +654,14 @@ class RdbToGraphService:
             # ─── P1 확장: Phase 3 ───────────────────────────────
             logger.info(f"\n🔗 Phase 3: P1 도메인 확장 (조직/메시지/소유관계)")
 
-            # 5-1. 조직/기관 (TB_INST) → vt_org
-            cur.execute("SELECT INST_ID, INST_NM, INST_SE_CD FROM TB_INST")
-            rows = cur.fetchall()
+            # 5-1. 조직/기관 (TB_INST) — test_v40 미존재시 skip
+            try:
+                cur.execute("SELECT INST_ID, INST_NM, INST_SE_CD FROM TB_INST")
+                rows = cur.fetchall()
+            except Exception:
+                conn.rollback(); rows = []
+                try: cur.execute(f'SET search_path = "{source_schema}", public;'); conn.commit()
+                except Exception: conn.rollback()
             for r in rows:
                 try:
                     oid, oname, otype = safe_str(r[0]), safe_str(r[1]), safe_str(r[2])
@@ -629,9 +671,14 @@ class RdbToGraphService:
                 except: pass
             conn.commit()
 
-            # 5-2. SMS 메시지 (TB_TELNO_SMS_MSG) → vt_msg + 발신/수신 엣지
-            cur.execute("SELECT SMS_SN, DSPTCH_TELNO, RCPTN_TELNO, DSPTCH_DT, MSG_CN FROM TB_TELNO_SMS_MSG")
-            rows = cur.fetchall()
+            # 5-2. SMS 메시지 (TB_TELNO_SMS_MSG) — test_v40 미존재시 skip
+            try:
+                cur.execute("SELECT SMS_SN, DSPTCH_TELNO, RCPTN_TELNO, DSPTCH_DT, MSG_CN FROM TB_TELNO_SMS_MSG")
+                rows = cur.fetchall()
+            except Exception:
+                conn.rollback(); rows = []
+                try: cur.execute(f'SET search_path = "{source_schema}", public;'); conn.commit()
+                except Exception: conn.rollback()
             for r in rows:
                 try:
                     eid, sender, receiver, dt, content = safe_str(r[0]), safe_str(r[1]), safe_str(r[2]), safe_str(r[3]), safe_str(r[4])
@@ -674,9 +721,9 @@ class RdbToGraphService:
 
             # 5-4. owns_phone 강화 (TB_TELNO_JOIN 기반, 가입자명↔인물 조인)
             cur.execute("""
-                SELECT J.TELNO, P.PRSN_ID
-                FROM TB_TELNO_JOIN J
-                JOIN TB_PRSN P ON P.KORN_FLNM = J.JOIN_PSNNM
+                SELECT J.telno, J.prsn_id
+                FROM tb_telno_join J
+                WHERE J.prsn_id IS NOT NULL AND J.telno IS NOT NULL
             """)
             rows = cur.fetchall()
             for r in rows:
@@ -690,10 +737,10 @@ class RdbToGraphService:
 
             # 5-5. has_account 강화 (TB_FIN_BACNT.DPSTR_NM ↔ TB_PRSN.KORN_FLNM 조인)
             cur.execute("""
-                SELECT B.BACNT_NO, P.PRSN_ID
-                FROM TB_FIN_BACNT B
-                JOIN TB_PRSN P ON P.KORN_FLNM = B.DPSTR_NM
-                WHERE B.DPSTR_NM IS NOT NULL AND B.DPSTR_NM != ''
+                SELECT B.bacnt_no, P.prsn_id
+                FROM tb_fin_bacnt B
+                JOIN tb_prsn P ON P.korn_flnm = B.dpstr
+                WHERE B.dpstr IS NOT NULL AND B.dpstr != ''
             """)
             rows = cur.fetchall()
             for r in rows:
@@ -707,13 +754,18 @@ class RdbToGraphService:
 
             # 5-6. used_ip + performed_by (TB_SYS_LGN_EVT.USER_ID ↔ TB_PRSN 조인)
             #      Person → vt_ip (used_ip), Person → vt_access (performed_by)
-            cur.execute("""
-                SELECT DISTINCT E.LGN_SN, E.CNNT_IP_ADDR, P.PRSN_ID
-                FROM TB_SYS_LGN_EVT E
-                JOIN TB_PRSN P ON P.KORN_FLNM = E.USER_ID
-                WHERE E.CNNT_IP_ADDR IS NOT NULL AND E.CNNT_IP_ADDR != ''
-            """)
-            rows = cur.fetchall()
+            try:
+                cur.execute("""
+                    SELECT DISTINCT E.LGN_SN, E.CNNT_IP_ADDR, P.PRSN_ID
+                    FROM TB_SYS_LGN_EVT E
+                    JOIN TB_PRSN P ON P.KORN_FLNM = E.USER_ID
+                    WHERE E.CNNT_IP_ADDR IS NOT NULL AND E.CNNT_IP_ADDR != ''
+                """)
+                rows = cur.fetchall()
+            except Exception:
+                conn.rollback(); rows = []
+                try: cur.execute(f'SET search_path = "{source_schema}", public;'); conn.commit()
+                except Exception: conn.rollback()
             for r in rows:
                 try:
                     lgn_sn, ip_addr, pid = safe_str(r[0]), safe_str(r[1]), safe_str(r[2])
@@ -729,9 +781,14 @@ class RdbToGraphService:
             # ─── P2 확장: Phase 4 ───────────────────────────────
             logger.info(f"\n🌐 Phase 4: P2 위치/차량/웹 도메인")
 
-            # 6-1. 차량 (TB_VHCL_MST) → vt_vhcl + owns_vehicle 엣지
-            cur.execute("SELECT VHCLNO, CARMDL_NM, OWNR_NM FROM TB_VHCL_MST")
-            rows = cur.fetchall()
+            # 6-1. 차량 (TB_VHCL_MST) — test_v40 미존재시 skip
+            try:
+                cur.execute("SELECT VHCLNO, CARMDL_NM, OWNR_NM FROM TB_VHCL_MST")
+                rows = cur.fetchall()
+            except Exception:
+                conn.rollback(); rows = []
+                try: cur.execute(f'SET search_path = "{source_schema}", public;'); conn.commit()
+                except Exception: conn.rollback()
             for r in rows:
                 try:
                     vno, model, owner = safe_str(r[0]), safe_str(r[1]), safe_str(r[2])
@@ -745,9 +802,14 @@ class RdbToGraphService:
                 except: pass
             conn.commit()
 
-            # 6-2. 기지국 위치 (TB_GEO_MBL_LOC_EVT) → vt_movement (mov_type='cell_tower')
-            cur.execute("SELECT LOC_EVT_SN, TELNO, BSST_LAT, BSST_LOT, OCCRN_DT, EVT_TYP_NM FROM TB_GEO_MBL_LOC_EVT")
-            rows = cur.fetchall()
+            # 6-2. 기지국 위치 (TB_GEO_MBL_LOC_EVT) — test_v40 미존재시 skip
+            try:
+                cur.execute("SELECT LOC_EVT_SN, TELNO, BSST_LAT, BSST_LOT, OCCRN_DT, EVT_TYP_NM FROM TB_GEO_MBL_LOC_EVT")
+                rows = cur.fetchall()
+            except Exception:
+                conn.rollback(); rows = []
+                try: cur.execute(f'SET search_path = "{source_schema}", public;'); conn.commit()
+                except Exception: conn.rollback()
             for r in rows:
                 try:
                     eid, telno = safe_str(r[0]), safe_str(r[1])
@@ -762,9 +824,14 @@ class RdbToGraphService:
                 except: pass
             conn.commit()
 
-            # 6-3. LPR 인식 (TB_VHCL_LPR_EVT) → vt_movement (mov_type='lpr')
-            cur.execute("SELECT RCGN_SN, VHCLNO, RCGN_DT, LAT, LOT, INST_LOC_NM FROM TB_VHCL_LPR_EVT")
-            rows = cur.fetchall()
+            # 6-3. LPR 인식 (TB_VHCL_LPR_EVT) — test_v40 미존재시 skip
+            try:
+                cur.execute("SELECT RCGN_SN, VHCLNO, RCGN_DT, LAT, LOT, INST_LOC_NM FROM TB_VHCL_LPR_EVT")
+                rows = cur.fetchall()
+            except Exception:
+                conn.rollback(); rows = []
+                try: cur.execute(f'SET search_path = "{source_schema}", public;'); conn.commit()
+                except Exception: conn.rollback()
             for r in rows:
                 try:
                     eid, vno = safe_str(r[0]), safe_str(r[1])
@@ -779,9 +846,14 @@ class RdbToGraphService:
                 except: pass
             conn.commit()
 
-            # 6-4. 웹 도메인 (TB_WEB_DMN) → vt_site
-            cur.execute("SELECT DMN_ADDR, IP_ADDR FROM TB_WEB_DMN")
-            rows = cur.fetchall()
+            # 6-4. 웹 도메인 (TB_WEB_DMN) — test_v40 미존재시 skip
+            try:
+                cur.execute("SELECT DMN_ADDR, IP_ADDR FROM TB_WEB_DMN")
+                rows = cur.fetchall()
+            except Exception:
+                conn.rollback(); rows = []
+                try: cur.execute(f'SET search_path = "{source_schema}", public;'); conn.commit()
+                except Exception: conn.rollback()
             for r in rows:
                 try:
                     dmn, ip = safe_str(r[0]), safe_str(r[1])
@@ -791,9 +863,14 @@ class RdbToGraphService:
                 except: pass
             conn.commit()
 
-            # 6-5. 디지털 파일 (TB_DGTL_FILE_INVNT) → vt_file
-            cur.execute("SELECT FILE_SN, FILE_NM, FILE_EXTSN_NM, HASH_VAL FROM TB_DGTL_FILE_INVNT")
-            rows = cur.fetchall()
+            # 6-5. 디지털 파일 (TB_DGTL_FILE_INVNT) — test_v40 미존재시 skip
+            try:
+                cur.execute("SELECT FILE_SN, FILE_NM, FILE_EXTSN_NM, HASH_VAL FROM TB_DGTL_FILE_INVNT")
+                rows = cur.fetchall()
+            except Exception:
+                conn.rollback(); rows = []
+                try: cur.execute(f'SET search_path = "{source_schema}", public;'); conn.commit()
+                except Exception: conn.rollback()
             for r in rows:
                 try:
                     fid, fname, fext, fhash = safe_str(r[0]), safe_str(r[1]), safe_str(r[2]), safe_str(r[3])
@@ -806,26 +883,31 @@ class RdbToGraphService:
             # ─── Enhancement: Phase 5 — 자동 추론 엣지 ───────────────
             logger.info(f"\n🧠 Phase 5: 자동 추론 엣지 (교차 도메인)")
 
-            # 7-1. related_case: 동일 증거(계좌/전화) 공유 사건 연결
-            cur.execute("""
-                SELECT DISTINCT c1.flnm, c2.flnm
-                FROM (
-                    SELECT substring(R1.DAM_CN from '사건참조:(.*)') as flnm, R1.SUSPCT_BACNT_NO as evidence
-                    FROM TB_FRD_VCTM_RPT R1 WHERE R1.SUSPCT_BACNT_NO IS NOT NULL AND R1.SUSPCT_BACNT_NO != ''
-                    UNION
-                    SELECT substring(R2.DAM_CN from '사건참조:(.*)'), R2.SUSPCT_TELNO
-                    FROM TB_FRD_VCTM_RPT R2 WHERE R2.SUSPCT_TELNO IS NOT NULL AND R2.SUSPCT_TELNO != ''
-                ) c1
-                JOIN (
-                    SELECT substring(R3.DAM_CN from '사건참조:(.*)') as flnm, R3.SUSPCT_BACNT_NO as evidence
-                    FROM TB_FRD_VCTM_RPT R3 WHERE R3.SUSPCT_BACNT_NO IS NOT NULL AND R3.SUSPCT_BACNT_NO != ''
-                    UNION
-                    SELECT substring(R4.DAM_CN from '사건참조:(.*)'), R4.SUSPCT_TELNO
-                    FROM TB_FRD_VCTM_RPT R4 WHERE R4.SUSPCT_TELNO IS NOT NULL AND R4.SUSPCT_TELNO != ''
-                ) c2 ON c1.evidence = c2.evidence AND c1.flnm != c2.flnm
-                LIMIT 500
-            """)
-            rows = cur.fetchall()
+            # 7-1. related_case: TB_FRD_VCTM_RPT 미존재시 skip
+            try:
+                cur.execute("""
+                    SELECT DISTINCT c1.flnm, c2.flnm
+                    FROM (
+                        SELECT substring(R1.DAM_CN from '사건참조:(.*)') as flnm, R1.SUSPCT_BACNT_NO as evidence
+                        FROM TB_FRD_VCTM_RPT R1 WHERE R1.SUSPCT_BACNT_NO IS NOT NULL AND R1.SUSPCT_BACNT_NO != ''
+                        UNION
+                        SELECT substring(R2.DAM_CN from '사건참조:(.*)'), R2.SUSPCT_TELNO
+                        FROM TB_FRD_VCTM_RPT R2 WHERE R2.SUSPCT_TELNO IS NOT NULL AND R2.SUSPCT_TELNO != ''
+                    ) c1
+                    JOIN (
+                        SELECT substring(R3.DAM_CN from '사건참조:(.*)') as flnm, R3.SUSPCT_BACNT_NO as evidence
+                        FROM TB_FRD_VCTM_RPT R3 WHERE R3.SUSPCT_BACNT_NO IS NOT NULL AND R3.SUSPCT_BACNT_NO != ''
+                        UNION
+                        SELECT substring(R4.DAM_CN from '사건참조:(.*)'), R4.SUSPCT_TELNO
+                        FROM TB_FRD_VCTM_RPT R4 WHERE R4.SUSPCT_TELNO IS NOT NULL AND R4.SUSPCT_TELNO != ''
+                    ) c2 ON c1.evidence = c2.evidence AND c1.flnm != c2.flnm
+                    LIMIT 500
+                """)
+                rows = cur.fetchall()
+            except Exception:
+                conn.rollback(); rows = []
+                try: cur.execute(f'SET search_path = "{source_schema}", public;'); conn.commit()
+                except Exception: conn.rollback()
             for r in rows:
                 try:
                     case1, case2 = safe_str(r[0]), safe_str(r[1])
@@ -835,14 +917,19 @@ class RdbToGraphService:
                 except: pass
             conn.commit()
 
-            # 7-2. belongs_to: 계좌 → 기관 연결 (TB_FIN_BACNT.INST_ID)
-            cur.execute("""
-                SELECT B.BACNT_NO, I.INST_ID
-                FROM TB_FIN_BACNT B
-                JOIN TB_INST I ON B.INST_ID = I.INST_ID
-                WHERE B.INST_ID IS NOT NULL
-            """)
-            rows = cur.fetchall()
+            # 7-2. belongs_to: 계좌 → 기관 (test_v40 미존재시 skip)
+            try:
+                cur.execute("""
+                    SELECT B.BACNT_NO, I.INST_ID
+                    FROM TB_FIN_BACNT B
+                    JOIN TB_INST I ON B.INST_ID = I.INST_ID
+                    WHERE B.INST_ID IS NOT NULL
+                """)
+                rows = cur.fetchall()
+            except Exception:
+                conn.rollback(); rows = []
+                try: cur.execute(f'SET search_path = "{source_schema}", public;'); conn.commit()
+                except Exception: conn.rollback()
             for r in rows:
                 try:
                     actno, inst_id = safe_str(r[0]), safe_str(r[1])
@@ -852,13 +939,18 @@ class RdbToGraphService:
                 except: pass
             conn.commit()
 
-            # 7-3. resolves_to: Site → IP (v3 방향: vt_site → vt_ip)
-            cur.execute("""
-                SELECT D.IP_ADDR, D.DMN_ADDR
-                FROM TB_WEB_DMN D
-                WHERE D.IP_ADDR IS NOT NULL AND D.IP_ADDR != ''
-            """)
-            rows = cur.fetchall()
+            # 7-3. resolves_to: Site → IP (test_v40 미존재시 skip)
+            try:
+                cur.execute("""
+                    SELECT D.IP_ADDR, D.DMN_ADDR
+                    FROM TB_WEB_DMN D
+                    WHERE D.IP_ADDR IS NOT NULL AND D.IP_ADDR != ''
+                """)
+                rows = cur.fetchall()
+            except Exception:
+                conn.rollback(); rows = []
+                try: cur.execute(f'SET search_path = "{source_schema}", public;'); conn.commit()
+                except Exception: conn.rollback()
             for r in rows:
                 try:
                     ip, dmn = safe_str(r[0]), safe_str(r[1])
