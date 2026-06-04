@@ -1477,6 +1477,11 @@
         <button class="nav-tab active" onclick="switchTab('graph')" id="tab-graph">
             <i class="fas fa-project-diagram"></i> 지식그래프 탐색
         </button>
+        <button class="nav-tab" id="tab-v40-pipeline"
+            onclick="(function(){var p=document.getElementById('v40PipelinePanel'); var open=p.style.display==='block'; p.style.display=open?'none':'block'; if(!open){var g=document.getElementById('v40PipelineGraphName'); if(g){var ts=new Date(); var suffix=(ts.getMonth()+1)+''+ts.getDate()+'_'+ts.getHours()+ts.getMinutes(); g.value='v40_demo_'+suffix; g.removeAttribute('readonly'); g.removeAttribute('disabled'); setTimeout(function(){g.focus(); g.select();},50);}}})()"
+            style="background:linear-gradient(135deg,#0984e3,#74b9ff); color:white; border-color:#0984e3;">
+            <i class="fas fa-layer-group"></i> V4.0 L1→L5 파이프라인
+        </button>
         <button class="nav-tab" onclick="switchTab('etl')" id="tab-etl">
             <i class="fas fa-file-import"></i> 데이터 적재
         </button>
@@ -1565,15 +1570,90 @@
                 </button>
             </div>
 
+            <!-- V4.0 5계층 통합 마법사 (L1→L5) — 상단 탭바 버튼으로 토글 -->
+            <div id="v40PipelinePanel"
+                style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); z-index:9999; background:rgba(20,26,46,0.99); border:2px solid #0984e3; border-radius:12px; padding:20px; width:720px; max-width:92vw; max-height:88vh; overflow-y:auto; box-shadow:0 12px 48px rgba(0,0,0,0.7); color:#dfe6e9; box-sizing:border-box;">
+
+                <!-- 헤더 -->
+                <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:16px; border-bottom:1px solid rgba(116,185,255,0.3); padding-bottom:12px;">
+                    <div>
+                        <div style="font-size:15px; color:#74b9ff; font-weight:bold; margin-bottom:4px;">
+                            <i class="fas fa-layer-group"></i> V4.0 5계층 통합 파이프라인
+                        </div>
+                        <div style="font-size:11px; color:#8e9abf;">
+                            L1 수집 → L2 표준화 → L3 매핑 → L4 그래프 → L5 시각화
+                        </div>
+                    </div>
+                    <span onclick="document.getElementById('v40PipelinePanel').style.display='none'"
+                        style="cursor:pointer; color:white; font-size:20px; padding:2px 10px; background:rgba(255,255,255,0.1); border-radius:4px; line-height:1; flex-shrink:0;">×</span>
+                </div>
+
+                <!-- 입력 폼 -->
+                <div style="margin-bottom:16px;">
+                    <div style="margin-bottom:12px;">
+                        <label style="display:block; font-size:11px; color:#74b9ff; font-weight:bold; margin-bottom:6px;">
+                            📁 CSV 파일 (다중 선택 가능)
+                        </label>
+                        <input type="file" id="v40PipelineFiles" accept=".csv" multiple
+                            style="display:block; width:100%; background:#253154; color:white; padding:8px; border:1px solid rgba(255,255,255,0.12); border-radius:4px; box-sizing:border-box;">
+                        <div id="v40PipelineFileList" style="font-size:10px; color:#8e9abf; margin-top:6px; min-height:16px;"></div>
+                    </div>
+                    <div style="display:grid; grid-template-columns: 1.5fr 1fr; gap:12px;">
+                        <div>
+                            <label style="display:block; font-size:11px; color:#74b9ff; font-weight:bold; margin-bottom:6px;">
+                                🎯 그래프 이름
+                            </label>
+                            <input type="text" id="v40PipelineGraphName" placeholder="예: my_v40_demo (자동 부여됨)" autocomplete="off"
+                                style="display:block; width:100%; background:#253154; color:white; padding:8px; border:1px solid rgba(255,255,255,0.12); border-radius:4px; box-sizing:border-box; font-family:inherit; user-select:text; -webkit-user-select:text; pointer-events:auto;">
+                            <div style="font-size:9px; color:#8e9abf; margin-top:4px;">패널 열 때마다 타임스탬프 접미사 자동 부여 — 자유롭게 편집 가능</div>
+                        </div>
+                        <div>
+                            <label style="display:block; font-size:11px; color:#74b9ff; font-weight:bold; margin-bottom:6px;">
+                                🏷 SOURCE_DOMAIN
+                            </label>
+                            <select id="v40PipelineSourceDomain"
+                                style="display:block; width:100%; background:#253154; color:white; padding:8px; border:1px solid rgba(255,255,255,0.12); border-radius:4px; box-sizing:border-box;">
+                                <option value="KICS">KICS (T1 공식)</option>
+                                <option value="OSINT">OSINT (T4 웹수집)</option>
+                                <option value="DIGITAL">DIGITAL (T2 수사)</option>
+                                <option value="EXT">EXT (T2 수사)</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <button id="v40PipelineRunBtn" onclick="runV40Pipeline()"
+                    style="display:block; width:100%; padding:12px; background:linear-gradient(135deg,#00b894,#55efc4); color:#0d1f1c; border:none; border-radius:6px; font-size:13px; font-weight:bold; cursor:pointer; margin-bottom:16px; box-sizing:border-box;">
+                    🚀 5계층 자동 실행 (L1 → L5)
+                </button>
+
+                <!-- 진행 스테퍼 -->
+                <div id="v40PipelineStepper" style="margin-bottom:14px;">
+                    <div style="display:flex; gap:6px; align-items:center;">
+                        <div class="v40-step" data-step="L1" style="flex:1; min-width:0; padding:8px 4px; background:#253154; color:#636e72; text-align:center; border-radius:6px; font-size:11px; font-weight:bold; white-space:nowrap;">L1 수집</div>
+                        <i class="fas fa-chevron-right" style="color:#444; font-size:10px;"></i>
+                        <div class="v40-step" data-step="L2" style="flex:1; min-width:0; padding:8px 4px; background:#253154; color:#636e72; text-align:center; border-radius:6px; font-size:11px; font-weight:bold; white-space:nowrap;">L2 표준화</div>
+                        <i class="fas fa-chevron-right" style="color:#444; font-size:10px;"></i>
+                        <div class="v40-step" data-step="L3" style="flex:1; min-width:0; padding:8px 4px; background:#253154; color:#636e72; text-align:center; border-radius:6px; font-size:11px; font-weight:bold; white-space:nowrap;">L3 매핑</div>
+                        <i class="fas fa-chevron-right" style="color:#444; font-size:10px;"></i>
+                        <div class="v40-step" data-step="L4" style="flex:1; min-width:0; padding:8px 4px; background:#253154; color:#636e72; text-align:center; border-radius:6px; font-size:11px; font-weight:bold; white-space:nowrap;">L4 그래프</div>
+                        <i class="fas fa-chevron-right" style="color:#444; font-size:10px;"></i>
+                        <div class="v40-step" data-step="L5" style="flex:1; min-width:0; padding:8px 4px; background:#253154; color:#636e72; text-align:center; border-radius:6px; font-size:11px; font-weight:bold; white-space:nowrap;">L5 시각화</div>
+                    </div>
+                </div>
+
+                <!-- 결과 표시 -->
+                <div id="v40PipelineResult" style="font-size:11px; line-height:1.6;"></div>
+            </div>
             <!-- V4.0 스칼라 결과 패널 (Phase 4.6) — RETURN n.prop 패턴 결과 표시 -->
             <div id="v40ScalarPanel"
-                style="display:none; position:absolute; bottom:16px; left:16px; z-index:9; background:rgba(26,32,53,0.96); border:1px solid rgba(116,185,255,0.35); border-radius:8px; padding:10px; min-width:280px; max-width:480px; max-height:280px; overflow:auto; box-shadow:0 4px 16px rgba(0,0,0,0.4);">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                    <div style="font-size:11px; color:#74b9ff; font-weight:bold;">
-                        <i class="fas fa-table"></i> V4.0 스칼라 결과
+                style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); z-index:9999; background:rgba(26,32,53,0.98); border:2px solid #74b9ff; border-radius:8px; padding:16px; min-width:360px; max-width:640px; max-height:480px; overflow:auto; box-shadow:0 8px 32px rgba(0,0,0,0.6);">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; border-bottom:1px solid rgba(116,185,255,0.3); padding-bottom:8px;">
+                    <div style="font-size:13px; color:#74b9ff; font-weight:bold;">
+                        <i class="fas fa-table"></i> V4.0 집계/스칼라 결과
                     </div>
                     <span onclick="document.getElementById('v40ScalarPanel').style.display='none'"
-                        style="cursor:pointer; color:#8e9abf; font-size:10px; padding:0 4px;">×</span>
+                        style="cursor:pointer; color:#fff; font-size:16px; padding:0 8px; background:rgba(255,255,255,0.1); border-radius:4px;">×</span>
                 </div>
                 <div id="v40ScalarBody"></div>
             </div>
@@ -2529,9 +2609,17 @@
         async function runV40Workflow(name) {
             if (!window.V40_WORKFLOWS || !window.V40_WORKFLOWS[name]) return;
             const wf = window.V40_WORKFLOWS[name];
-            // 현재 선택된 그래프 가져오기 (그래프 셀렉터 또는 기본값)
-            const sel = document.getElementById('graphSelector') || document.getElementById('graphList');
-            const graphPath = (sel && sel.value) || window.currentGraphPath || 'tccop_v40_demo';
+            // 현재 시각화 중인 그래프 가져오기 (targetGraphInfo = 메인 셀렉터)
+            const sel = document.getElementById('targetGraphInfo')
+                     || document.getElementById('graphSelect')
+                     || document.getElementById('graphSelector')
+                     || document.getElementById('graphList');
+            const rawVal = (sel && sel.value) || window.currentGraphPath || '';
+            // "schema/graph" 형식이면 마지막 토큰만 사용
+            const graphPath = (rawVal.includes('/') ? rawVal.split('/').pop() : rawVal) || 'tccop_v40_demo';
+            if (!sel || !sel.value) {
+                showToast?.(`⚠ 그래프 선택 안됨 — 기본값 ${graphPath} 사용`, 'warning');
+            }
             try {
                 showToast?.(`▶ 워크플로우 실행 중: ${wf.description || name}…`, 'info');
                 const res = await fetch(`/api/v1/workflows/${encodeURIComponent(name)}/execute?graph_path=${encodeURIComponent(graphPath)}&limit=300`);
@@ -2625,10 +2713,138 @@
         (function hookCyAddForScalar() {
             const origAdd = cy.add.bind(cy);
             cy.add = function(arg) {
-                try { if (Array.isArray(arg)) renderV40Scalars(arg); } catch (e) {}
+                try {
+                    if (Array.isArray(arg)) {
+                        // scalar 원소는 별도 패널 렌더 → cytoscape 에는 nodes/edges 만 전달
+                        renderV40Scalars(arg);
+                        const filtered = arg.filter(e => e && (e.group === 'nodes' || e.group === 'edges'));
+                        return origAdd(filtered);
+                    }
+                } catch (e) { console.warn('[V4.0 scalar hook]', e); }
                 return origAdd(arg);
             };
         })();
+
+        // ============================================================
+        // V4.0 L1→L5 통합 파이프라인 (학습 중 신규)
+        // ============================================================
+        function setV40Step(step, status) {
+            // status: 'pending' / 'running' / 'done' / 'error'
+            const el = document.querySelector(`.v40-step[data-step="${step}"]`);
+            if (!el) return;
+            const COLORS = {
+                pending: { bg: '#253154', fg: '#636e72' },
+                running: { bg: '#fdcb6e', fg: '#1a2035' },
+                done:    { bg: '#00b894', fg: 'white' },
+                error:   { bg: '#d63031', fg: 'white' },
+            };
+            const c = COLORS[status] || COLORS.pending;
+            el.style.background = c.bg;
+            el.style.color = c.fg;
+        }
+
+        // 파일 선택 시 목록 표시
+        document.addEventListener('DOMContentLoaded', () => {
+            const fileInput = document.getElementById('v40PipelineFiles');
+            if (fileInput) {
+                fileInput.addEventListener('change', () => {
+                    const list = document.getElementById('v40PipelineFileList');
+                    const files = Array.from(fileInput.files);
+                    list.innerHTML = `${files.length}개 파일 선택: ` +
+                        files.map(f => `<span style="background:#253154; padding:1px 6px; border-radius:3px; margin-right:4px;">${f.name} (${(f.size/1024).toFixed(1)}KB)</span>`).join('');
+                });
+            }
+        });
+
+        async function runV40Pipeline() {
+            const files = document.getElementById('v40PipelineFiles').files;
+            const graphName = document.getElementById('v40PipelineGraphName').value.trim();
+            const sourceDomain = document.getElementById('v40PipelineSourceDomain').value;
+            const btn = document.getElementById('v40PipelineRunBtn');
+            const resultDiv = document.getElementById('v40PipelineResult');
+
+            if (!files.length) { alert('CSV 파일을 1개 이상 선택하세요'); return; }
+            if (!graphName) { alert('그래프 이름을 입력하세요'); return; }
+
+            // 스테퍼 초기화
+            ['L1','L2','L3','L4','L5'].forEach(s => setV40Step(s, 'pending'));
+            resultDiv.innerHTML = '<div style="color:#fdcb6e;">⏳ 파이프라인 시작...</div>';
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 실행 중...';
+
+            // 모든 단계 동시 'running' (서버는 순차 처리, 클라이언트는 시각화)
+            setV40Step('L1', 'running');
+
+            const fd = new FormData();
+            for (const f of files) fd.append('files', f);
+            fd.append('graph_name', graphName);
+            fd.append('source_domain', sourceDomain);
+
+            try {
+                const res = await fetch('/api/v1/pipeline/csv_to_v40_graph', {
+                    method: 'POST', body: fd,
+                });
+                const data = await res.json();
+
+                if (data.status !== 'success') {
+                    ['L1','L2','L3','L4','L5'].forEach(s => setV40Step(s, 'error'));
+                    resultDiv.innerHTML = `<div style="color:#d63031;">❌ 실패: ${data.message || '오류'}</div>`;
+                    return;
+                }
+
+                // 각 계층 상태 업데이트
+                const L = data.layers || {};
+                setV40Step('L1', L.L1?.total_rows > 0 ? 'done' : 'error');
+                setV40Step('L2', (L.L2?.rdb_actual_total > 0 || L.L2?.total_inserted > 0) ? 'done' : 'error');
+                setV40Step('L3', 'done');  // 매핑 카탈로그는 항상 OK
+                setV40Step('L4', L.L4?.success ? 'done' : 'error');
+                setV40Step('L5', L.L4?.nodes_total > 0 ? 'done' : 'error');
+
+                // 결과 렌더
+                const html = `
+                    <div style="background:rgba(0,184,148,0.1); border:1px solid rgba(0,184,148,0.4); border-radius:6px; padding:10px;">
+                        <div style="color:#55efc4; font-weight:bold; margin-bottom:8px;">✅ 파이프라인 완료 — ${data.elapsed_sec}초</div>
+                        <table style="width:100%; font-size:11px;">
+                            <tr><td style="color:#74b9ff; padding:3px 0;">L1 수집</td><td>${L.L1?.files?.length || 0} 파일 / ${L.L1?.total_rows || 0} 행</td></tr>
+                            <tr><td style="color:#74b9ff;">L2 표준화 (test_v40)</td><td>RDB 적재: ${L.L2?.rdb_actual_total || L.L2?.total_inserted || 0} 행${L.L2?.rdb_actual ? ' (' + Object.entries(L.L2.rdb_actual).map(([k,v])=>`${k}:${v}`).join(', ') + ')' : ''}</td></tr>
+                            <tr><td style="color:#74b9ff;">L3 매핑</td><td>V4.0 SSOT — 25 노드 / 55 엣지 카탈로그 / 6 메타컬럼</td></tr>
+                            <tr><td style="color:#74b9ff;">L4 그래프 (${L.L4?.graph})</td><td><b>노드 ${L.L4?.nodes_total || 0} / 엣지 ${L.L4?.edges_total || 0}</b> (사건 ${L.L4?.cases || 0}, 인물 ${L.L4?.persons || 0}, 계좌 ${L.L4?.accounts || 0})</td></tr>
+                            <tr><td style="color:#74b9ff;">L5 시각화</td><td>${L.L5?.recommendations?.[0] || '그래프 셀렉터 전환'}</td></tr>
+                        </table>
+                        <button onclick="switchToV40Graph('${L.L4?.graph}')"
+                            style="margin-top:10px; width:100%; padding:8px; background:linear-gradient(135deg,#0984e3,#74b9ff); color:white; border:none; border-radius:6px; font-size:12px; font-weight:bold; cursor:pointer;">
+                            🎨 그래프 시각화로 전환 → ${L.L4?.graph}
+                        </button>
+                    </div>
+                `;
+                resultDiv.innerHTML = html;
+            } catch (e) {
+                ['L1','L2','L3','L4','L5'].forEach(s => setV40Step(s, 'error'));
+                resultDiv.innerHTML = `<div style="color:#d63031;">❌ 네트워크 오류: ${e.message}</div>`;
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '🚀 5계층 자동 실행 (L1 → L5)';
+            }
+        }
+
+        async function switchToV40Graph(graphName) {
+            if (!graphName) return;
+            // 그래프 셀렉터에 graphName 추가 후 선택
+            const sel = document.getElementById('targetGraphInfo');
+            if (sel) {
+                // 옵션에 없으면 추가
+                if (!Array.from(sel.options).some(o => o.value === graphName)) {
+                    const opt = document.createElement('option');
+                    opt.value = graphName; opt.text = graphName;
+                    sel.appendChild(opt);
+                }
+                sel.value = graphName;
+                if (typeof switchGraph === 'function') switchGraph();
+            }
+            // 패널 닫기
+            document.getElementById('v40PipelinePanel').style.display = 'none';
+            showToast?.(`✅ '${graphName}' 그래프로 전환됨`, 'success');
+        }
 
         // 페이지 로드 후 V4.0 SSOT 비동기 오버레이
         document.addEventListener('DOMContentLoaded', () => {
@@ -3253,13 +3469,24 @@
                         return;
                     }
 
-                    const els = preprocessElements(d.elements || []);
-                    if (els.length > 0) {
+                    // V4.0 — scalar 결과 별도 패널 렌더 (cy.add 안 가는 경로)
+                    const rawElements = d.elements || [];
+                    try { renderV40Scalars(rawElements); } catch (e) {}
+                    const scalarCount = rawElements.filter(e => e && e.group === 'scalar').length;
+
+                    const els = preprocessElements(rawElements);
+                    const visualEls = els.filter(e => e && (e.group === 'nodes' || e.group === 'edges'));
+
+                    if (visualEls.length > 0) {
                         cy.elements().remove();
-                        cy.add(els);
+                        cy.add(visualEls);
                         cy.layout({ name: 'dagre', rankDir: 'LR', nodeSep: 50, rankSep: 100, animate: true, fit: true }).run();
-                        const nodeCnt = els.filter(e => e.group === 'nodes').length;
-                        showToast(`✅ ${nodeCnt}개 노드 조회 완료`, "success");
+                        const nodeCnt = visualEls.filter(e => e.group === 'nodes').length;
+                        const scalarMsg = scalarCount > 0 ? ` (+ 스칼라 ${scalarCount}건)` : '';
+                        showToast(`✅ ${nodeCnt}개 노드 조회 완료${scalarMsg}`, "success");
+                    } else if (scalarCount > 0) {
+                        // 노드/엣지 없고 scalar 만 있는 경우 (집계 쿼리)
+                        showToast(`✅ 집계 결과 ${scalarCount}건 — 좌하단 스칼라 패널 확인`, "success");
                     } else {
                         const hints = d.hints || [];
                         if (hints.length > 0) {
