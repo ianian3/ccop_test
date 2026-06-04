@@ -1611,3 +1611,177 @@ def ontology_meta():
         "domain_usage": getattr(Ont, 'DOMAIN_USAGE', {}),
         "inference_rules": getattr(Ont, 'INFERENCE_RULES_V37', {}),
     }), 200
+
+
+# ============================================================
+# V4.0 L1→L5 통합 파이프라인 API (학습 진행 중 신규)
+# ============================================================
+@api_v1.route('/pipeline/csv_to_v40_graph', methods=['POST'])
+def pipeline_csv_to_v40_graph():
+    """L1(CSV 업로드) → L2(test_v40 RDB 적재) → L3(매핑) → L4(그래프) → L5(시각화) 통합 실행.
+
+    multipart/form-data:
+        file:           CSV 파일 (1개 또는 여러개 — 각 파일은 tbl_* 형식 권장)
+        graph_name:     생성할 그래프 이름 (예: my_pipeline_demo)
+        source_domain:  KICS / OSINT / DIGITAL / EXT (기본 KICS)
+        source_id:      (선택) 원천 시스템 레코드 ID
+
+    반환:
+        각 계층별 결과 + 통계 + 다음 행동 안내
+    """
+    import os, time
+    from app.services.rdb_service import RDBService
+    from app.services.rdb_to_graph_service import RdbToGraphService
+    from app.database import safe_set_graph_path
+    import psycopg2 as _pg2
+
+    t0 = time.time()
+    layer_results = {}
+
+    # ─── L1. CSV 수신 ───────────────────────────────────────
+    if 'file' not in request.files and 'files' not in request.files:
+        return jsonify({"status": "error", "message": "CSV 파일이 필요합니다 (file 또는 files)"}), 400
+    files = request.files.getlist('files') or [request.files['file']]
+    graph_name = (request.form.get('graph_name') or 'v40_pipeline_demo').strip()
+    source_domain = (request.form.get('source_domain') or 'KICS').upper()
+    source_id = request.form.get('source_id') or None
+
+    if source_domain not in {'KICS', 'OSINT', 'DIGITAL', 'EXT',
+                              'INVESTIGATION', 'PARTNER', 'INFERENCE'}:
+        return jsonify({"status": "error", "message": f"Invalid source_domain: {source_domain}"}), 400
+
+    layer_results['L1'] = {
+        'layer': 'L1 수집',
+        'files': [],
+        'total_rows': 0,
+    }
+    temp_paths = []
+    try:
+        for f in files:
+            if not f or not f.filename: continue
+            temp_path = f"/tmp/{f.filename}"
+            f.save(temp_path)
+            temp_paths.append((temp_path, f.filename))
+            # 행수 카운트
+            try:
+                with open(temp_path) as fp:
+                    row_count = sum(1 for _ in fp) - 1
+            except Exception: row_count = -1
+            layer_results['L1']['files'].append({'name': f.filename, 'rows': row_count})
+            if row_count > 0: layer_results['L1']['total_rows'] += row_count
+
+        # ─── L2. test_v40 RDB 적재 ─────────────────────────
+        target_schema = 'test_v40'
+        current_app.config['_V40_TARGET_SCHEMA'] = target_schema
+        layer_results['L2'] = {'layer': 'L2 표준화 (test_v40 RDB)', 'tables': {}, 'total_inserted': 0}
+
+        for temp_path, fname in temp_paths:
+            try:
+                if fname.lower().startswith('tbl_'):
+                    success, result = RDBService.import_predefined_schema_to_rdb(
+                        temp_path, fname, clear_existing=False,
+                        source_domain=source_domain, source_id=source_id,
+                    )
+                else:
+                    success, result = RDBService.import_csv_to_rdb(
+                        temp_path, clear_existing=False,
+                        source_domain=source_domain, source_id=source_id,
+                    )
+                if success:
+                    for k, v in (result.items() if isinstance(result, dict) else []):
+                        if isinstance(v, int) and v > 0:
+                            layer_results['L2']['tables'][k] = layer_results['L2']['tables'].get(k, 0) + v
+                            layer_results['L2']['total_inserted'] += v
+            except Exception as e:
+                current_app.logger.warning(f"L2 적재 실패 {fname}: {e}")
+
+        # 적재 후 test_v40 실제 row count 직접 검증 (정확한 통계)
+        try:
+            verify_conn = _pg2.connect(**current_app.config['DB_CONFIG'])
+            verify_conn.autocommit = True
+            verify_cur = verify_conn.cursor()
+            l2_actual = {}
+            for tbl in ['tb_prsn','tb_fin_bacnt','tb_telno_mst','tb_fin_bacnt_dlng',
+                        'tb_telno_call_dtl','tb_fin_extrc_bacnt','tb_telno_join',
+                        'tb_incdnt_mst','tb_inst']:
+                try:
+                    verify_cur.execute(f'SELECT COUNT(*) FROM test_v40."{tbl}";')
+                    cnt = verify_cur.fetchone()[0]
+                    if cnt > 0: l2_actual[tbl] = cnt
+                except Exception: pass
+            verify_cur.close(); verify_conn.close()
+            if l2_actual:
+                layer_results['L2']['rdb_actual'] = l2_actual
+                layer_results['L2']['rdb_actual_total'] = sum(l2_actual.values())
+        except Exception as e:
+            current_app.logger.warning(f"L2 verify 실패: {e}")
+
+        # ─── L3. 매핑 카탈로그 (V4.0 SSOT 참조) ────────────
+        from app.services.ontology_service import KICSCrimeDomainOntology as Ont
+        # 적재된 RDB 테이블 → V4.0 노드/엣지 라벨 매핑 카탈로그
+        L2_TO_V40 = {
+            'cases': 'vt_case', 'suspects': 'vt_psn', 'accounts': 'vt_bacnt',
+            'phones': 'vt_telno', 'transfers': 'vt_transfer', 'calls': 'vt_call',
+        }
+        v40_labels = sorted(set(L2_TO_V40[k] for k in layer_results['L2']['tables']
+                                 if k in L2_TO_V40))
+        layer_results['L3'] = {
+            'layer': 'L3 매핑 (V4.0 SSOT)',
+            'expected_v40_labels': v40_labels,
+            'visual_style_count': len(Ont.VISUAL_STYLE_V40),
+            'edge_style_count': len(Ont.EDGE_STYLE_V40),
+            'meta_columns': ['id_format', 'source_domain', 'reliability_tier',
+                              'source_id', 'collected_at', 'rec_created'],
+        }
+
+        # ─── L4. 그래프 변환 ─────────────────────────────
+        layer_results['L4'] = {'layer': 'L4 그래프 (AgensGraph)', 'graph': graph_name}
+        try:
+            success, stats = RdbToGraphService.transfer_data(graph_name)
+            if success and isinstance(stats, dict):
+                layer_results['L4'].update({
+                    'success': True,
+                    'nodes_total': stats.get('nodes', 0),
+                    'edges_total': stats.get('edges', 0),
+                    'cases': stats.get('cases', 0),
+                    'persons': stats.get('persons', 0),
+                    'accounts': stats.get('accounts', 0),
+                    'phones': stats.get('phones', 0),
+                    'transfers': stats.get('transfers', 0),
+                    'calls': stats.get('calls', 0),
+                    'relations': stats.get('relations', 0),
+                })
+            else:
+                layer_results['L4']['success'] = False
+                layer_results['L4']['error'] = str(stats)[:200]
+        except Exception as e:
+            layer_results['L4']['success'] = False
+            layer_results['L4']['error'] = str(e)[:200]
+
+        # ─── L5. 시각화 안내 ─────────────────────────────
+        layer_results['L5'] = {
+            'layer': 'L5 시각화 (Cytoscape)',
+            'graph_url': f'/?graph={graph_name}',
+            'recommendations': [
+                f'그래프 셀렉터에서 "{graph_name}" 선택',
+                '자연어 질의: "사건의 피의자 보여줘"',
+                '워크플로우 6종 + 레이아웃 5종 시연 가능',
+            ],
+        }
+
+    finally:
+        for tp, _ in temp_paths:
+            if os.path.exists(tp):
+                try: os.remove(tp)
+                except: pass
+
+    elapsed = time.time() - t0
+    return jsonify({
+        'status': 'success',
+        'pipeline': 'V4.0 L1→L5',
+        'graph_name': graph_name,
+        'source_domain': source_domain,
+        'target_schema': 'test_v40',
+        'elapsed_sec': round(elapsed, 2),
+        'layers': layer_results,
+    }), 200
