@@ -1,0 +1,212 @@
+{
+  "version": "v1.0",
+  "description": "Few-shot dynamic prompting examples for T2C Cypher generation. Curated gold standards per weak category.",
+  "categories": {
+    "1hop_event": {
+      "description": "Single edge event queries: caller/callee, from/to_account, transferred_to, accessed_from/to",
+      "examples": [
+        {
+          "question": "전화번호 010-1234-5678의 발신 통화 내역 보여줘",
+          "cypher": "MATCH (t:vt_telno {telno: '010-1234-5678'})-[:caller]->(c:vt_call) RETURN t, c"
+        },
+        {
+          "question": "전화번호 010-1234-5678의 수신 통화 내역",
+          "cypher": "MATCH (c:vt_call)-[:callee]->(t:vt_telno {telno: '010-1234-5678'}) RETURN c, t"
+        },
+        {
+          "question": "계좌 1002-110-100001에서 출금된 이체",
+          "cypher": "MATCH (b:vt_bacnt {account_no: '1002-110-100001'})-[:from_account]->(t:vt_transfer) RETURN b, t"
+        },
+        {
+          "question": "계좌 1002-110-100001으로 입금된 이체",
+          "cypher": "MATCH (t:vt_transfer)-[:to_account]->(b:vt_bacnt {account_no: '1002-110-100001'}) RETURN t, b"
+        },
+        {
+          "question": "100만원 이상 출금 이체 내역",
+          "cypher": "MATCH (b:vt_bacnt)-[:from_account]->(t:vt_transfer) WHERE t.amount >= 1000000 RETURN b, t"
+        },
+        {
+          "question": "계좌 간 직접 이체 (transferred_to)",
+          "cypher": "MATCH (b1:vt_bacnt)-[:transferred_to]->(b2:vt_bacnt) RETURN b1, b2"
+        },
+        {
+          "question": "IP 192.168.1.10의 접속 내역",
+          "cypher": "MATCH (ip:vt_ip {ip_addr: '192.168.1.10'})-[:accessed_from]->(a:vt_access) RETURN ip, a"
+        },
+        {
+          "question": "악성 사이트 접속 IP",
+          "cypher": "MATCH (a:vt_access)-[:accessed_to]->(s:vt_site {is_malicious: true}) RETURN a, s"
+        }
+      ]
+    },
+    "1hop_object": {
+      "description": "Object-to-Object relations: hosts, contains_file, communicated_with, belongs_to, used_for, targets",
+      "examples": [
+        {
+          "question": "IP 192.168.1.10에 호스팅된 사이트",
+          "cypher": "MATCH (ip:vt_ip {ip_addr: '192.168.1.10'})-[:hosts]->(s:vt_site) RETURN ip, s"
+        },
+        {
+          "question": "피싱 사이트 호스팅 IP 역추적",
+          "cypher": "MATCH (ip:vt_ip)-[:hosts]->(s:vt_site {is_phishing: true}) RETURN ip, s"
+        },
+        {
+          "question": "사이트에 포함된 악성 파일",
+          "cypher": "MATCH (s:vt_site)-[:contains_file]->(f:vt_file {is_malicious: true}) RETURN s, f"
+        },
+        {
+          "question": "메시지 첨부 악성 파일",
+          "cypher": "MATCH (m:vt_msg)-[:contains_file]->(f:vt_file {is_malicious: true}) RETURN m, f"
+        },
+        {
+          "question": "IP끼리 직접 통신 (C2 추적)",
+          "cypher": "MATCH (ip1:vt_ip)-[:communicated_with]->(ip2:vt_ip) RETURN ip1, ip2"
+        },
+        {
+          "question": "계좌 소속 금융기관",
+          "cypher": "MATCH (b:vt_bacnt)-[:belongs_to]->(o:vt_org) RETURN b, o"
+        },
+        {
+          "question": "전화 사칭에 사용된 이벤트",
+          "cypher": "MATCH (t:vt_telno)-[:used_for]->(imp:vt_impersonation) RETURN t, imp"
+        },
+        {
+          "question": "사칭이 타겟한 기관",
+          "cypher": "MATCH (imp:vt_impersonation)-[:targets]->(o:vt_org) RETURN imp, o"
+        }
+      ]
+    },
+    "chain": {
+      "description": "Multi-hop chains: 2~5 hops combining multiple edges",
+      "examples": [
+        {
+          "question": "김민준의 계좌에서 출발한 이체 흐름",
+          "cypher": "MATCH (p:vt_psn {name: '김민준'})-[:has_account]->(b:vt_bacnt)-[:from_account]->(t:vt_transfer) RETURN p, b, t"
+        },
+        {
+          "question": "김민준 명의 전화의 발신 통화",
+          "cypher": "MATCH (p:vt_psn {name: '김민준'})-[:owns_phone]->(t:vt_telno)-[:caller]->(c:vt_call) RETURN p, t, c"
+        },
+        {
+          "question": "IP에서 호스팅된 사이트의 악성 파일",
+          "cypher": "MATCH (ip:vt_ip)-[:hosts]->(s:vt_site)-[:contains_file]->(f:vt_file) RETURN ip, s, f"
+        },
+        {
+          "question": "대포폰 → 사칭 → 피해기관 체인",
+          "cypher": "MATCH (t:vt_telno {is_burner: true})-[:used_for]->(imp:vt_impersonation)-[:targets]->(o:vt_org) RETURN t, imp, o"
+        },
+        {
+          "question": "인물 → 계좌 → 이체 → 수신계좌 (2hop 자금세탁)",
+          "cypher": "MATCH (p:vt_psn)-[:has_account]->(b1:vt_bacnt)-[:from_account]->(t:vt_transfer)-[:to_account]->(b2:vt_bacnt) RETURN p, b1, t, b2"
+        },
+        {
+          "question": "피의자 → 사건 → 출처 신뢰도",
+          "cypher": "MATCH (p:vt_psn)-[:suspect_in]->(c:vt_case)-[:sourced_from]->(src:vt_src) RETURN p, c, src"
+        },
+        {
+          "question": "김민준의 차량 LPR 기록 위치",
+          "cypher": "MATCH (p:vt_psn {name: '김민준'})-[:drives]->(c:vt_vhcl)-[:recorded_in]->(m:vt_movement)-[:occurred_at]->(l:vt_loc) RETURN p, c, m, l"
+        },
+        {
+          "question": "김민준이 발송한 메시지에 언급된 계좌",
+          "cypher": "MATCH (p:vt_psn {name: '김민준'})-[:sent_msg]->(m:vt_msg)-[:mentions_account]->(b:vt_bacnt) RETURN p, m, b"
+        }
+      ]
+    },
+    "meta_condition": {
+      "description": "WHERE-clause filtering: risk_level, reliability_tier, source_domain, amount, evid_grade, is_anonymous, is_burner",
+      "examples": [
+        {
+          "question": "위험도 HIGH 인물",
+          "cypher": "MATCH (p:vt_psn) WHERE p.risk_level = 'HIGH' RETURN p"
+        },
+        {
+          "question": "신뢰도 1 사건의 피의자",
+          "cypher": "MATCH (p:vt_psn)-[:suspect_in]->(c:vt_case) WHERE c.reliability_tier = 1 RETURN p, c"
+        },
+        {
+          "question": "OSINT 출처 계좌",
+          "cypher": "MATCH (b:vt_bacnt) WHERE b.source_domain = 'osint' RETURN b"
+        },
+        {
+          "question": "5천만원 이상 이체",
+          "cypher": "MATCH (t:vt_transfer) WHERE t.amount >= 50000000 RETURN t"
+        },
+        {
+          "question": "증거등급 A 이체 전체",
+          "cypher": "MATCH (t:vt_transfer) WHERE t.evid_grade = 'A' RETURN t"
+        },
+        {
+          "question": "성명불상 (익명) 피의자",
+          "cypher": "MATCH (p:vt_psn) WHERE p.is_anonymous = true RETURN p"
+        },
+        {
+          "question": "대포통장 (is_burner=true) 목록",
+          "cypher": "MATCH (b:vt_bacnt) WHERE b.is_burner = true RETURN b"
+        },
+        {
+          "question": "위험점수 80 이상 OSINT IP",
+          "cypher": "MATCH (ip:vt_ip) WHERE ip.threat_score >= 80 AND ip.source_domain = 'osint' RETURN ip"
+        }
+      ]
+    },
+    "threat_filter": {
+      "description": "Threat-specific filters: blacklist, sanction, fraud, phishing markers",
+      "examples": [
+        {
+          "question": "악성 사이트 전체",
+          "cypher": "MATCH (s:vt_site) WHERE s.is_malicious = true RETURN s"
+        },
+        {
+          "question": "지급정지 계좌",
+          "cypher": "MATCH (b:vt_bacnt) WHERE b.is_frozen = true RETURN b"
+        },
+        {
+          "question": "제재 대상 가상자산 지갑",
+          "cypher": "MATCH (w:vt_crypto) WHERE w.sanction_yn = 'Y' RETURN w"
+        },
+        {
+          "question": "블랙리스트 전화번호",
+          "cypher": "MATCH (t:vt_telno) WHERE t.blacklist_yn = 'Y' RETURN t"
+        },
+        {
+          "question": "피싱 캠페인 군집 전체",
+          "cypher": "MATCH (sc:site_cluster) RETURN sc"
+        }
+      ]
+    },
+    "1hop_person": {
+      "description": "Person-to-Object ownership: has_account, owns_phone, registered_to, used_ip, owns_vehicle, drives",
+      "examples": [
+        {
+          "question": "김민준의 소유 계좌 조회",
+          "cypher": "MATCH (p:vt_psn {name: '김민준'})-[:has_account]->(b:vt_bacnt) RETURN p, b"
+        },
+        {
+          "question": "계좌 1002-110-100001의 소유자",
+          "cypher": "MATCH (p:vt_psn)-[:has_account]->(b:vt_bacnt {account_no: '1002-110-100001'}) RETURN p, b"
+        },
+        {
+          "question": "김민준이 소유한 전화번호",
+          "cypher": "MATCH (p:vt_psn {name: '김민준'})-[:owns_phone]->(t:vt_telno) RETURN p, t"
+        },
+        {
+          "question": "010-1234-5678의 명의자 (registered_to 기준)",
+          "cypher": "MATCH (t:vt_telno {telno: '010-1234-5678'})-[:registered_to]->(p:vt_psn) RETURN t, p"
+        },
+        {
+          "question": "실사용자와 명의자가 다른 대포폰",
+          "cypher": "MATCH (p1:vt_psn)-[:owns_phone]->(t:vt_telno)-[:registered_to]->(p2:vt_psn) WHERE p1 <> p2 RETURN p1, t, p2"
+        },
+        {
+          "question": "김민준이 사용한 IP 목록",
+          "cypher": "MATCH (p:vt_psn {name: '김민준'})-[:used_ip]->(ip:vt_ip) RETURN p, ip"
+        },
+        {
+          "question": "김민준이 법적으로 소유한 차량",
+          "cypher": "MATCH (p:vt_psn {name: '김민준'})-[:owns_vehicle]->(c:vt_vhcl) RETURN p, c"
+        }
+      ]
+    }
+  }
+}
