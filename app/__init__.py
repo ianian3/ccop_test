@@ -94,7 +94,11 @@ def create_app():
     # API v1 라우트 등록
     from app.routes_api import api_v1
     app.register_blueprint(api_v1)
-    
+
+    # 외부 LLM/시스템용 read-only 그래프 접근 API
+    from app.routes_graph_read import graph_read_bp
+    app.register_blueprint(graph_read_bp)
+
     # Admin 라우트 등록
     from app.routes_admin import admin
     app.register_blueprint(admin)
