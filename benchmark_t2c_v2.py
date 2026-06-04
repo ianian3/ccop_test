@@ -1009,13 +1009,24 @@ def _wrap_native_cypher(native: str, graph_path: str) -> str:
     return f"SELECT * FROM cypher('{safe_graph}', $$ {s} $$) AS ({as_clause});"
 
 
-def call_model_t2c_v37(client, question: str, model: str, system_prompt: str, graph_path: str) -> str:
-    """학습된 Qwen v2 모델 호출: 학습 system 프롬프트 + 자연어 질문만 + Native→SQL Wrap."""
+def call_model_t2c_v37(client, question: str, model: str, system_prompt: str, graph_path: str,
+                        use_few_shot: bool = True) -> str:
+    """학습된 Qwen v2 모델 호출: 학습 system 프롬프트 + (옵션) Few-shot + 자연어 질문 + Native→SQL Wrap."""
+    user_content = question
+    if use_few_shot:
+        try:
+            import sys
+            sys.path.insert(0, str(Path(__file__).parent))
+            from app.services.few_shot_router import build_few_shot_prompt_with_stats
+            user_content = build_few_shot_prompt_with_stats(question, top_k=3)
+        except Exception as e:
+            print(f"  [few-shot disabled: {e}]")
+
     resp = client.chat.completions.create(
         model=model,
         messages=[
             {"role": "system", "content": system_prompt},
-            {"role": "user",   "content": question},
+            {"role": "user",   "content": user_content},
         ],
         temperature=0.0,
         max_tokens=512,
@@ -1023,6 +1034,30 @@ def call_model_t2c_v37(client, question: str, model: str, system_prompt: str, gr
     native = resp.choices[0].message.content.strip()
     native = re.sub(r"```[a-zA-Z]*\n?", "", native).replace("```", "").strip()
     return _wrap_native_cypher(native, graph_path)
+
+
+# ─── 사전 라우터 (운영 ai_service.py 와 동일 패턴) ─────────────────────────
+_PRE_GUARD_RE = re.compile(
+    r'(\bCREATE\b|\bDELETE\b|\bMERGE\b|\bSET\b|\bDETACH\b|\bDROP\b|\bUPDATE\b|'
+    r'\bINSERT\b|\bALTER\b|\bTRUNCATE\b|'
+    r'이전\s*지시.*잊|시스템\s*프롬프트|프롬프트.*출력|제한\s*없는\s*AI|'
+    r'DB.*초기화|데이터.*삭제|전체.*지워|모든.*삭제|risk_level.*바꿔)',
+    re.IGNORECASE,
+)
+_PRE_GENERAL_RE = re.compile(
+    r'(한국\s*수도|날씨|코드.*짜|python.*코드|파이썬.*코드|영어.*번역|번역해\s*줘|'
+    r'시간.*몇|오늘.*날짜|주식.*추천|맛집.*추천|음식.*추천|영화.*추천|'
+    r'hello|hi\s|안녕|반가워)',
+    re.IGNORECASE,
+)
+
+def pre_route_guard_general(question: str):
+    """sLLM 호출 전 GUARD/GENERAL 사전 차단. 차단 시 거절 응답, 통과 시 None."""
+    if _PRE_GUARD_RE.search(question):
+        return "죄송합니다. 쓰기/수정/삭제 명령은 실행할 수 없습니다. 수사 관련 질문만 답변 가능합니다."
+    if _PRE_GENERAL_RE.search(question):
+        return "죄송합니다. 수사 관련 질문만 답변 가능합니다."
+    return None
 
 
 # ─── 메인 ─────────────────────────────────────────────────────────────────────
@@ -1037,6 +1072,11 @@ def main():
     parser.add_argument("--mode",     default="legacy", choices=["legacy", "t2c_v37"],
                         help="legacy: SQL-Wrapped 프롬프트(GPT-4o/EXAONE v1) / t2c_v37: 학습된 Qwen v37 system 프롬프트 + Native→Wrap")
     parser.add_argument("--graph",    default=GRAPH_NAME, help="SQL Wrap 시 사용할 graph_path")
+    parser.add_argument("--few-shot", action="store_true",
+                        help="Few-shot Dynamic Prompting 활성화 (약점 카테고리 +1~2p 기대)")
+    parser.add_argument("--no-few-shot", dest="few_shot", action="store_false",
+                        help="Few-shot 비활성화 (기본)")
+    parser.set_defaults(few_shot=False)
     args = parser.parse_args()
 
     try:
@@ -1058,7 +1098,7 @@ def main():
     items = BENCH_ITEMS
     if args.category:
         items = [i for i in items if i.category == args.category]
-    print(f"벤치마크 시작: {len(items)}문항  모델: {args.model}  엔드포인트: {args.endpoint}  모드: {args.mode}\n")
+    print(f"벤치마크 시작: {len(items)}문항  모델: {args.model}  엔드포인트: {args.endpoint}  모드: {args.mode}  Few-shot: {'ON' if args.few_shot else 'OFF'}\n")
 
     t2c_v37_system = _load_t2c_v37_system_prompt() if args.mode == "t2c_v37" else None
 
@@ -1067,16 +1107,22 @@ def main():
 
     for item in items:
         try:
-            if args.mode == "t2c_v37":
-                response = call_model_t2c_v37(client, item.question, args.model, t2c_v37_system, args.graph)
+            # 사전 라우터: GUARD/GENERAL 은 sLLM 호출 없이 차단 응답
+            pre_blocked = pre_route_guard_general(item.question)
+            if pre_blocked is not None:
+                response = pre_blocked
+            elif args.mode == "t2c_v37":
+                response = call_model_t2c_v37(client, item.question, args.model, t2c_v37_system, args.graph,
+                                              use_few_shot=args.few_shot)
             else:
                 response = call_model(client, item.question, item.schema, args.model)
             result = eval_response(item, response)
             results.append(result)
 
             status = "✅" if result["pass"] else "❌"
+            tag = " [PRE-BLOCKED]" if pre_blocked is not None else ""
             note = f" [{item.note}]" if item.note else ""
-            print(f"  {status} [{item.id}] {item.question[:50]}{note}")
+            print(f"  {status} [{item.id}]{tag} {item.question[:50]}{note}")
         except Exception as e:
             errors += 1
             results.append({"id": item.id, "error": str(e), "pass": False})

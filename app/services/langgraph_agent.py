@@ -241,11 +241,31 @@ class LangGraphAgent:
             res = AIService.route_question(state['question'])
             
         metrics = {**state.get("metrics", {}), "router_node": time.time() - start_time}
-        
+
+        # REPORT 폐지 — 라우터가 그래도 REPORT 반환 시 QUERY 로 매핑 (안전망)
+        intent = res.get("intent", "QUERY")
+        if intent == "REPORT":
+            logger.info("▶ Router returned REPORT — 강제로 QUERY 로 매핑 (REPORT 분기 폐지됨)")
+            intent = "QUERY"
+
+        # GUARD / GENERAL — sLLM 호출 건너뛰고 즉시 차단 신호 전파
+        if intent in ("GUARD", "GENERAL"):
+            block_tag = "GUARD_BLOCK" if intent == "GUARD" else "GENERAL_CHAT"
+            logger.info(f"▶ Router blocked: {intent} → {block_tag}")
+            return {
+                "intent": intent,
+                "keyword": res.get("keyword", ""),
+                "labels": res.get("labels", []),
+                "term1": res.get("term1"),
+                "term2": res.get("term2"),
+                "metrics": metrics,
+                "error_message": block_tag,
+            }
+
         return {
-            "intent": res.get("intent", "QUERY"),
+            "intent": intent,
             "keyword": res.get("keyword"),
-            "labels": res.get("labels", []), # [추가]
+            "labels": res.get("labels", []),
             "term1": res.get("term1"),
             "term2": res.get("term2"),
             "metrics": metrics
@@ -565,8 +585,16 @@ class LangGraphAgent:
         start_time = time.time()
         logger.info(f"--- SYNTHESIS NODE (Attempt: {state['error_count'] + 1}) ---")
 
-        # GENERAL 의도는 sLLM 호출 자체를 건너뛰고 즉시 차단
-        # (학습 모델은 잡담 거절 룰이 없어 Cypher를 강제로 출력함)
+        # GENERAL / GUARD 의도는 sLLM 호출 자체를 건너뛰고 즉시 차단
+        # (학습 모델은 잡담/쓰기 거절 룰이 없어 Cypher를 강제로 출력함)
+        if state.get('intent') == 'GUARD':
+            logger.info("[Router] GUARD 의도 — synthesis 건너뜀 (쓰기/인젝션 차단)")
+            return {
+                "cypher_query": "",
+                "error_message": "GUARD_BLOCK",
+                "reflection_log": state['reflection_log'] + ["쓰기 명령 또는 프롬프트 인젝션으로 분류되어 차단"],
+                "metrics": {**state.get("metrics", {}), "synthesis_node_skipped_guard": time.time() - start_time},
+            }
         if state.get('intent') == 'GENERAL':
             logger.info("[Router] GENERAL 의도 — synthesis 건너뜀")
             return {
@@ -907,6 +935,21 @@ AS (p agtype);
                 "intent": "REPORT"
             }}
         
+        # GUARD: 쓰기 명령 / 프롬프트 인젝션 차단
+        if state.get("error_message") == "GUARD_BLOCK":
+            return {
+                "final_response": {
+                    "status": "blocked",
+                    "cypher": "",
+                    "elements": [],
+                    "results_count": 0,
+                    "type": "guard",
+                    "intent": "GUARD",
+                    "message": "죄송합니다. 쓰기/수정/삭제 명령은 실행할 수 없습니다. 이 시스템은 수사 관련 조회만 답변 가능합니다.",
+                    "error": "쓰기 명령은 실행할 수 없습니다. 수사 관련 질문만 답변 가능합니다."
+                }
+            }
+
         # 일반 QUERY 결과 반환 전 가드레일 예외 처리
         if state.get("error_message") == "GENERAL_CHAT":
             return {
@@ -917,10 +960,11 @@ AS (p agtype);
                     "results_count": 0,
                     "type": "general",
                     "intent": "GENERAL",
-                    "error": state['reflection_log'][-1] if state['reflection_log'] else "답변 내용 반환"
+                    "message": "죄송합니다. 수사 관련 질문만 답변 가능합니다.",
+                    "error": "수사 관련 질문만 답변 가능합니다. " + (state['reflection_log'][-1] if state.get('reflection_log') else "")
                 }
             }
-            
+
         if state.get("error_message") and "보안 정책 위반" in state["error_message"]:
              return {
                 "final_response": {
@@ -930,6 +974,7 @@ AS (p agtype);
                     "results_count": 0,
                     "type": "guardrail",
                     "intent": "QUERY",
+                    "message": "죄송합니다. 보안 정책상 실행할 수 없습니다.",
                     "error": state["error_message"]
                 }
              }

@@ -42,7 +42,18 @@ class AIService:
 
     # 명백한 패턴 — LLM 호출 없이 즉시 분류
     _GENERAL_PATTERNS = re.compile(
-        r'(한국\s*수도|날씨|코드.*짜|python.*코드|영어.*번역|시간.*몇|오늘.*날짜)',
+        r'(한국\s*수도|날씨|코드.*짜|python.*코드|파이썬.*코드|영어.*번역|번역해\s*줘|'
+        r'시간.*몇|오늘.*날짜|주식.*추천|맛집.*추천|음식.*추천|영화.*추천|'
+        r'대답해|hello|hi\s|안녕|반가워)',
+        re.IGNORECASE,
+    )
+
+    # GUARD: 쓰기/삭제 DDL/DML + 프롬프트 인젝션 시도
+    _GUARD_PATTERNS = re.compile(
+        r'(\bCREATE\b|\bDELETE\b|\bMERGE\b|\bSET\b|\bDETACH\b|\bDROP\b|\bUPDATE\b|'
+        r'\bINSERT\b|\bALTER\b|\bTRUNCATE\b|'
+        r'이전\s*지시.*잊|시스템\s*프롬프트|프롬프트.*출력|제한\s*없는\s*AI|'
+        r'DB.*초기화|데이터.*삭제|전체.*지워|모든.*삭제|risk_level.*바꿔)',
         re.IGNORECASE,
     )
 
@@ -55,6 +66,9 @@ class AIService:
     def _try_fast_route(question: str):
         """LLM 없이 분류 가능한 패턴 즉시 처리 (None 반환 시 LLM 사용)."""
         q = question or ''
+        # 0) GUARD — 쓰기 명령 / 프롬프트 인젝션 (GENERAL보다 먼저 체크)
+        if AIService._GUARD_PATTERNS.search(q):
+            return {"intent": "GUARD", "keyword": "", "labels": []}
         # 0) GENERAL — 명백한 비수사 질문
         if AIService._GENERAL_PATTERNS.search(q):
             return {"intent": "GENERAL", "keyword": "", "labels": []}
@@ -84,17 +98,17 @@ class AIService:
 
         [의도 종류]
         1. "PATH": 두 개체 사이의 최단 경로 추적 (예: "A와 B의 관계", "A에서 B로 가는 경로")
-        2. "REPORT": 서술형 종합 분석/요약 보고서 (예: "이 사건 요약해줘", "전체 자금 흐름 분석")
-           ⚠️ 집계/통계/정렬/COUNT/SUM/평균/합계/순위 같은 단순 수치 질의는 REPORT 가 아님 → QUERY
-        3. "QUERY": 노드 검색, 관계 확장, 집계, 통계, 정렬, 필터링 등 Cypher 변환 가능한 모든 질의
+        2. "QUERY": 노드 검색, 관계 확장, 집계, 통계, 정렬, 필터링, 요약 등 Cypher 변환 가능한 모든 질의
            (예: "홍길동 연결 노드", "이 계좌의 이체 내역", "사건별 피의자 수", "이체 금액 합계",
-                "금액 순 정렬", "최근 5건", "OSINT 도메인 노드", "신뢰도 1 이상 계좌")
-        4. "GENERAL": 수사와 무관한 일반 상식/코딩/개념 질문 (예: "한국 수도는?")
+                "금액 순 정렬", "최근 5건", "OSINT 도메인 노드", "신뢰도 1 이상 계좌",
+                "강남 사건 보여줘", "이 사건 정보 요약", "전체 자금 흐름")
+        3. "GENERAL": 수사와 무관한 일반 상식/코딩/개념 질문 (예: "한국 수도는?", "파이썬 코드 짜줘")
 
         [중요 분류 규칙]
-        - "몇 개", "총", "합계", "평균", "순위", "Top N", "최대", "최소", "정렬", "그룹별",
-          "통계", "분포", "비율" → REPORT 가 아니라 **QUERY** (COUNT/SUM/ORDER BY Cypher 생성 가능)
-        - REPORT 는 오직 서술형 답변이 필요한 "요약/분석/설명" 요청일 때만 선택
+        - 수사/그래프와 조금이라도 관련 있으면 무조건 QUERY 로 분류 (Cypher 시도)
+        - 집계/통계/정렬/COUNT/SUM/요약/분석 — 모두 QUERY (REPORT 사용 금지)
+        - "보여줘/찾아줘/조회/검색/목록/노드/리스트/전체/요약/분석" — 모두 QUERY
+        - GENERAL 은 명백히 수사와 무관한 일반 상식/코딩만 (한국 수도, 날씨, 파이썬 등)
 
         [레이블 추측 — V4.0 통합 온톨로지 (25노드, V3.7 신규 포함)]
         CASE 레이어:
@@ -144,7 +158,7 @@ class AIService:
 
         [출력 JSON 포맷]
         {{
-            "intent": "PATH" | "QUERY" | "REPORT" | "GENERAL",
+            "intent": "PATH" | "QUERY" | "GENERAL",
             "keyword": "핵심 검색어 (고유명사 또는 식별자 우선)",
             "labels": ["예상레이블1", "예상레이블2"],
             "term1": "경로시작 개체명 (PATH 전용)",
