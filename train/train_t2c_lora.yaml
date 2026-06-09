@@ -1,0 +1,60 @@
+### CCOP Text2Cypher v1 SFT — EXAONE-3.5-7.8B LoRA
+### 학습 데이터: t2c_v1 (4,132개, 학습 3,632 / 검증 500)
+### 목표: AgensGraph Cypher 특화 Text2Cypher 모델 (v3.3 온톨로지 기준)
+### 기준: ONTOLOGY_FINAL_ARCHITECTURE.md v3.3 (23노드, 55+엣지, vt_impersonation 포함)
+
+### ── 모델 ──────────────────────────────────────────────────────────
+model_name_or_path: LGAI-EXAONE/EXAONE-3.5-7.8B-Instruct
+trust_remote_code: true
+
+### ── 학습 방식 ──────────────────────────────────────────────────────
+stage: sft
+do_train: true
+finetuning_type: lora
+
+### ── LoRA 설정 ─────────────────────────────────────────────────────
+### Text2Cypher 특화 — 과적합 방지를 위해 rank 32 (v5의 64 대비 절반)
+### 10k 특화 데이터이므로 작은 rank로 충분한 표현력 확보
+lora_rank: 32
+lora_alpha: 64
+lora_dropout: 0.05
+lora_target: q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj
+
+### ── 데이터셋 ───────────────────────────────────────────────────────
+dataset: t2c_v1
+dataset_dir: /home/ai-kyw-dev/ccop_train/train
+template: exaone
+
+### v3.2 엣지 메타속성 + 스키마 스니펫 포함 → 컨텍스트 확장
+### v5(768) → 1280 (스키마 주입 + 메타속성 조건 쿼리 커버)
+cutoff_len: 1280
+overwrite_cache: true
+preprocessing_num_workers: 4
+
+### ── 학습 하이퍼파라미터 ────────────────────────────────────────────
+output_dir: /home/ai-kyw-dev/ccop_train/train/output/exaone_t2c_v1
+per_device_train_batch_size: 4
+gradient_accumulation_steps: 4     # 유효 배치 크기: 16
+num_train_epochs: 3
+learning_rate: 2.0e-4              # 소규모 특화 학습 → lr 높임
+lr_scheduler_type: cosine
+warmup_ratio: 0.05
+weight_decay: 0.01
+
+### ── 정밀도 및 메모리 ───────────────────────────────────────────────
+bf16: true
+quantization_bit: 4                # QLoRA — RTX 5090 32GB 기준
+optim: adamw_torch_fused
+ddp_find_unused_parameters: false
+
+### ── 저장 및 로깅 ───────────────────────────────────────────────────
+save_strategy: epoch
+save_total_limit: 3                # 최근 3개 체크포인트 보관
+logging_steps: 50
+report_to: none
+
+### ── 평가 ─────────────────────────────────────────────────────────
+### t2c_v1_eval 500개로 별도 eval (val_size 대신 eval_dataset 사용 권장)
+val_size: 0.05
+eval_strategy: epoch
+per_device_eval_batch_size: 4

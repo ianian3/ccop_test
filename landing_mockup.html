@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>부의 로직 부로 | IT PM의 부동산 분석</title>
+    <link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            /* 컬러 팔레트 추출 (업로드하신 이미지 기반) */
+            --bg-color: #f7fbff; /* 아주 연한 푸른빛 배경 */
+            --text-main: #343a40; /* 짙은 차콜 그레이 (가독성) */
+            --text-muted: #6c757d;
+            
+            /* 핵심 그라데이션 컬러 (블루 -> 민트/그린) */
+            --grad-blue: #64b5f6;
+            --grad-teal: #4dd0e1;
+            --grad-green: #81c784;
+            
+            --main-gradient: linear-gradient(135deg, var(--grad-blue) 0%, var(--grad-teal) 50%, var(--grad-green) 100%);
+            --glass-bg: rgba(255, 255, 255, 0.7);
+            --glass-border: rgba(255, 255, 255, 0.5);
+            --shadow-subtle: 0 10px 30px rgba(100, 181, 246, 0.15);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            overflow-x: hidden;
+            background-image: 
+                radial-gradient(circle at 15% 50%, rgba(100, 181, 246, 0.08), transparent 25%),
+                radial-gradient(circle at 85% 30%, rgba(129, 199, 132, 0.08), transparent 25%);
+        }
+
+        /* 네비게이션바 */
+        nav {
+            position: fixed;
+            top: 0;
+            width: 100%;
+            padding: 20px 50px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(247, 251, 255, 0.8);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            z-index: 100;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .logo {
+            font-weight: 800;
+            font-size: 24px;
+            letter-spacing: -0.5px;
+            background: var(--main-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 30px;
+        }
+
+        .nav-links a {
+            text-decoration: none;
+            color: var(--text-main);
+            font-weight: 500;
+            transition: color 0.3s;
+        }
+
+        .nav-links a:hover {
+            color: var(--grad-teal);
+        }
+
+        .cta-button {
+            background: var(--main-gradient);
+            color: white;
+            padding: 12px 24px;
+            border-radius: 30px;
+            text-decoration: none;
+            font-weight: 600;
+            box-shadow: 0 4px 15px rgba(77, 208, 225, 0.4);
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+
+        .cta-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(77, 208, 225, 0.6);
+        }
+
+        /* 메인 히어로 섹션 */
+        .hero {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            padding: 100px 20px 50px;
+            position: relative;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 6px 16px;
+            background: white;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--grad-teal);
+            box-shadow: var(--shadow-subtle);
+            margin-bottom: 24px;
+            border: 1px solid rgba(77, 208, 225, 0.2);
+            animation: float 3s ease-in-out infinite;
+        }
+
+        .hero h1 {
+            font-size: 56px;
+            font-weight: 800;
+            line-height: 1.3;
+            letter-spacing: -1px;
+            margin-bottom: 20px;
+        }
+
+        .hero h1 .highlight {
+            background: var(--main-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            position: relative;
+            display: inline-block;
+        }
+
+        .hero p {
+            font-size: 20px;
+            color: var(--text-muted);
+            font-weight: 400;
+            margin-bottom: 40px;
+            max-width: 600px;
+            line-height: 1.6;
+        }
+
+        /* 3D 요소 모방 (글래스모피즘 3D 카드) */
+        .hero-visual {
+            position: relative;
+            width: 100%;
+            max-width: 800px;
+            height: 400px;
+            margin-top: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .glass-card {
+            width: 600px;
+            height: 300px;
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: 24px;
+            box-shadow: var(--shadow-subtle);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+            overflow: hidden;
+            transform: perspective(1000px) rotateX(10deg);
+            transition: transform 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        .glass-card:hover {
+            transform: perspective(1000px) rotateX(0deg) translateY(-10px);
+        }
+
+        .glass-card::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: linear-gradient(to bottom right, rgba(255,255,255,0.8), rgba(255,255,255,0) 40%, rgba(255,255,255,0));
+            transform: rotate(30deg);
+            pointer-events: none;
+        }
+
+        .big-number {
+            font-size: 100px;
+            font-weight: 800;
+            background: var(--main-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            filter: drop-shadow(0 10px 15px rgba(100, 181, 246, 0.3));
+            line-height: 1;
+        }
+        
+        .card-text {
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--text-main);
+            margin-top: 10px;
+        }
+
+        /* 장식용 떠다니는 배경 요소들 */
+        .shape {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(40px);
+            z-index: -1;
+            opacity: 0.5;
+        }
+
+        .shape-1 {
+            width: 300px;
+            height: 300px;
+            background: var(--grad-blue);
+            top: 20%;
+            left: 10%;
+            animation: float 6s ease-in-out infinite;
+        }
+
+        .shape-2 {
+            width: 250px;
+            height: 250px;
+            background: var(--grad-green);
+            bottom: 20%;
+            right: 15%;
+            animation: float 8s ease-in-out infinite reverse;
+        }
+
+        @keyframes float {
+            0% { transform: translateY(0px); }
+            50% { transform: translateY(-20px); }
+            100% { transform: translateY(0px); }
+        }
+
+        /* 하단 로고 영역 */
+        footer {
+            text-align: center;
+            padding: 40px 20px;
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+
+        footer .footer-logo {
+            font-size: 24px;
+            font-weight: 800;
+            color: var(--text-main);
+            margin-top: 10px;
+        }
+
+    </style>
+</head>
+<body>
+
+    <!-- 데코레이션 배경 -->
+    <div class="shape shape-1"></div>
+    <div class="shape shape-2"></div>
+
+    <nav>
+        <div class="logo">부의 로직 부로</div>
+        <div class="nav-links">
+            <a href="#">분석 리포트</a>
+            <a href="#">단지 정보</a>
+            <a href="#">투자 칼럼</a>
+        </div>
+        <a href="#" class="cta-button">무료 분석 시작하기</a>
+    </nav>
+
+    <section class="hero">
+        <div class="badge">IT PM의 데이터 기반 부동산 분석</div>
+        
+        <h1>
+            투자금 2억으로 잡는<br>
+            <span class="highlight">구리시 저평가 단지 3선</span>
+        </h1>
+        
+        <p>복잡한 부동산 시장, 감이 아닌 데이터로 접근하세요. 부의 로직 부로가 성공적인 투자를 위한 최적의 인사이트를 제공합니다.</p>
+
+        <div class="hero-visual">
+            <div class="glass-card">
+                <div class="big-number">200M</div>
+                <div class="card-text">최소 투자 병목 돌파 전략</div>
+            </div>
+        </div>
+    </section>
+
+    <footer>
+        <p>부의 로직 부로 | IT PM의 부동산 분석</p>
+        <div class="footer-logo">BURO</div>
+    </footer>
+
+    <script>
+        // 마우스 무브에 따른 3D 카드 틸트 효과
+        const card = document.querySelector('.glass-card');
+        const heroVisual = document.querySelector('.hero-visual');
+
+        heroVisual.addEventListener('mousemove', (e) => {
+            const rect = heroVisual.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            const centerX = rect.width / 2;
+            const centerY = rect.height / 2;
+            
+            const rotateX = ((y - centerY) / centerY) * -15;
+            const rotateY = ((x - centerX) / centerX) * 15;
+
+            card.style.transform = `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg)`;
+        });
+
+        heroVisual.addEventListener('mouseleave', () => {
+            card.style.transform = `perspective(1000px) rotateX(10deg) rotateY(0deg)`;
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,55 @@
+### CCOP V5 SFT — EXAONE-3.5-7.8B LoRA
+### 학습 데이터: ccop_v5_merged (~34,000개)
+### 구성: synth(23k) + korean_cybercrime(10k) + multihop(1k)
+### 비교: V4 (26,110개) → V5 (~34,000개) +30% 데이터 증가
+
+### 모델 설정
+model_name_or_path: LGAI-EXAONE/EXAONE-3.5-7.8B-Instruct
+trust_remote_code: true
+
+### 학습 방식
+stage: sft
+do_train: true
+finetuning_type: lora
+
+### LoRA 설정 (RTX 5090 32GB 기준)
+### V5: rank 64 유지, multihop 강화를 위해 lora_target 유지
+lora_rank: 64
+lora_alpha: 128
+lora_dropout: 0.05
+lora_target: all
+
+### 데이터셋 (V5 병합 데이터)
+dataset: ccop_v5_merged
+dataset_dir: /home/ai-kyw-dev/ccop_train/train
+template: exaone
+cutoff_len: 768
+max_samples: 25526        # 실제 데이터 수 (synth 21,326 + cybercrime 10,143 + multihop 1,000 → dedup 후)
+overwrite_cache: true
+preprocessing_num_workers: 4
+
+### 학습 하이퍼파라미터
+output_dir: /home/ai-kyw-dev/ccop_train/train/output/exaone-lora-v5
+per_device_train_batch_size: 8
+gradient_accumulation_steps: 4   # 실질 배치: 32
+learning_rate: 1.0e-4             # V5: 데이터 증가로 lr 소폭 낮춤 (1.5e-4→1.0e-4)
+num_train_epochs: 3
+lr_scheduler_type: cosine
+warmup_ratio: 0.05
+weight_decay: 0.01
+
+### 정밀도 및 메모리
+bf16: true
+optim: adamw_torch_fused
+ddp_find_unused_parameters: false
+
+### 저장 및 로깅
+save_strategy: epoch
+save_total_limit: 3
+logging_steps: 50
+report_to: none
+
+### 평가
+val_size: 0.05
+eval_strategy: epoch
+per_device_eval_batch_size: 8

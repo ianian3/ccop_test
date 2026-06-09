@@ -1,0 +1,73 @@
+### CCOP Text2Cypher v3.7 SFT — EXAONE-3.5-7.8B LoRA
+### 학습 데이터: t2c_v37 (31,226개 → 28,109 train / 3,117 eval, 층화 분할)
+### 목표: AgensGraph Cypher 특화 Text2Cypher v3.7 (v3.7 온톨로지 기준)
+### v2 대비 변경:
+###   - 온톨로지: v3.6(23노드/52엣지) → v3.7(25노드/53엣지, +pt_cluster/+site_cluster)
+###   - v3.7 신규 엣지 3종: belongs_to_cluster / belongs_to_campaign / used_in_device
+###   - v3.7 신규 속성: vt_psn.is_anonymous, vt_dev.dev_type='relay_station'
+###   - deprecated: clusters_with (학습 시 생성 금지 가이드)
+###   - 응답 포맷: Native Cypher 통일 (SQL wrapper 제거, SYSTEM 프롬프트 일관성↑)
+###   - 데이터 양: 6,075 → 31,226 (5.1×)
+###   - hop 분포 보강: 2-hop/3-hop/4-hop+/var-hop/shortestPath에 v3.7 신규 패턴 확보
+### 기준: ONTOLOGY_FINAL_ARCHITECTURE_v3.7.md (25노드, 53엣지)
+
+### ── 모델 ──────────────────────────────────────────────────────────
+model_name_or_path: LGAI-EXAONE/EXAONE-3.5-7.8B-Instruct
+trust_remote_code: true
+
+### ── 학습 방식 ──────────────────────────────────────────────────────
+stage: sft
+do_train: true
+finetuning_type: lora
+
+### ── LoRA 설정 ─────────────────────────────────────────────────────
+### v3.7: rank 64 유지 (v2 검증된 설정) — 데이터 양↑로 추가 capacity 불필요
+lora_rank: 64
+lora_alpha: 128
+lora_dropout: 0.05
+lora_target: q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj
+
+### ── 데이터셋 ───────────────────────────────────────────────────────
+dataset: t2c_v37
+eval_dataset: t2c_v37_eval
+dataset_dir: /home/ai-kyw-dev/ccop_train/train
+template: exaone
+
+### v3.7: cutoff_len 1536 유지
+### shortestPath / var-hop / 4-hop+ 쿼리도 1024~1400 토큰 내 수렴
+cutoff_len: 1536
+overwrite_cache: true
+preprocessing_num_workers: 4
+
+### ── 학습 하이퍼파라미터 ────────────────────────────────────────────
+output_dir: /home/ai-kyw-dev/ccop_train/train/output/exaone_t2c_v37
+per_device_train_batch_size: 2      # rank 64 + QLoRA 4bit — RTX 5090 32GB 기준
+gradient_accumulation_steps: 8     # 유효 배치 크기: 16
+### v3.7: 데이터 5배 증가 → 에폭 4 → 3으로 축소 (총 step 수는 v2 대비 ~3.85배)
+num_train_epochs: 3
+### v3.7: lr 1.5e-4 → 1e-4 (데이터 양↑ → 안정성 우선, overshooting 방지)
+learning_rate: 1.0e-4
+lr_scheduler_type: cosine
+warmup_ratio: 0.03                 # warmup steps = 28109 * 0.03 / 16 ≈ 53 steps
+weight_decay: 0.01
+
+### ── 정밀도 및 메모리 ───────────────────────────────────────────────
+bf16: true
+quantization_bit: 4                # QLoRA — RTX 5090 32GB 기준
+optim: adamw_torch_fused
+ddp_find_unused_parameters: false
+
+### ── 저장 및 로깅 ───────────────────────────────────────────────────
+save_strategy: epoch
+save_total_limit: 3
+logging_steps: 50                   # 데이터 양 증가 → step 간격 확대
+report_to: none
+
+### ── 평가 ─────────────────────────────────────────────────────────
+### t2c_v37_eval (3,117개) — 13개 stratum 층화 추출 (v3.7신규/legacy × hop 카테고리)
+eval_strategy: epoch
+per_device_eval_batch_size: 4
+
+### ── 추론 최적화 (학습 후 vLLM 서빙용) ────────────────────────────
+### merge 후: python train/merge_lora.py --base EXAONE-3.5-7.8B --adapter output/exaone_t2c_v37
+### 서빙: bash train/run_vllm_lora.sh exaone_t2c_v37
