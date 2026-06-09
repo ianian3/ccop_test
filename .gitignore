@@ -61,4 +61,41 @@ build/
 
 # DBs & Coverage
 chroma_data/
+data/chromadb/
 .coverage
+
+# ─────────────────────────────────────────
+# Large training / benchmark data (GitHub 100MB 한도 회피)
+# ─────────────────────────────────────────
+data/*.json
+data/*.jsonl
+train/*.json
+train/*.jsonl
+
+# Benchmark / perf / test 결과 산출물 (루트 + results/)
+benchmark_v*.json
+db_test_results_*.json
+perf_results_*.json
+vllm_bench_*.json
+test_30q_results_*.json
+results/*.json
+
+# ─────────────────────────────────────────
+# Secrets (절대 커밋 금지)
+# ─────────────────────────────────────────
+data/api_keys.json
+deploy/.env.cslee
+*.pem
+*.key
+
+# ─────────────────────────────────────────
+# AI/IDE tool directories
+# ─────────────────────────────────────────
+.claude/
+.codex/
+
+# 외부 SDK
+sdk/
+
+# Node
+node_modules/
