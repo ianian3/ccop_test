@@ -1,0 +1,49 @@
+### 모델 설정
+model_name_or_path: LGAI-EXAONE/EXAONE-3.5-7.8B-Instruct
+trust_remote_code: true
+
+### 학습 방식
+stage: sft
+do_train: true
+finetuning_type: lora
+
+### LoRA 설정 (RTX 5090 32GB 기준 최적화)
+lora_rank: 32
+lora_alpha: 64
+lora_dropout: 0.05
+lora_target: all          # 모든 linear layer에 LoRA 적용
+
+### 데이터셋
+dataset: korean_cybercrime_sft
+dataset_dir: /home/ai-kyw-dev/ccop_train/train
+template: exaone
+cutoff_len: 512           # Cypher 쿼리는 짧으므로 512 충분
+max_samples: 10143
+overwrite_cache: true
+preprocessing_num_workers: 4
+
+### 학습 하이퍼파라미터
+output_dir: /home/ai-kyw-dev/ccop_train/train/output/exaone-lora
+per_device_train_batch_size: 8
+gradient_accumulation_steps: 4   # 실질 배치: 32
+learning_rate: 2.0e-4
+num_train_epochs: 5
+lr_scheduler_type: cosine
+warmup_ratio: 0.05
+weight_decay: 0.01
+
+### 정밀도 및 메모리
+bf16: true                # RTX 5090 BF16 지원
+optim: adamw_torch_fused
+ddp_find_unused_parameters: false
+
+### 저장 및 로깅
+save_strategy: epoch
+save_total_limit: 3
+logging_steps: 10
+report_to: none           # wandb 사용 시 wandb로 변경
+
+### 평가
+val_size: 0.05            # 5% validation split
+eval_strategy: epoch
+per_device_eval_batch_size: 8

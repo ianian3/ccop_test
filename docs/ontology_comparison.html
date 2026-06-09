@@ -1,0 +1,1001 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>CCOP 온톨로지 아키텍처 비교</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', 'Noto Sans KR', sans-serif;
+    background: #0d1117;
+    color: #e6edf3;
+    padding: 32px 24px;
+    min-width: 1400px;
+  }
+
+  h1 {
+    text-align: center;
+    font-size: 22px;
+    font-weight: 700;
+    margin-bottom: 6px;
+    color: #f0f6fc;
+    letter-spacing: -0.3px;
+  }
+  .subtitle {
+    text-align: center;
+    font-size: 13px;
+    color: #8b949e;
+    margin-bottom: 32px;
+  }
+
+  /* ── 비교 레이아웃 ── */
+  .compare-wrap {
+    display: grid;
+    grid-template-columns: 1fr 60px 1fr;
+    gap: 0;
+    align-items: start;
+    margin-bottom: 48px;
+  }
+  .arrow-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding-top: 180px;
+  }
+  .arrow-col svg { width: 48px; }
+
+  /* ── 온톨로지 패널 ── */
+  .onto-panel {
+    border: 1px solid #30363d;
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .panel-header {
+    padding: 14px 20px;
+    font-size: 15px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .panel-header .badge {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 20px;
+  }
+  .old-header  { background: #1c1c2a; border-bottom: 1px solid #30363d; }
+  .new-header  { background: #0d2016; border-bottom: 1px solid #238636; }
+  .old-header .badge { background: #6e4040; color: #ffa5a5; }
+  .new-header .badge { background: #1a4731; color: #56d364; }
+
+  .panel-body { padding: 20px; }
+
+  /* ── 레이어 블록 ── */
+  .layer {
+    margin-bottom: 12px;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid transparent;
+  }
+  .layer-header {
+    padding: 7px 14px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .layer-body {
+    padding: 10px 12px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+  }
+
+  /* 레이어 색상 — Old */
+  .l-case-old   { border-color: #3a3a60; }
+  .l-case-old   .layer-header { background: #1e1e42; color: #9fa8da; }
+  .l-case-old   .layer-body  { background: #15152e; }
+
+  .l-actor-old  { border-color: #3a5040; }
+  .l-actor-old  .layer-header { background: #1a2e22; color: #80cbc4; }
+  .l-actor-old  .layer-body  { background: #111e17; }
+
+  .l-action-old { border-color: #50402a; }
+  .l-action-old .layer-header { background: #2e2210; color: #ffcc80; }
+  .l-action-old .layer-body  { background: #1e1608; }
+
+  .l-evid-old   { border-color: #4a3060; }
+  .l-evid-old   .layer-header { background: #271540; color: #ce93d8; }
+  .l-evid-old   .layer-body  { background: #1a0c2e; }
+
+  /* 레이어 색상 — New */
+  .l-src   { border-color: #3a3060; }
+  .l-src   .layer-header { background: #1e1535; color: #b39ddb; }
+  .l-src   .layer-body  { background: #140e26; }
+
+  .l-case  { border-color: #3a3a60; }
+  .l-case  .layer-header { background: #1e1e42; color: #9fa8da; }
+  .l-case  .layer-body  { background: #15152e; }
+
+  .l-person{ border-color: #3a5040; }
+  .l-person .layer-header { background: #1a2e22; color: #80cbc4; }
+  .l-person .layer-body  { background: #111e17; }
+
+  .l-obj   { border-color: #4a3060; }
+  .l-obj   .layer-header { background: #271540; color: #ce93d8; }
+  .l-obj   .layer-body  { background: #1a0c2e; }
+
+  .l-loc   { border-color: #3a5050; }
+  .l-loc   .layer-header { background: #102836; color: #80deea; }
+  .l-loc   .layer-body  { background: #071820; }
+
+  .l-evt   { border-color: #50402a; }
+  .l-evt   .layer-header { background: #2e2210; color: #ffcc80; }
+  .l-evt   .layer-body  { background: #1e1608; }
+
+  /* ── 노드 칩 ── */
+  .node {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 5px;
+    border: 1px solid rgba(255,255,255,0.08);
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    white-space: nowrap;
+  }
+  .node .ko { font-size: 9.5px; font-weight: 400; opacity: 0.7; }
+
+  /* 노드 색상 */
+  .n-case    { background: #1e1e42; color: #9fa8da; border-color: #3a3a60; }
+  .n-actor   { background: #1a2e22; color: #80cbc4; border-color: #2a5040; }
+  .n-action  { background: #2e2210; color: #ffcc80; border-color: #50402a; }
+  .n-evid    { background: #271540; color: #ce93d8; border-color: #4a3060; }
+  .n-src     { background: #1e1535; color: #b39ddb; border-color: #3a3060; }
+  .n-loc     { background: #102836; color: #80deea; border-color: #2a5060; }
+  .n-new     { background: #0f2d1a; color: #56d364; border-color: #238636; }  /* 신규 */
+  .n-merged  { background: #2d2200; color: #e3b341; border-color: #5a4500; }  /* 통합 */
+  .n-removed { background: #2d0f0f; color: #f85149; border-color: #6e3030; text-decoration: line-through; opacity: 0.6; }
+
+  /* ── 문제 표시 (Old) ── */
+  .issue-tag {
+    font-size: 9.5px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: #6e1a1a;
+    color: #ffa5a5;
+    border: 1px solid #a33;
+    margin-left: 4px;
+  }
+
+  /* ── 개선 표시 (New) ── */
+  .improve-tag {
+    font-size: 9.5px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: #0f3a1a;
+    color: #56d364;
+    border: 1px solid #238636;
+    margin-left: 4px;
+  }
+
+  /* ── 레이어 레이블 ── */
+  .layer-label {
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 3px;
+    letter-spacing: 0.5px;
+  }
+
+  /* ── 노트 ── */
+  .note {
+    font-size: 11px;
+    color: #8b949e;
+    padding: 6px 10px;
+    border-left: 2px solid #30363d;
+    margin-top: 8px;
+  }
+  .note.err { border-color: #f85149; color: #ffa5a5; background: #1a0808; }
+  .note.ok  { border-color: #238636; color: #56d364; background: #081a0f; }
+
+  /* ── 변경 요약 섹션 ── */
+  .change-section {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 40px;
+  }
+  .change-card {
+    border: 1px solid #30363d;
+    border-radius: 10px;
+    padding: 16px;
+  }
+  .change-card h3 {
+    font-size: 13px;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .change-card ul { list-style: none; }
+  .change-card li {
+    font-size: 12px;
+    padding: 4px 0;
+    border-bottom: 1px solid #21262d;
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    color: #c9d1d9;
+  }
+  .change-card li:last-child { border-bottom: none; }
+  .dot-red    { width: 7px; height: 7px; border-radius: 50%; background: #f85149; flex-shrink: 0; margin-top: 4px; }
+  .dot-green  { width: 7px; height: 7px; border-radius: 50%; background: #56d364; flex-shrink: 0; margin-top: 4px; }
+  .dot-yellow { width: 7px; height: 7px; border-radius: 50%; background: #e3b341; flex-shrink: 0; margin-top: 4px; }
+
+  /* ── 엣지 비교 ── */
+  .edge-compare {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 40px;
+  }
+  .edge-panel {
+    border: 1px solid #30363d;
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .edge-panel-header {
+    padding: 10px 16px;
+    font-size: 13px;
+    font-weight: 700;
+    border-bottom: 1px solid #30363d;
+  }
+  .edge-old-header { background: #1c1520; }
+  .edge-new-header { background: #0d2016; border-color: #238636; }
+  .edge-list { padding: 12px 16px; }
+  .edge-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 0;
+    border-bottom: 1px solid #161b22;
+    font-size: 12px;
+  }
+  .edge-item:last-child { border-bottom: none; }
+  .edge-arrow { color: #58a6ff; font-size: 10px; }
+  .edge-from { color: #80cbc4; font-weight: 600; }
+  .edge-type { color: #f0a070; font-style: italic; }
+  .edge-to   { color: #ce93d8; font-weight: 600; }
+  .edge-note { font-size: 10px; color: #8b949e; margin-left: auto; }
+  .edge-new-mark { font-size: 9px; color: #56d364; background: #0f2d1a; border: 1px solid #238636; padding: 1px 5px; border-radius: 3px; }
+
+  /* ── 스탯 바 ── */
+  .stats-row {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 12px;
+    margin-bottom: 40px;
+  }
+  .stat-card {
+    border: 1px solid #30363d;
+    border-radius: 10px;
+    padding: 16px;
+    text-align: center;
+  }
+  .stat-label { font-size: 11px; color: #8b949e; margin-bottom: 8px; }
+  .stat-values { display: flex; justify-content: center; align-items: center; gap: 10px; }
+  .stat-old { font-size: 24px; font-weight: 700; color: #f85149; }
+  .stat-new { font-size: 24px; font-weight: 700; color: #56d364; }
+  .stat-arrow { font-size: 16px; color: #8b949e; }
+  .stat-desc { font-size: 10px; color: #8b949e; margin-top: 6px; }
+
+  /* ── 섹션 타이틀 ── */
+  .sec-title {
+    font-size: 15px;
+    font-weight: 700;
+    margin-bottom: 16px;
+    color: #f0f6fc;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .sec-title::before {
+    content: '';
+    display: inline-block;
+    width: 4px;
+    height: 18px;
+    background: #238636;
+    border-radius: 2px;
+  }
+
+  /* ── 흐름도 ── */
+  .flow-compare {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 40px;
+  }
+  .flow-panel {
+    border: 1px solid #30363d;
+    border-radius: 10px;
+    padding: 20px;
+  }
+  .flow-title {
+    font-size: 13px;
+    font-weight: 700;
+    margin-bottom: 16px;
+    text-align: center;
+  }
+  .flow-nodes {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+  }
+  .flow-node {
+    padding: 8px 20px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    text-align: center;
+    width: 100%;
+    max-width: 320px;
+    position: relative;
+  }
+  .flow-down {
+    font-size: 16px;
+    color: #58a6ff;
+    line-height: 1;
+  }
+  .flow-problem {
+    position: absolute;
+    right: -130px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 10px;
+    color: #ffa5a5;
+    background: #2d0f0f;
+    border: 1px solid #a33;
+    border-radius: 4px;
+    padding: 2px 6px;
+    width: 120px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .flow-ok {
+    position: absolute;
+    right: -130px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 10px;
+    color: #56d364;
+    background: #0f2d1a;
+    border: 1px solid #238636;
+    border-radius: 4px;
+    padding: 2px 6px;
+    width: 120px;
+  }
+
+  /* Layer arrow connector between panels */
+  .connector {
+    text-align: center;
+    padding: 4px 0;
+    color: #3a8a4a;
+    font-size: 13px;
+  }
+
+  /* ── 범례 ── */
+  .legend {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+    margin-bottom: 32px;
+    padding: 12px 16px;
+    background: #161b22;
+    border-radius: 8px;
+    border: 1px solid #30363d;
+    font-size: 12px;
+  }
+  .legend-item { display: flex; align-items: center; gap: 6px; }
+</style>
+</head>
+<body>
+
+<h1>CCOP 온톨로지 아키텍처 비교</h1>
+<p class="subtitle">기존 KICS 4계층 (v1) → 최종 POLE 기반 6계층 (v3 Final)</p>
+
+<!-- ── 스탯 요약 ── -->
+<div class="sec-title">수치 비교</div>
+<div class="stats-row">
+  <div class="stat-card">
+    <div class="stat-label">노드 타입 수</div>
+    <div class="stat-values">
+      <span class="stat-old">21</span>
+      <span class="stat-arrow">→</span>
+      <span class="stat-new">22</span>
+    </div>
+    <div class="stat-desc">기능 확장 (+신규 5, -통폐합 4)</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">레이어 수</div>
+    <div class="stat-values">
+      <span class="stat-old">4</span>
+      <span class="stat-arrow">→</span>
+      <span class="stat-new">6</span>
+    </div>
+    <div class="stat-desc">Source + Location 레이어 추가</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">엣지 타입 수</div>
+    <div class="stat-values">
+      <span class="stat-old">27</span>
+      <span class="stat-arrow">→</span>
+      <span class="stat-new">32</span>
+    </div>
+    <div class="stat-desc">역할 엣지 3개 신규 포함</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Provenance 추적</div>
+    <div class="stat-values">
+      <span class="stat-old">✗</span>
+      <span class="stat-arrow">→</span>
+      <span class="stat-new">✓</span>
+    </div>
+    <div class="stat-desc">vt_src + source_id 의무화</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">이중시간 지원</div>
+    <div class="stat-values">
+      <span class="stat-old">✗</span>
+      <span class="stat-arrow">→</span>
+      <span class="stat-new">✓</span>
+    </div>
+    <div class="stat-desc">valid_from/to + rec_created 분리</div>
+  </div>
+</div>
+
+<!-- ── 범례 ── -->
+<div class="legend">
+  <span style="font-weight:700; color:#8b949e; margin-right:4px;">범례:</span>
+  <div class="legend-item"><span class="node n-new" style="font-size:10px;">신규 노드</span></div>
+  <div class="legend-item"><span class="node n-merged" style="font-size:10px;">통합된 노드</span></div>
+  <div class="legend-item"><span class="node n-removed" style="font-size:10px;">제거된 노드</span></div>
+  <div class="legend-item"><span class="issue-tag">⚠ 문제점</span></div>
+  <div class="legend-item"><span class="improve-tag">✓ 개선</span></div>
+</div>
+
+<!-- ── 메인 비교 ── -->
+<div class="sec-title">레이어 구조 비교</div>
+<div class="compare-wrap">
+
+  <!-- ───── OLD ───── -->
+  <div class="onto-panel">
+    <div class="panel-header old-header">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="#f85149" stroke-width="1.5"/><path d="M8 5v4M8 11v.5" stroke="#f85149" stroke-width="1.5" stroke-linecap="round"/></svg>
+      기존 KICS 4계층 아키텍처
+      <span class="badge">v1 — 현행</span>
+    </div>
+    <div class="panel-body">
+
+      <!-- CASE LAYER -->
+      <div class="layer l-case-old">
+        <div class="layer-header">
+          <span class="layer-label" style="background:#2a2a60;color:#9fa8da;">LAYER 1</span>
+          Case — 사건
+        </div>
+        <div class="layer-body">
+          <span class="node n-case">vt_case <span class="ko">사건</span></span>
+          <span class="node n-case">vt_inv <span class="ko">수사</span></span>
+        </div>
+        <div class="note err">⚠ 진정서(수사 개시 전 신고) 표현 불가 — 사건 개시 후만 존재</div>
+      </div>
+
+      <!-- ACTOR LAYER -->
+      <div class="layer l-actor-old">
+        <div class="layer-header">
+          <span class="layer-label" style="background:#1a3a2a;color:#80cbc4;">LAYER 2</span>
+          Actor — 행위자
+        </div>
+        <div class="layer-body">
+          <span class="node n-actor">vt_psn <span class="ko">인물</span></span>
+          <span class="issue-tag">role 속성 충돌</span>
+          <span class="node n-actor">vt_org <span class="ko">조직</span></span>
+          <span class="node n-actor">vt_persona <span class="ko">페르소나</span></span>
+          <span class="issue-tag">vt_id 와 중복</span>
+          <span class="node n-actor">vt_dev <span class="ko">기기</span></span>
+        </div>
+        <div class="note err">⚠ vt_psn.role = "피의자" → 동일인이 다른 사건에서 피해자면 덮어쓰기</div>
+      </div>
+
+      <!-- ACTION LAYER -->
+      <div class="layer l-action-old">
+        <div class="layer-header">
+          <span class="layer-label" style="background:#3a2a10;color:#ffcc80;">LAYER 3</span>
+          Action — 행위
+        </div>
+        <div class="layer-body">
+          <span class="node n-action">vt_transfer <span class="ko">이체</span></span>
+          <span class="node n-action">vt_call <span class="ko">통화</span></span>
+          <span class="node n-action">vt_access <span class="ko">접속</span></span>
+          <span class="node n-action">vt_msg <span class="ko">메시지</span></span>
+          <span class="node n-action">vt_lpr_evt <span class="ko">LPR인식</span></span>
+          <span class="issue-tag">분리 불필요</span>
+          <span class="node n-action">vt_loc_evt <span class="ko">기지국위치</span></span>
+          <span class="issue-tag">분리 불필요</span>
+          <span class="node n-evid" style="opacity:0.7;">vt_event <span class="ko">이벤트</span></span>
+          <span class="issue-tag">모호한 catch-all</span>
+        </div>
+        <div class="note err">⚠ vt_lpr_evt / vt_loc_evt → 개념 동일(이동 이벤트)인데 별도 노드로 분리</div>
+      </div>
+
+      <!-- EVIDENCE LAYER -->
+      <div class="layer l-evid-old">
+        <div class="layer-header">
+          <span class="layer-label" style="background:#301550;color:#ce93d8;">LAYER 4</span>
+          Evidence — 증거
+        </div>
+        <div class="layer-body">
+          <span class="node n-evid">vt_bacnt <span class="ko">계좌</span></span>
+          <span class="issue-tag">bank_cd 누락</span>
+          <span class="node n-evid">vt_telno <span class="ko">전화번호</span></span>
+          <span class="node n-evid">vt_ip <span class="ko">IP주소</span></span>
+          <span class="node n-evid">vt_site <span class="ko">사이트</span></span>
+          <span class="issue-tag">url/site/domain 중복</span>
+          <span class="node n-evid">vt_file <span class="ko">파일</span></span>
+          <span class="issue-tag">hash_md5 취약</span>
+          <span class="node n-evid">vt_crypto <span class="ko">가상자산</span></span>
+          <span class="node n-evid">vt_atm <span class="ko">ATM</span></span>
+          <span class="node n-evid">vt_loc <span class="ko">위치</span></span>
+          <span class="issue-tag">위치 정보 분산</span>
+          <span class="node n-evid">vt_vhcl <span class="ko">차량</span></span>
+        </div>
+        <div class="note err">⚠ 위치(vt_loc) 정보가 각 노드 속성으로 흩어짐 — 위치 기반 교차분석 어려움</div>
+      </div>
+
+      <!-- 공통 문제 -->
+      <div style="margin-top:12px; display:flex; flex-direction:column; gap:6px;">
+        <div class="note err">🔴 Provenance(출처) 레이어 없음 — 데이터가 어디서 왔는지 추적 불가</div>
+        <div class="note err">🔴 confidence / verified 체계 없음 — NER 추출값과 공식 문서 구분 불가</div>
+        <div class="note err">🔴 rec_created 단일 시간 — 사건 발생 시점 vs 기록 시점 구분 불가</div>
+        <div class="note err">🔴 sameAs / contradicts 엣지 없음 — 동일인물 다중 소스 연결 불가</div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── 화살표 ── -->
+  <div class="arrow-col">
+    <svg viewBox="0 0 48 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M10 20 L38 50 L10 80" stroke="#238636" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M24 50 L48 50" stroke="#238636" stroke-width="2" stroke-linecap="round" stroke-dasharray="4 3"/>
+    </svg>
+    <div style="font-size:10px; color:#238636; text-align:center; margin-top:8px; font-weight:700;">개선</div>
+  </div>
+
+  <!-- ───── NEW ───── -->
+  <div class="onto-panel">
+    <div class="panel-header new-header">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="#56d364" stroke-width="1.5"/><path d="M5 8l2.5 2.5L11 5.5" stroke="#56d364" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      최종 POLE 기반 6계층 아키텍처
+      <span class="badge">v3 — Final</span>
+    </div>
+    <div class="panel-body">
+
+      <!-- SOURCE LAYER (NEW) -->
+      <div class="layer l-src">
+        <div class="layer-header">
+          <span class="layer-label" style="background:#251040;color:#b39ddb;">SOURCE</span>
+          Provenance — 출처 메타 레이어
+          <span class="improve-tag">신규</span>
+        </div>
+        <div class="layer-body">
+          <span class="node n-new">vt_src <span class="ko">데이터 소스</span></span>
+        </div>
+        <div class="note ok">✓ 모든 엣지에 source_id 의무화 — "이 데이터는 더치트 Tier4 출처, confidence 0.8"</div>
+        <div class="note ok">✓ reliability_tier 1~5: 공식문서 → 기관연계 → 진정서 → OSINT → 미확인</div>
+      </div>
+
+      <div class="connector">↓ source_id 참조 (수직 관통)</div>
+
+      <!-- CASE LAYER -->
+      <div class="layer l-case">
+        <div class="layer-header">
+          <span class="layer-label" style="background:#2a2a60;color:#9fa8da;">LAYER 0</span>
+          Case — 수사 컨텍스트
+        </div>
+        <div class="layer-body">
+          <span class="node n-case">vt_case <span class="ko">사건</span></span>
+          <span class="node n-new">vt_petition <span class="ko">진정서</span></span>
+          <span class="node n-removed">vt_inv</span>
+          <span style="font-size:10px;color:#8b949e;">→ vt_case 속성으로</span>
+        </div>
+        <div class="note ok">✓ vt_petition: 수사 개시 전 단계부터 추적, filed_as 엣지로 vt_case 전환</div>
+      </div>
+
+      <div class="connector">↓ suspect_in / victim_in / witness_in</div>
+
+      <!-- PERSON LAYER -->
+      <div class="layer l-person">
+        <div class="layer-header">
+          <span class="layer-label" style="background:#1a3a2a;color:#80cbc4;">POLE-P</span>
+          Person — 행위 주체
+        </div>
+        <div class="layer-body">
+          <span class="node n-actor">vt_psn <span class="ko">인물</span></span>
+          <span class="improve-tag">role 속성 제거</span>
+          <span class="node n-actor">vt_org <span class="ko">조직/기관</span></span>
+          <span class="improve-tag">org_category 분기</span>
+          <span class="node n-removed">vt_persona</span>
+          <span style="font-size:10px;color:#8b949e;">→ vt_id 흡수</span>
+          <span class="node n-removed">vt_dev <span class="ko"></span></span>
+          <span style="font-size:10px;color:#8b949e;">→ Object로 이동</span>
+        </div>
+        <div class="note ok">✓ 역할은 엣지 타입: suspect_in / victim_in / witness_in — 다중 사건·다중 역할 지원</div>
+        <div class="note ok">✓ vt_org: org_category = 'criminal' | 'institution' (은행·통신사 포함)</div>
+      </div>
+
+      <div class="connector">↓ has_account / owns_phone / drives / uses_id ...</div>
+
+      <!-- OBJECT LAYER -->
+      <div class="layer l-obj">
+        <div class="layer-header">
+          <span class="layer-label" style="background:#301550;color:#ce93d8;">POLE-O</span>
+          Object — 객체·증거
+        </div>
+        <div class="layer-body">
+          <span class="node n-evid">vt_bacnt <span class="ko">계좌</span></span>
+          <span class="improve-tag">bank_cd 추가</span>
+          <span class="node n-evid">vt_telno <span class="ko">전화</span></span>
+          <span class="node n-evid">vt_ip <span class="ko">IP</span></span>
+          <span class="improve-tag">tor/proxy 플래그</span>
+          <span class="node n-evid">vt_site <span class="ko">사이트</span></span>
+          <span class="improve-tag">url_addr 단일화</span>
+          <span class="node n-evid">vt_file <span class="ko">파일</span></span>
+          <span class="improve-tag">hash_val SHA256</span>
+          <span class="node n-new">vt_id <span class="ko">디지털ID</span></span>
+          <span class="node n-evid">vt_vhcl <span class="ko">차량</span></span>
+          <span class="node n-new">vt_email <span class="ko">이메일</span></span>
+          <span class="node n-evid">vt_crypto <span class="ko">가상자산</span></span>
+          <span class="node n-evid">vt_dev <span class="ko">기기</span></span>
+          <span class="node n-evid">vt_atm <span class="ko">ATM</span></span>
+        </div>
+        <div class="note ok">✓ vt_id (신규): 플랫폼 계정 ID·닉네임 — 기존 vt_persona 흡수·단순화</div>
+        <div class="note ok">✓ vt_email (신규): 경찰청 TB_EML_TRNS_EVT 대응</div>
+      </div>
+
+      <div class="connector">↓ at_location</div>
+
+      <!-- LOCATION LAYER (NEW) -->
+      <div class="layer l-loc">
+        <div class="layer-header">
+          <span class="layer-label" style="background:#102836;color:#80deea;">POLE-L</span>
+          Location — 위치
+          <span class="improve-tag">독립 레이어 신설</span>
+        </div>
+        <div class="layer-body">
+          <span class="node n-loc">vt_loc <span class="ko">위치</span></span>
+          <span class="improve-tag">loc_type으로 통합</span>
+        </div>
+        <div class="note ok">✓ loc_type = address | cell_tower | cctv | atm_loc | transit | poi</div>
+        <div class="note ok">✓ 기지국(vt_bsst) + CCTV 설치점(vt_cctv) → vt_loc 속성으로 통합 (노드 수 감소)</div>
+        <div class="note ok">✓ 위치 기반 교차 분석: "강남역에서 같은 날 목격된 차량·전화번호" 단일 쿼리</div>
+      </div>
+
+      <div class="connector">↓ occurred_at</div>
+
+      <!-- EVENT LAYER -->
+      <div class="layer l-evt">
+        <div class="layer-header">
+          <span class="layer-label" style="background:#3a2a10;color:#ffcc80;">POLE-E</span>
+          Event — 시공간 행위
+        </div>
+        <div class="layer-body">
+          <span class="node n-action">vt_transfer <span class="ko">이체</span></span>
+          <span class="node n-action">vt_call <span class="ko">통화</span></span>
+          <span class="node n-action">vt_msg <span class="ko">메시지</span></span>
+          <span class="node n-action">vt_access <span class="ko">접속</span></span>
+          <span class="node n-merged">vt_movement <span class="ko">이동이벤트</span></span>
+          <span class="node n-removed">vt_lpr_evt</span>
+          <span class="node n-removed">vt_loc_evt</span>
+          <span class="node n-removed">vt_event (catch-all)</span>
+        </div>
+        <div class="note ok">✓ vt_movement (통합): mov_type = lpr | cell_tower | transit_card — 3개 노드 → 1개</div>
+        <div class="note ok">✓ 이벤트 노드의 timestamp가 Valid Time 담당 (이중시간 선택적 적용)</div>
+      </div>
+
+      <!-- 공통 개선 -->
+      <div style="margin-top:12px; display:flex; flex-direction:column; gap:6px;">
+        <div class="note ok">🟢 엣지 공통 속성: source_id (필수) + rec_created (필수) + confidence + verified</div>
+        <div class="note ok">🟢 이중시간: valid_from/valid_to (소유 엣지) vs timestamp (이벤트 노드)</div>
+        <div class="note ok">🟢 sameAs / contradicts 엣지: 동일 인물 다중 소스 병합, 모순 표시</div>
+        <div class="note ok">🟢 경찰청 28개 표준 테이블 Coverage: 차량·위치·기관·이메일 도메인 추가</div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ── 핵심 변경 포인트 ── -->
+<div class="sec-title">핵심 변경 포인트 상세</div>
+<div class="change-section">
+
+  <div class="change-card">
+    <h3 style="color:#f85149;">
+      <svg width="14" height="14" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="#6e1a1a"/><path d="M5 11L11 5M5 5l6 6" stroke="#f85149" stroke-width="1.5" stroke-linecap="round"/></svg>
+      제거 / 통폐합
+    </h3>
+    <ul>
+      <li><span class="dot-red"></span><code style="font-size:11px;">vt_inv</code> — vt_case 속성(chrg_plcmn_nm, chrgdp_nm)으로 흡수</li>
+      <li><span class="dot-red"></span><code style="font-size:11px;">vt_event</code> (catch-all) — 모호, 특화 이벤트 노드 사용</li>
+      <li><span class="dot-red"></span><code style="font-size:11px;">vt_persona</code> — vt_id로 흡수·단순화</li>
+      <li><span class="dot-red"></span><code style="font-size:11px;">vt_assertion</code> (v2안) — 엣지 속성으로 대체, 노드 불필요</li>
+      <li><span class="dot-red"></span><code style="font-size:11px;">vt_lpr_evt + vt_loc_evt</code> → vt_movement(mov_type)로 통합</li>
+      <li><span class="dot-red"></span><code style="font-size:11px;">vt_bsst + vt_cctv</code> → vt_loc(loc_type)로 통합</li>
+      <li><span class="dot-red"></span><code style="font-size:11px;">vt_psn.role</code> 속성 — 엣지 타입으로 완전 이동</li>
+      <li><span class="dot-red"></span><code style="font-size:11px;">hash_md5</code> — MD5 충돌 취약, hash_val(SHA-256)으로 통일</li>
+    </ul>
+  </div>
+
+  <div class="change-card">
+    <h3 style="color:#56d364;">
+      <svg width="14" height="14" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="#0f2d1a"/><path d="M5 8l2.5 2.5L11 5.5" stroke="#56d364" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      신규 추가
+    </h3>
+    <ul>
+      <li><span class="dot-green"></span><code style="font-size:11px;">vt_src</code> — 출처 소스 노드 (Provenance 레이어)</li>
+      <li><span class="dot-green"></span><code style="font-size:11px;">vt_petition</code> — 진정서 노드 (수사 개시 전 단계)</li>
+      <li><span class="dot-green"></span><code style="font-size:11px;">vt_id</code> — 디지털 ID·닉네임 (플랫폼 계정)</li>
+      <li><span class="dot-green"></span><code style="font-size:11px;">vt_email</code> — 이메일 주소 (경찰청 표준)</li>
+      <li><span class="dot-green"></span><code style="font-size:11px;">vt_movement</code> — 이동 이벤트 통합 노드</li>
+      <li><span class="dot-green"></span><code style="font-size:11px;">Location Layer</code> — 독립 레이어 신설</li>
+      <li><span class="dot-green"></span><code style="font-size:11px;">suspect_in / victim_in / witness_in</code> — 역할 엣지 3개</li>
+      <li><span class="dot-green"></span><code style="font-size:11px;">sameAs / contradicts</code> — 엔티티 해소 엣지</li>
+    </ul>
+  </div>
+
+  <div class="change-card">
+    <h3 style="color:#e3b341;">
+      <svg width="14" height="14" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="#2d2200"/><path d="M8 5v4M8 11v.5" stroke="#e3b341" stroke-width="1.5" stroke-linecap="round"/></svg>
+      수정·보완
+    </h3>
+    <ul>
+      <li><span class="dot-yellow"></span><code style="font-size:11px;">vt_bacnt</code> — bank_cd 추가 (경찰청 복합 PK 정렬)</li>
+      <li><span class="dot-yellow"></span><code style="font-size:11px;">vt_telno</code> — telco_nm, join_typ_cd, imsi 추가</li>
+      <li><span class="dot-yellow"></span><code style="font-size:11px;">vt_ip</code> — is_tor, is_proxy, asn, abuse_score 추가</li>
+      <li><span class="dot-yellow"></span><code style="font-size:11px;">vt_site</code> — url_addr 단일화, risk_grd, WHOIS 추가</li>
+      <li><span class="dot-yellow"></span><code style="font-size:11px;">vt_psn</code> — POLE 4+1 (dob, gender, nationality, contact) 추가</li>
+      <li><span class="dot-yellow"></span><code style="font-size:11px;">vt_org</code> — org_category, inst_se_cd, brno 추가</li>
+      <li><span class="dot-yellow"></span><code style="font-size:11px;">vt_loc</code> — loc_type 속성 + 기지국·CCTV 속성 통합</li>
+      <li><span class="dot-yellow"></span><code style="font-size:11px;">EDGE 공통</code> — source_id + rec_created 의무화</li>
+    </ul>
+  </div>
+
+</div>
+
+<!-- ── 엣지 흐름 비교 ── -->
+<div class="sec-title">역할 표현 방식 비교 (핵심 변경)</div>
+<div class="edge-compare">
+
+  <div class="edge-panel">
+    <div class="edge-panel-header edge-old-header" style="color:#f85149;">
+      ✗ 기존 방식 — Role을 노드 속성으로
+    </div>
+    <div class="edge-list">
+      <div class="edge-item">
+        <span class="edge-from">vt_psn</span>
+        <span class="edge-arrow">{role: "피의자"}</span>
+        <span style="font-size:11px; color:#8b949e;">→ 노드 속성</span>
+        <span class="edge-note" style="color:#f85149;">⚠ 덮어쓰기 위험</span>
+      </div>
+      <div class="edge-item">
+        <span class="edge-from">vt_psn</span>
+        <span class="edge-arrow">{role: "피해자"}</span>
+        <span style="font-size:11px; color:#8b949e;">→ 같은 노드에 저장</span>
+        <span class="edge-note" style="color:#f85149;">⚠ 이전 역할 소실</span>
+      </div>
+      <div style="padding:8px; margin-top:4px; background:#1a0808; border-radius:6px; font-size:11px; color:#ffa5a5;">
+        홍길동이 사건 A에서 피의자, 사건 B에서 피해자인 경우<br>
+        → <strong>role 속성이 마지막 값으로 덮어씌워짐</strong>
+      </div>
+    </div>
+  </div>
+
+  <div class="edge-panel" style="border-color:#238636;">
+    <div class="edge-panel-header edge-new-header" style="color:#56d364;">
+      ✓ 개선 방식 — Role을 엣지 타입으로
+    </div>
+    <div class="edge-list">
+      <div class="edge-item">
+        <span class="edge-from">vt_psn:홍길동</span>
+        <span class="edge-arrow">─[suspect_in]→</span>
+        <span class="edge-to">vt_case:사건A</span>
+      </div>
+      <div class="edge-item">
+        <span class="edge-from">vt_psn:홍길동</span>
+        <span class="edge-arrow">─[victim_in]→</span>
+        <span class="edge-to">vt_case:사건B</span>
+      </div>
+      <div class="edge-item">
+        <span class="edge-from">vt_psn:홍길동</span>
+        <span class="edge-arrow">─[witness_in]→</span>
+        <span class="edge-to">vt_case:사건C</span>
+      </div>
+      <div style="padding:8px; margin-top:4px; background:#081a0f; border-radius:6px; font-size:11px; color:#56d364;">
+        동일 인물이 여러 사건에서 서로 다른 역할 → <strong>모두 독립 엣지로 보존</strong>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ── Provenance 비교 ── -->
+<div class="sec-title">Provenance 데이터 흐름 비교</div>
+<div class="flow-compare">
+
+  <div class="flow-panel" style="border-color:#6e3030;">
+    <div class="flow-title" style="color:#f85149;">✗ 기존 — 출처 추적 없음</div>
+    <div class="flow-nodes">
+      <div class="flow-node" style="background:#1e1e42; color:#9fa8da;">더치트 수집</div>
+      <div class="flow-down">↓</div>
+      <div class="flow-node" style="background:#271540; color:#ce93d8; position:relative;">
+        vt_bacnt { account_no: "110-xxx" }
+        <div class="flow-problem">❓ 이 데이터가 어디서?</div>
+      </div>
+      <div class="flow-down">↓</div>
+      <div class="flow-node" style="background:#271540; color:#ce93d8; position:relative;">
+        수사관 직접 입력
+        <div class="flow-problem">❓ 언제 수집됐나?</div>
+      </div>
+      <div class="flow-down">↓</div>
+      <div class="flow-node" style="background:#271540; color:#ce93d8; position:relative;">
+        분석 결과
+        <div class="flow-problem">❓ 신뢰 가능한가?</div>
+      </div>
+    </div>
+    <div style="margin-top:16px; font-size:11px; color:#ffa5a5; text-align:center;">
+      법정에서 증거 출처 제시 불가
+    </div>
+  </div>
+
+  <div class="flow-panel" style="border-color:#238636;">
+    <div class="flow-title" style="color:#56d364;">✓ 개선 — vt_src + source_id 추적</div>
+    <div class="flow-nodes">
+      <div class="flow-node" style="background:#1e1535; color:#b39ddb;">
+        vt_src { src_name: "더치트", reliability_tier: 4 }
+      </div>
+      <div class="flow-down">↓ SOURCED_FROM</div>
+      <div class="flow-node" style="background:#271540; color:#ce93d8; position:relative;">
+        vt_bacnt { account_no: "110-xxx" }
+        <div class="flow-ok">✓ Tier 4 OSINT</div>
+      </div>
+      <div class="flow-down">↓</div>
+      <div class="flow-node" style="background:#271540; color:#ce93d8; position:relative;">
+        엣지 { source_id: "src-dutcheat", confidence: 0.8, verified: false }
+        <div class="flow-ok">✓ 미검증 표시</div>
+      </div>
+      <div class="flow-down">↓ 수사관 확인</div>
+      <div class="flow-node" style="background:#0f2d1a; color:#56d364; position:relative;">
+        엣지 { verified: true, verified_by: "inv-001" }
+        <div class="flow-ok">✓ 검증 완료</div>
+      </div>
+    </div>
+    <div style="margin-top:16px; font-size:11px; color:#56d364; text-align:center;">
+      출처·신뢰도·검증 이력 완전 추적 가능
+    </div>
+  </div>
+
+</div>
+
+<!-- ── 엣지 메타속성 비교 ── -->
+<div class="sec-title">엣지 메타속성 비교</div>
+<div class="edge-compare" style="margin-bottom:40px;">
+  <div class="edge-panel">
+    <div class="edge-panel-header edge-old-header" style="color:#ffa5a5;">기존 엣지 속성</div>
+    <div class="edge-list">
+      <div class="edge-item"><span class="edge-from">created_at</span><span class="edge-note">단일 시간축 — 현실시간과 기록시간 혼재</span></div>
+      <div class="edge-item" style="opacity:0.4;"><span style="font-size:11px;">source_id</span><span class="edge-note" style="color:#f85149;">없음</span></div>
+      <div class="edge-item" style="opacity:0.4;"><span style="font-size:11px;">confidence</span><span class="edge-note" style="color:#f85149;">없음</span></div>
+      <div class="edge-item" style="opacity:0.4;"><span style="font-size:11px;">verified</span><span class="edge-note" style="color:#f85149;">없음</span></div>
+      <div class="edge-item" style="opacity:0.4;"><span style="font-size:11px;">valid_from/to</span><span class="edge-note" style="color:#f85149;">없음</span></div>
+    </div>
+  </div>
+
+  <div class="edge-panel" style="border-color:#238636;">
+    <div class="edge-panel-header edge-new-header" style="color:#56d364;">최종 엣지 메타속성 (EDGE_META_SCHEMA)</div>
+    <div class="edge-list">
+      <div class="edge-item">
+        <span class="edge-new-mark">필수</span>
+        <span class="edge-from">source_id</span>
+        <span class="edge-note">vt_src.src_id 참조</span>
+      </div>
+      <div class="edge-item">
+        <span class="edge-new-mark">필수</span>
+        <span class="edge-from">rec_created</span>
+        <span class="edge-note">DB 기록 시점 (Transaction Time)</span>
+      </div>
+      <div class="edge-item">
+        <span class="edge-new-mark">필수</span>
+        <span class="edge-from">creation_method</span>
+        <span class="edge-note">manual | etl | ocr_ner | osint | inference</span>
+      </div>
+      <div class="edge-item">
+        <span style="font-size:9px;padding:1px 5px;border-radius:3px;background:#1a2e10;border:1px solid #3a6020;color:#80a060;">권장</span>
+        <span class="edge-from">confidence</span>
+        <span class="edge-note">0.0~1.0</span>
+      </div>
+      <div class="edge-item">
+        <span style="font-size:9px;padding:1px 5px;border-radius:3px;background:#1a2e10;border:1px solid #3a6020;color:#80a060;">권장</span>
+        <span class="edge-from">verified</span>
+        <span class="edge-note">false=주장 / true=검증완료</span>
+      </div>
+      <div class="edge-item">
+        <span style="font-size:9px;padding:1px 5px;border-radius:3px;background:#1a2030;border:1px solid #304060;color:#6080a0;">선택</span>
+        <span class="edge-from">valid_from / valid_to</span>
+        <span class="edge-note">소유·관계 엣지에만 (현실 유효기간)</span>
+      </div>
+      <div class="edge-item">
+        <span style="font-size:9px;padding:1px 5px;border-radius:3px;background:#1a2030;border:1px solid #304060;color:#6080a0;">조건부</span>
+        <span class="edge-from">verified_by / verified_at</span>
+        <span class="edge-note">verified=true 시 필수</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── 구현 우선순위 ── -->
+<div class="sec-title">구현 우선순위 (Phase)</div>
+<div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; margin-bottom:32px;">
+
+  <div style="border:1px solid #238636; border-radius:10px; padding:16px; background:#081a0f;">
+    <div style="font-size:13px; font-weight:700; color:#56d364; margin-bottom:10px;">Phase 1 — 즉시</div>
+    <div style="font-size:11px; color:#8b949e; margin-bottom:10px;">기존 코드 수정, 신규 노드 없음</div>
+    <ul style="list-style:none;">
+      <li style="font-size:12px; padding:3px 0; color:#c9d1d9; border-bottom:1px solid #0d2a16;">✓ vt_psn.role 속성 제거 → 역할 엣지</li>
+      <li style="font-size:12px; padding:3px 0; color:#c9d1d9; border-bottom:1px solid #0d2a16;">✓ vt_bacnt bank_cd 추가</li>
+      <li style="font-size:12px; padding:3px 0; color:#c9d1d9; border-bottom:1px solid #0d2a16;">✓ vt_file hash_val 표준화</li>
+      <li style="font-size:12px; padding:3px 0; color:#c9d1d9; border-bottom:1px solid #0d2a16;">✓ 엣지 source_id, rec_created 의무화</li>
+      <li style="font-size:12px; padding:3px 0; color:#c9d1d9;">✓ COLUMN_PATTERNS 완전판 교체</li>
+    </ul>
+  </div>
+
+  <div style="border:1px solid #e3b341; border-radius:10px; padding:16px; background:#1a1000;">
+    <div style="font-size:13px; font-weight:700; color:#e3b341; margin-bottom:10px;">Phase 2 — 단기</div>
+    <div style="font-size:11px; color:#8b949e; margin-bottom:10px;">신규 노드 추가·통합</div>
+    <ul style="list-style:none;">
+      <li style="font-size:12px; padding:3px 0; color:#c9d1d9; border-bottom:1px solid #2a1e00;">+ vt_src 노드 신규 + 소스 5개 등록</li>
+      <li style="font-size:12px; padding:3px 0; color:#c9d1d9; border-bottom:1px solid #2a1e00;">+ vt_petition 노드 신규</li>
+      <li style="font-size:12px; padding:3px 0; color:#c9d1d9; border-bottom:1px solid #2a1e00;">+ vt_id (vt_persona 흡수)</li>
+      <li style="font-size:12px; padding:3px 0; color:#c9d1d9; border-bottom:1px solid #2a1e00;">+ vt_email 신규</li>
+      <li style="font-size:12px; padding:3px 0; color:#c9d1d9; border-bottom:1px solid #2a1e00;">+ vt_movement (lpr+cell 통합)</li>
+      <li style="font-size:12px; padding:3px 0; color:#c9d1d9;">+ sameAs / contradicts 엣지 등록</li>
+    </ul>
+  </div>
+
+  <div style="border:1px solid #58a6ff; border-radius:10px; padding:16px; background:#0c1824;">
+    <div style="font-size:13px; font-weight:700; color:#58a6ff; margin-bottom:10px;">Phase 3 — 중기</div>
+    <div style="font-size:11px; color:#8b949e; margin-bottom:10px;">분석 기능 자동화</div>
+    <ul style="list-style:none;">
+      <li style="font-size:12px; padding:3px 0; color:#c9d1d9; border-bottom:1px solid #102030;">⚙ EntityResolution 서비스</li>
+      <li style="font-size:12px; padding:3px 0; color:#c9d1d9; border-bottom:1px solid #102030;">⚙ confidence_fusion (D-S 결합)</li>
+      <li style="font-size:12px; padding:3px 0; color:#c9d1d9; border-bottom:1px solid #102030;">⚙ vt_petition 군집화 자동화</li>
+      <li style="font-size:12px; padding:3px 0; color:#c9d1d9; border-bottom:1px solid #102030;">⚙ Bitemporal 쿼리 UI</li>
+      <li style="font-size:12px; padding:3px 0; color:#c9d1d9;">⚙ INFERENCE_RULES 스케줄러</li>
+    </ul>
+  </div>
+
+</div>
+
+<div style="text-align:center; font-size:11px; color:#484f58; padding-top:20px; border-top:1px solid #21262d;">
+  CCOP Ontology Final Architecture v3.0 — 2026-04-01 | 기준 문서: docs/ONTOLOGY_FINAL_ARCHITECTURE.md
+</div>
+
+</body>
+</html>

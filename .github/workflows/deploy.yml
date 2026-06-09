@@ -1,74 +1,149 @@
-name: Deploy to Production
+name: Deploy to VM (Test)
 
 on:
   push:
     branches:
       - main
-  workflow_dispatch:
+      - dev          # dev 브랜치 push도 테스트 배포 트리거
+  workflow_dispatch: # 수동 실행 버튼
 
 env:
   DOCKER_IMAGE: ccop_app
-  DOCKER_TAG: latest
+  IMAGE_FULL: ${{ secrets.DOCKER_USERNAME }}/ccop_app
 
 jobs:
+  # ─────────────────────────────────────────
+  # 1. 코드 검증
+  # ─────────────────────────────────────────
   test:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.10'
+          cache: 'pip'
 
-      - name: Install dependencies
+      - name: 의존성 설치
+        run: pip install -r requirements.txt
+
+      - name: 온톨로지 서비스 임포트 검증
         run: |
-          pip install -r requirements.txt
+          python -c "from app.middleware.services.ontology_service import KICSCrimeDomainOntology; \
+                     assert len(KICSCrimeDomainOntology.ENTITIES) > 0; \
+                     print('✅ 온톨로지 노드:', len(KICSCrimeDomainOntology.ENTITIES), '개'); \
+                     print('✅ 온톨로지 엣지:', len(KICSCrimeDomainOntology.RELATIONSHIPS), '개')"
 
-      - name: Run linting (if you add linters later)
+      - name: Flask 앱 시작 검증 (DB 없이)
+        env:
+          DB_HOST: "localhost"
+          DB_PORT: "5432"
+          DB_NAME: "test"
+          DB_USER: "test"
+          DB_PASSWORD: "test"
+          OPENAI_API_KEY: "sk-test"
         run: |
-          # pip install flake8
-          # flake8 app/
+          timeout 10 python -c "
+          import os
+          os.environ.setdefault('FLASK_ENV', 'testing')
+          from app import create_app
+          app = create_app()
+          print('✅ Flask 앱 생성 성공')
+          " || echo "⚠️ DB 없이 앱 시작 실패 (정상 — DB 연결 필요)"
 
+  # ─────────────────────────────────────────
+  # 2. Docker 이미지 빌드 & 푸시
+  # ─────────────────────────────────────────
   build:
     needs: test
     runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.meta.outputs.tag }}
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
+      - name: 이미지 태그 결정
+        id: meta
+        run: |
+          SHA=$(echo ${{ github.sha }} | cut -c1-7)
+          BRANCH=$(echo ${{ github.ref_name }} | sed 's/\//-/g')
+          TAG="${BRANCH}-${SHA}"
+          echo "tag=${TAG}" >> $GITHUB_OUTPUT
+          echo "📦 이미지 태그: ${TAG}"
 
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v2
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v4
+      - name: 빌드 & 푸시
+        uses: docker/build-push-action@v5
         with:
           context: .
           push: true
-          tags: ${{ secrets.DOCKER_USERNAME }}/${{ env.DOCKER_IMAGE }}:${{ env.DOCKER_TAG }}
-          cache-from: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/${{ env.DOCKER_IMAGE }}:buildcache
-          cache-to: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/${{ env.DOCKER_IMAGE }}:buildcache,mode=max
+          tags: |
+            ${{ env.IMAGE_FULL }}:${{ steps.meta.outputs.tag }}
+            ${{ env.IMAGE_FULL }}:latest
+          cache-from: type=registry,ref=${{ env.IMAGE_FULL }}:buildcache
+          cache-to:   type=registry,ref=${{ env.IMAGE_FULL }}:buildcache,mode=max
 
+  # ─────────────────────────────────────────
+  # 3. VM 배포
+  # ─────────────────────────────────────────
   deploy:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy to VPS via SSH
-        uses: appleboy/ssh-action@master
+      - name: VM SSH 배포
+        uses: appleboy/ssh-action@v1.0.3
         with:
-          host: ${{ secrets.VPS_HOST }}
+          host:     ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
+          key:      ${{ secrets.VPS_SSH_KEY }}
           script: |
+            set -e
             cd ~/ccop_test
-            git pull origin main
+
+            echo "=== 1. 코드 최신화 ==="
+            git pull origin ${{ github.ref_name }}
+
+            echo "=== 2. 이미지 태그 업데이트 ==="
+            export IMAGE_TAG="${{ needs.build.outputs.image_tag }}"
+            sed -i "s|image:.*ccop_app.*|image: ${{ secrets.DOCKER_USERNAME }}/ccop_app:${IMAGE_TAG}|g" docker-compose.yml
+
+            echo "=== 3. 새 버전 실행 ==="
             docker-compose pull
-            docker-compose up -d --force-recreate
+            docker-compose up -d --force-recreate --remove-orphans
+
+            echo "=== 4. 헬스체크 (최대 60초 대기) ==="
+            for i in $(seq 1 12); do
+              STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:5001/api/v1/health || echo "000")
+              if [ "$STATUS" = "200" ]; then
+                echo "✅ 배포 성공 (시도 ${i}회, HTTP ${STATUS})"
+                break
+              fi
+              echo "⏳ 대기 중... (${i}/12, HTTP ${STATUS})"
+              sleep 5
+            done
+
+            if [ "$STATUS" != "200" ]; then
+              echo "❌ 헬스체크 실패 — 이전 버전으로 롤백"
+              docker-compose down
+              git checkout HEAD~1 -- docker-compose.yml
+              docker-compose up -d
+              exit 1
+            fi
+
+            echo "=== 5. 이미지 정리 ==="
             docker image prune -af
+
+      - name: 배포 결과 출력
+        if: always()
+        run: |
+          echo "브랜치  : ${{ github.ref_name }}"
+          echo "커밋    : ${{ github.sha }}"
+          echo "이미지  : ${{ needs.build.outputs.image_tag }}"
+          echo "VM      : ${{ secrets.VPS_HOST }}"

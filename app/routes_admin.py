@@ -5,6 +5,8 @@ API 키 관리 및 파트너 관리
 from flask import Blueprint, render_template, request, jsonify, session, redirect, url_for, current_app
 from functools import wraps
 from app.models.api_key import APIKey, TIERS
+from collections import defaultdict
+from datetime import datetime, timezone, timedelta
 import hashlib
 import hmac
 import logging
@@ -14,7 +16,10 @@ admin = Blueprint('admin', __name__, url_prefix='/admin')
 
 logger = logging.getLogger(__name__)
 
-# API_KEYS_PLAINTEXT는 api_auth 모듈에서 관리 (영속화)
+# 로그인 실패 추적: {ip: [실패 시각, ...]}
+_login_failures: dict = defaultdict(list)
+_MAX_LOGIN_ATTEMPTS = 5    # 최대 실패 횟수
+_LOCKOUT_SECONDS = 300     # 잠금 시간 (5분)
 
 
 def _get_admin_password_hash():
@@ -29,31 +34,63 @@ def _get_admin_password_hash():
     return hashlib.sha256(password.encode()).hexdigest()
 
 
+def _is_ip_locked(ip: str) -> bool:
+    """IP 잠금 여부 확인 (5분 내 5회 실패 시 잠금)"""
+    now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(seconds=_LOCKOUT_SECONDS)
+    recent = [t for t in _login_failures[ip] if t > cutoff]
+    _login_failures[ip] = recent
+    return len(recent) >= _MAX_LOGIN_ATTEMPTS
+
+
+def _record_login_failure(ip: str):
+    _login_failures[ip].append(datetime.now(timezone.utc))
+
+
 def require_admin(f):
-    """관리자 인증 데코레이터"""
+    """관리자 인증 데코레이터 (세션 만료 포함)"""
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if not session.get('admin_logged_in'):
             return redirect(url_for('admin.login'))
+        # 세션 만료 검사 (1시간)
+        login_time = session.get('login_time')
+        if login_time:
+            elapsed = datetime.now(timezone.utc).timestamp() - login_time
+            if elapsed > 3600:
+                session.clear()
+                return redirect(url_for('admin.login'))
         return f(*args, **kwargs)
     return decorated_function
 
 @admin.route('/login', methods=['GET', 'POST'])
 def login():
-    """관리자 로그인"""
+    """관리자 로그인 (Brute Force 방지)"""
     if request.method == 'POST':
-        password = request.form.get('password')
+        ip = request.remote_addr
+
+        # IP 잠금 확인
+        if _is_ip_locked(ip):
+            logger.warning(f"관리자 로그인 잠금 상태 (IP: {ip})")
+            return render_template('admin/login.html', error=f"로그인 시도가 너무 많습니다. {_LOCKOUT_SECONDS//60}분 후 재시도하세요.")
+
+        password = request.form.get('password', '')
         password_hash = hashlib.sha256(password.encode()).hexdigest()
-        
+
         # 타이밍 공격 방어를 위해 hmac.compare_digest 사용
         if hmac.compare_digest(password_hash, _get_admin_password_hash()):
             session['admin_logged_in'] = True
-            logger.info("관리자 로그인 성공")
+            session['login_time'] = datetime.now(timezone.utc).timestamp()
+            session.permanent = True
+            _login_failures.pop(ip, None)  # 성공 시 실패 기록 초기화
+            logger.info(f"관리자 로그인 성공 (IP: {ip})")
             return redirect(url_for('admin.dashboard'))
         else:
-            logger.warning(f"관리자 로그인 실패 (IP: {request.remote_addr})")
-            return render_template('admin/login.html', error="잘못된 비밀번호입니다.")
-    
+            _record_login_failure(ip)
+            remaining = _MAX_LOGIN_ATTEMPTS - len(_login_failures[ip])
+            logger.warning(f"관리자 로그인 실패 (IP: {ip}, 남은 시도: {remaining})")
+            return render_template('admin/login.html', error=f"잘못된 비밀번호입니다. (남은 시도: {max(remaining, 0)}회)")
+
     return render_template('admin/login.html')
 
 @admin.route('/logout')
@@ -111,7 +148,8 @@ def create_partner():
         }), 201
         
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        logger.error(f"Admin API error: {e}")
+        return jsonify({"error": "내부 서버 오류가 발생했습니다."}), 500
 
 @admin.route('/api/partners/list', methods=['GET'])
 @require_admin
@@ -139,7 +177,8 @@ def list_partners():
         return jsonify({"partners": partners}), 200
         
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        logger.error(f"Admin API error: {e}")
+        return jsonify({"error": "내부 서버 오류가 발생했습니다."}), 500
 
 @admin.route('/api/partners/deactivate', methods=['POST'])
 @require_admin
@@ -162,7 +201,8 @@ def deactivate_partner():
             return jsonify({"error": "Partner not found"}), 404
         
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        logger.error(f"Admin API error: {e}")
+        return jsonify({"error": "내부 서버 오류가 발생했습니다."}), 500
 
 @admin.route('/api/partners/delete', methods=['POST'])
 @require_admin
@@ -191,4 +231,5 @@ def delete_partner():
             return jsonify({"error": "Partner not found"}), 404
         
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        logger.error(f"Admin API error: {e}")
+        return jsonify({"error": "내부 서버 오류가 발생했습니다."}), 500

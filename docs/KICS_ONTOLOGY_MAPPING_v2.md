@@ -1,3 +1,15 @@
+> ## ⚠️ DEPRECATED — V4.0 통합본 사용 권장
+>
+> 이 문서는 **CCOP 온톨로지 V2.0 (KICS 매핑)** 명세입니다. **2026-05-21부로 V4.0으로 통합되어 deprecated** 되었습니다.
+>
+> **현행 SSOT**: [`docs/CCOP_ONTOLOGY_V4.0.md`](CCOP_ONTOLOGY_V4.0.md)
+> **코드 SSOT**: `app/middleware/services/ontology_service.py:KICSCrimeDomainOntology`
+>
+> V4.0은 V3.7 카탈로그(25 노드 / 53 엣지)를 그대로 유지하면서, 도메인 사용 매트릭스 / 식별자 형식 / 추론 규칙을 표준 메타로 격상한 통합본입니다. 본 문서는 **역사적 참고용**으로만 보존됩니다.
+>
+> ---
+>
+
 # CCOP GDB 온톨로지 매핑 가이드 v2 (RDB 표준화 v2 연동)
 
 > **Version**: 2.0  

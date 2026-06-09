@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CCOP 지능형 수사 그래프 검색</title>
+    <!-- 최신 폰트 (Pretendard) 로드 -->
+    <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v3.2.1/dist/web/static/pretendard.css" />
+    <style>
+        :root {
+            --primary: #4F46E5;
+            --primary-hover: #4338CA;
+            --bg-color: #0B0F19;
+            --card-bg: rgba(255, 255, 255, 0.05);
+            --border-color: rgba(255, 255, 255, 0.1);
+            --text-main: #FFFFFF;
+            --text-muted: #9CA3AF;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            /* 은은한 배경 그라데이션 및 애니메이션 효과 */
+            background-image: 
+                radial-gradient(circle at 15% 50%, rgba(79, 70, 229, 0.15), transparent 25%),
+                radial-gradient(circle at 85% 30%, rgba(236, 72, 153, 0.15), transparent 25%);
+        }
+
+        .search-container {
+            width: 100%;
+            max-width: 800px;
+            padding: 40px;
+            /* 글래스모피즘(Glassmorphism) 효과 */
+            background: var(--card-bg);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--border-color);
+            border-radius: 24px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            text-align: center;
+            transform: translateY(0);
+            transition: all 0.4s ease;
+        }
+
+        .search-container:hover {
+            box-shadow: 0 30px 60px -12px rgba(79, 70, 229, 0.2);
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 12px;
+            background: linear-gradient(to right, #A78BFA, #F472B6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        p.subtitle {
+            color: var(--text-muted);
+            font-size: 1.1rem;
+            margin-bottom: 40px;
+        }
+
+        /* 검색 입력창 영역 */
+        .input-wrapper {
+            position: relative;
+            display: flex;
+            align-items: center;
+            margin-bottom: 24px;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            padding: 20px 24px;
+            font-size: 1.1rem;
+            color: var(--text-main);
+            background: rgba(0, 0, 0, 0.2);
+            border: 2px solid var(--border-color);
+            border-radius: 16px;
+            outline: none;
+            transition: all 0.3s ease;
+            padding-right: 140px; /* 버튼 공간 확보 */
+        }
+
+        input[type="text"]:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.2);
+            background: rgba(0, 0, 0, 0.4);
+        }
+
+        input[type="text"]::placeholder {
+            color: #6B7280;
+        }
+
+        button.search-btn {
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 12px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        button.search-btn:hover {
+            background: var(--primary-hover);
+            transform: translateY(-50%) scale(1.05);
+        }
+
+        button.search-btn:active {
+            transform: translateY(-50%) scale(0.95);
+        }
+
+        /* 추천 해시태그 칩(Chip) 영역 */
+        .suggestions-title {
+            text-align: left;
+            font-size: 0.9rem;
+            color: #D1D5DB;
+            font-weight: 600;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .chips-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            justify-content: flex-start;
+        }
+
+        .chip {
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: #E5E7EB;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            user-select: none;
+        }
+
+        .chip:hover {
+            background: rgba(79, 70, 229, 0.2);
+            border-color: rgba(79, 70, 229, 0.5);
+            color: white;
+            transform: translateY(-2px);
+        }
+
+        .chip:active {
+            transform: translateY(0);
+        }
+
+        /* 마이크로 애니메이션: 입력 텍스트 변경 효과 */
+        @keyframes highlight {
+            0% { background-color: rgba(79, 70, 229, 0.4); }
+            100% { background-color: transparent; }
+        }
+        .highlight-text {
+            animation: highlight 0.8s ease-out;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="search-container">
+        <h1>지능형 텍스트 수사 엔진</h1>
+        <p class="subtitle">자연어로 질문하면 AI가 복잡한 범죄 연관망(Graph)을 실시간으로 추적합니다.</p>
+
+        <div class="input-wrapper">
+            <input type="text" id="searchInput" placeholder="예: 국민은행 110-222-3333 계좌에서 돈이 빠져나간 경로를 찾아줘" autocomplete="off">
+            <button class="search-btn" onclick="executeSearch()">수사 시작</button>
+        </div>
+
+        <div class="suggestions-title">
+            <span>💡 <strong>[추천]</strong> 클릭해서 완성된 질문 템플릿 채우기</span>
+        </div>
+        
+        <div class="chips-container">
+            <!-- 칩 클릭 시 data-query에 있는 완벽한 프롬프트가 검색창에 채워집니다. -->
+            <div class="chip" data-query="용의자 A의 계좌에서 출발해 3단계를 거쳐 용의자 B에게 도달하는 자금 이동의 최단 경로(Path)를 그려줘." onclick="fillSearch(this)">
+                #자금_최단경로
+            </div>
+            
+            <div class="chip" data-query="이체 일시가 '2023-04-01' 이후이고, 이체 금액이 5000000원 이상(>=)인 거액 이체 내역(vt_transfer)을 추적해줘." onclick="fillSearch(this)">
+                #거액_이체조회
+            </div>
+            
+            <div class="chip" data-query="통신사가 'SKT'인 전화번호(vt_telno) 소유자들 중 범죄에 연루된 리스트를 뽑아줘." onclick="fillSearch(this)">
+                #특정_통신사_추적
+            </div>
+            
+            <div class="chip" data-query="특정 IP(103.38.1.169)로 접속한 모든 사람들의 이름과 주민번호 리스트만 반환해줘." onclick="fillSearch(this)">
+                #의심IP_로그인
+            </div>
+            
+            <div class="chip" data-query="이체 횟수가 가장 많은 상위 3명의 핵심 연락책(허브) 랭킹을 뽑아줘." onclick="fillSearch(this)">
+                #핵심_허브노드_탐색
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 해시태그 칩(Chip)을 클릭했을 때 검색창에 텍스트 자동 채우기
+        function fillSearch(element) {
+            const inputField = document.getElementById('searchInput');
+            const queryText = element.getAttribute('data-query');
+            
+            inputField.value = queryText;
+            
+            // 시각적 피드백 (반짝임 효과)
+            inputField.classList.remove('highlight-text');
+            void inputField.offsetWidth; // 트리거 강제 실행
+            inputField.classList.add('highlight-text');
+            
+            // 입력창에 포커스 맞추기
+            inputField.focus();
+        }
+
+        // 수사 시작 버튼 클릭 시
+        function executeSearch() {
+            const inputField = document.getElementById('searchInput');
+            if (inputField.value.trim() === '') {
+                alert('검색할 수사 질문을 입력해 주세요.');
+                inputField.focus();
+                return;
+            }
+            
+            // 실제 서비스에서는 이곳에서 백엔드(API)로 쿼리를 전송합니다.
+            const btn = document.querySelector('.search-btn');
+            btn.innerHTML = '추적 중...';
+            btn.style.opacity = '0.8';
+            btn.disabled = true;
+            
+            // 시뮬레이션용 지연 시간
+            setTimeout(() => {
+                alert('요청하신 쿼리가 서버로 성공적으로 전송되었습니다!\n\n입력값: ' + inputField.value);
+                btn.innerHTML = '수사 시작';
+                btn.style.opacity = '1';
+                btn.disabled = false;
+            }, 800);
+        }
+        
+        // 엔터키 입력 시 검색 실행
+        document.getElementById('searchInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                executeSearch();
+            }
+        });
+    </script>
+
+</body>
+</html>

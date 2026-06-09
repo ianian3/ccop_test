@@ -34,82 +34,77 @@ class CypherService:
         """
         self.db_config = db_config or Config.DB_CONFIG
 
-    def _wrap_age_sql(self, query: str, graph_path: str) -> str:
+    def _extract_return_columns(self, query: str) -> List[str]:
         """
-        [핵심 로직] Standard Cypher -> Apache AGE SQL 변환
-        Example:
-            Input:  MATCH (n) RETURN n
-            Output: SELECT * FROM cypher('graph', $$ MATCH (n) RETURN n $$) as (n agtype)
+        RETURN 절에서 컬럼명 추출 (중복 파싱 제거용 공통 메서드)
+        "RETURN p, r, b" -> ["p", "r", "b"]
+        "RETURN p AS person" -> ["person"]
         """
-        # 1. RETURN 절 파싱 (정규식으로 반환 변수 추출)
-        # LIMIT, ORDER BY, SKIP 등 후속 절 제외
         return_pattern = re.compile(
-            r"RETURN\s+(.*?)(?:\s+(?:LIMIT|ORDER\s+BY|SKIP)\s+.*)?$", 
+            r"RETURN\s+(.*?)(?:\s+(?:LIMIT|ORDER\s+BY|SKIP)\s+.*)?$",
             re.IGNORECASE | re.DOTALL
         )
         match = return_pattern.search(query)
-        
         if not match:
-            # 조회용이 아닌 경우(CREATE 등) 처리 (여기선 예외 처리)
-            # AI가 조회만 하도록 유도하거나, 필요 시 로직 추가
             raise ValueError("CCOP 조회 쿼리에는 반드시 RETURN 절이 필요합니다.")
 
-        raw_items = match.group(1).split(',')
-        
-        # 2. agtype 캐스팅 구문 생성
-        cast_items = []
-        for item in raw_items:
+        columns = []
+        for item in match.group(1).split(','):
             clean_item = item.strip()
-            # AS 별칭이 있는 경우: "e AS edge" -> "edge agtype"
             if " AS " in clean_item.upper():
-                alias = clean_item.upper().split(" AS ")[-1].strip()
-                cast_items.append(f"{alias} agtype")
+                alias = clean_item.split(" AS ")[-1].strip()
+                columns.append(alias.lower())
             else:
-                # 단순 변수명인 경우
-                cast_items.append(f"{clean_item} agtype")
-        
-        columns_def = ", ".join(cast_items)
-        
-        # 3. 최종 SQL 조립
-        # 주의: f-string 사용 시 graph_path 검증 필수 (SQL Injection 방지)
-        wrapped_sql = f"SELECT * FROM cypher('{graph_path}', $$ {query} $$) as ({columns_def})"
-        return wrapped_sql
+                columns.append(clean_item.lower())
+        return columns
+
+    def _parse_agensgraph_value(self, value: str) -> Dict[str, Any]:
+        """
+        AgensGraph 결과 문자열 파싱
+        형식 1 (노드): vt_psn[4.11]{"id": "suspect_1", "name": "홍길동"}
+        형식 2 (엣지): owns_phone[8.1][4.11,6.1]{"rec_created": "..."}
+        형식 3 (스칼라): "문자열" 또는 숫자
+        """
+        if not isinstance(value, str):
+            return value
+
+        # 노드 패턴: label[graphid]{props}
+        node_match = re.match(r'^(\w+)\[(\d+\.\d+)\](\{.*\})$', value, re.DOTALL)
+        if node_match:
+            label, gid, props_str = node_match.groups()
+            try:
+                props = json.loads(props_str)
+            except Exception:
+                props = {}
+            return {"id": gid, "label": label, "properties": props}
+
+        # 엣지 패턴: label[graphid][start_id,end_id]{props}
+        edge_match = re.match(r'^(\w+)\[(\d+\.\d+)\]\[(\d+\.\d+),(\d+\.\d+)\](\{.*\})$', value, re.DOTALL)
+        if edge_match:
+            label, gid, start_id, end_id, props_str = edge_match.groups()
+            try:
+                props = json.loads(props_str)
+            except Exception:
+                props = {}
+            return {"id": gid, "label": label, "start": start_id, "end": end_id, "properties": props}
+
+        # 스칼라 JSON 시도
+        try:
+            return json.loads(value)
+        except Exception:
+            return value
 
     def _format_age_result(self, row: tuple, columns: List[str]) -> Dict[str, Any]:
         """
-        AGE 결과(agtype 문자열/객체)를 프론트엔드용 표준 JSON으로 변환
-        
-        Args:
-            row: psycopg2 결과 튜플
-            columns: 컬럼명 리스트
+        AgensGraph Cypher 결과를 프론트엔드용 표준 JSON으로 변환
         """
         formatted = {}
-        
         for idx, value in enumerate(row):
             key = columns[idx] if idx < len(columns) else f"col_{idx}"
-            
             if value is None:
                 formatted[key] = None
-                continue
-                
-            # AGE는 결과를 문자열 형태의 JSON으로 줄 때가 많음
-            if isinstance(value, str):
-                try:
-                    # '::vertex', '::edge' 등 접미사 제거
-                    clean_val = value.split("::")[0]
-                    parsed = json.loads(clean_val)
-                    
-                    # 노드(Vertex) 구조 표준화
-                    if isinstance(parsed, dict) and 'label' in parsed and 'id' in parsed:
-                        formatted[key] = {
-                            "id": str(parsed['id']),  # ID 문자열 변환
-                            "label": parsed['label'],
-                            "properties": parsed.get('properties', {})
-                        }
-                    else:
-                        formatted[key] = parsed
-                except (json.JSONDecodeError, TypeError):
-                    formatted[key] = value
+            elif isinstance(value, str):
+                formatted[key] = self._parse_agensgraph_value(value)
             else:
                 formatted[key] = value
         return formatted
@@ -136,34 +131,18 @@ class CypherService:
         """
         conn = None
         try:
-            # 1. SQL 래핑
-            sql = self._wrap_age_sql(query, graph_path)
-            
-            # 2. DB 연결 및 실행
+            # AgensGraph 네이티브 방식: SET graph_path 후 Cypher 직접 실행
             conn = self._get_connection()
             cur = conn.cursor()
-            
+
             # 그래프 경로 설정
             safe_set_graph_path(cur, graph_path)
-            cur.execute(sql)
-            
+            cur.execute(query)
+
             rows = cur.fetchall()
-            
-            # 컬럼명 추출 (RETURN 절에서)
-            return_pattern = re.compile(r"RETURN\s+(.*)", re.IGNORECASE | re.DOTALL)
-            match = return_pattern.search(query)
-            columns = []
-            if match:
-                raw_items = match.group(1).split(',')
-                for item in raw_items:
-                    clean_item = item.strip()
-                    if " AS " in clean_item.upper():
-                        alias = clean_item.split(" AS ")[-1].strip()
-                        columns.append(alias.lower())
-                    else:
-                        columns.append(clean_item.lower())
-            
-            # 3. 결과 변환
+
+            # 결과 변환
+            columns = self._extract_return_columns(query)
             return [self._format_age_result(row, columns) for row in rows]
             
         except ValueError as e:

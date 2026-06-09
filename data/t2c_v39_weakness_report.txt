@@ -1,0 +1,6 @@
+meta_condition        : 600 (target 600)
+threat_filter         : 350 (target 350)
+chain                 : 450 (target 450)
+1hop_object_extra     : 350 (target 350)
+
+총 생성: 1750  중복 제거 후: 1662

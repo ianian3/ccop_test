@@ -1,0 +1,7 @@
+1hop_person2person    : 500 (target 500)
+1hop_case             : 450 (target 450)
+1hop_event            : 400 (target 400)
+1hop_object           : 320 (target 320)
+1hop_person           : 280 (target 280)
+
+총 생성: 1950  중복 제거 후: 1923

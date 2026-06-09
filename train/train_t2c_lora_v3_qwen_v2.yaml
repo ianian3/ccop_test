@@ -1,0 +1,59 @@
+### CCOP Text2Cypher v3.7 SFT — Qwen2.5-7B-Instruct LoRA (v2)
+### 학습 데이터: t2c_v37_msg (messages format, 28,109 train / 3,117 eval)
+###
+### v1 (ShareGPT) → v2 (messages) 변경 사유:
+###   - v1: ShareGPT format + template:qwen 조합에서 assistant 응답이 label 마스킹됨
+###     → eval_loss 0.0002 (비정상으로 낮음), 추론 시 v3.7 패턴 학습 안 됨 확인
+###   - v2: OpenAI native messages format → LF가 role 매핑 깨끗이 처리
+###     → assistant 응답이 정상 label로 학습됨
+
+### ── 모델 ──────────────────────────────────────────────────────────
+model_name_or_path: Qwen/Qwen2.5-7B-Instruct
+trust_remote_code: false
+
+### ── 학습 방식 ──────────────────────────────────────────────────────
+stage: sft
+do_train: true
+finetuning_type: lora
+
+### ── LoRA 설정 ─────────────────────────────────────────────────────
+lora_rank: 64
+lora_alpha: 128
+lora_dropout: 0.05
+lora_target: q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj
+
+### ── 데이터셋 (messages format) ─────────────────────────────────────
+dataset: t2c_v37_msg
+eval_dataset: t2c_v37_eval_msg
+dataset_dir: /home/ai-kyw-dev/ccop_train/train
+template: qwen
+
+cutoff_len: 1536
+overwrite_cache: true
+preprocessing_num_workers: 4
+
+### ── 학습 하이퍼파라미터 ────────────────────────────────────────────
+output_dir: /home/ai-kyw-dev/ccop_train/train/output/qwen25_t2c_v37_v2
+per_device_train_batch_size: 2
+gradient_accumulation_steps: 8     # 유효 배치 16
+num_train_epochs: 3
+learning_rate: 1.0e-4
+lr_scheduler_type: cosine
+warmup_ratio: 0.03
+weight_decay: 0.01
+
+### ── 정밀도 및 메모리 ───────────────────────────────────────────────
+bf16: true
+quantization_bit: 4
+optim: adamw_torch_fused
+ddp_find_unused_parameters: false
+
+### ── 저장 및 로깅 ───────────────────────────────────────────────────
+save_strategy: epoch
+save_total_limit: 3
+logging_steps: 50
+report_to: none
+
+### ── 평가 ─────────────────────────────────────────────────────────
+eval_strategy: epoch
+per_device_eval_batch_size: 4

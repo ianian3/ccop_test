@@ -3,13 +3,96 @@ import logging
 from app.database import get_db_connection, safe_props, safe_set_graph_path, validate_graph_path
 from app.services.subgraph_service import SubGraphService
 from app.services.ai_service import AIService
+
+def _extract_keyword(question: str) -> str:
+    """질문에서 가장 긴 단어를 키워드로 추출 (LLM 호출 없이 규칙 기반)"""
+    words = [w.strip(".,?!\"'()") for w in question.split() if len(w) >= 2]
+    return max(words, key=len) if words else question
 import psycopg2
 from flask import current_app
 
 logger = logging.getLogger(__name__)
 
 class GraphService:
-    
+
+    # KICS 온톨로지 엣지 방향 — v3.7 POLE 6레이어 기준
+    # (docs/ONTOLOGY_FINAL_ARCHITECTURE_v3.7.md §4 엣지 카탈로그)
+    # 동적 DB 조회 실패 시 fallback으로 사용.
+    _KICS_EDGE_DIRECTIONS = {
+        # ── CASE 관련 역할 엣지 ───────────────────────────────────────
+        "suspect_in":    ("vt_psn",      "vt_case"),
+        "victim_in":     ("vt_psn",      "vt_case"),
+        "witness_in":    ("vt_psn",      "vt_case"),
+        "filed_as":      ("vt_petition", "vt_case"),
+        "linked_to":     ("vt_petition", "vt_case"),
+        "clusters_with": ("vt_petition", "vt_petition"),
+        "related_case":  ("vt_case",     "vt_case"),   # v3.5: similar_to 대체
+        # ── CASE → OBJECT 증거 연결 (v3.5 공식 등재) ─────────────────
+        "eg_used_account": ("vt_case",   "vt_bacnt"),
+        "eg_used_phone":   ("vt_case",   "vt_telno"),
+        "eg_used_ip":      ("vt_case",   "vt_ip"),
+        # ── [호환성] involves — 신규 생성 금지, 기존 DB 데이터 읽기 전용
+        "involves":      ("vt_case",     "vt_psn"),
+        "involves_org":  ("vt_case",     "vt_org"),
+        # ── PERSON 소유/귀속 엣지 ─────────────────────────────────────
+        "has_account":   ("vt_psn",      "vt_bacnt"),
+        "controls":      ("vt_psn",      "vt_bacnt"),
+        "owns_phone":    ("vt_psn",      "vt_telno"),
+        "owns_device":   ("vt_psn",      "vt_dev"),
+        "uses_id":       ("vt_psn",      "vt_id"),
+        "uses_email":    ("vt_psn",      "vt_email"),
+        "drives":        ("vt_psn",      "vt_vhcl"),   # 운행 (LPR·CDR 기반)
+        "owns_vehicle":  ("vt_psn",      "vt_vhcl"),   # v3.5: 법적 소유 (등록원부)
+        "used_ip":       ("vt_psn",      "vt_ip"),
+        "member_of":     ("vt_psn",      "vt_org"),
+        "works_at":      ("vt_psn",      "vt_org"),
+        # ── PERSON 간 관계 ────────────────────────────────────────────
+        "accomplice_of": ("vt_psn",      "vt_psn"),
+        "sameAs":        ("vt_psn",      "vt_psn"),
+        "contradicts":   ("vt_psn",      "vt_psn"),
+        # ── PERSON v3.4 신규 ──────────────────────────────────────────
+        "operates":      ("vt_psn",      "vt_site"),
+        "recruits":      ("vt_psn",      "vt_psn"),
+        "blackmails":    ("vt_psn",      "vt_psn"),
+        # ── OBJECT → PERSON 예외 엣지 (v3.5 공식 허용) ───────────────
+        "registered_to": ("vt_telno",    "vt_psn"),    # v3.5: 전화 명의자 (Phone→Person)
+        # ── OBJECT 간 관계 ────────────────────────────────────────────
+        "transferred_to": ("vt_bacnt",   "vt_bacnt"),
+        "hosts":         ("vt_ip",       "vt_site"),   # 서버 IP → 사이트 호스팅
+        "resolves_to":   ("vt_site",     "vt_ip"),     # DNS 해석
+        "communicated_with": ("vt_ip",   "vt_ip"),     # IP 간 통신
+        "belongs_to":    ("vt_bacnt",    "vt_org"),    # 계좌 소속 금융기관
+        "contains_file": ("vt_site",     "vt_file"),   # 파일 내장·배포
+        "located_at":    ("vt_atm",      "vt_loc"),    # 객체 고정 위치
+        "mentions_account": ("vt_msg",   "vt_bacnt"),  # v3.5: 메시지 내 계좌 언급
+        # ── [호환성] deprecated, 신규 생성 금지 ──────────────────────
+        "hosted_at":     ("vt_site",     "vt_ip"),     # → hosts 대체됨
+        "contacted":     ("vt_telno",    "vt_telno"),  # → caller/callee 대체됨
+        # ── EVENT 관련 엣지 ───────────────────────────────────────────
+        "from_account":  ("vt_bacnt",    "vt_transfer"),
+        "to_account":    ("vt_transfer", "vt_bacnt"),
+        "caller":        ("vt_telno",    "vt_call"),
+        "callee":        ("vt_call",     "vt_telno"),
+        "accessed_from": ("vt_access",   "vt_ip"),     # 접속 출발 IP
+        "accessed_to":   ("vt_access",   "vt_site"),   # v3.5 복원: 접속 목적지 사이트
+        "sent_msg":      ("vt_telno",    "vt_msg"),    # sent_via 대체
+        "received_msg":  ("vt_msg",      "vt_telno"),  # received_by 대체
+        "occurred_at":   ("vt_transfer", "vt_loc"),    # 이벤트 발생 위치 (범용)
+        "recorded_in":   ("vt_vhcl",     "vt_movement"),
+        # ── 사칭 범죄 엣지 (v3.3+) ────────────────────────────────────
+        "used_for":      ("vt_telno",    "vt_impersonation"),
+        "targets":       ("vt_impersonation", "vt_org"),
+        # ── META (Provenance) ─────────────────────────────────────────
+        "verified_by":   ("vt_psn",      "vt_psn"),
+        # sourced_from: 모든 노드 타입 → vt_src (None = Any)
+        # 버그수정 v3.7: ("vt_psn", "vt_src") 로 제한되어 있어 vt_case 등에서 방향 교정 불가
+        "sourced_from":  (None,          "vt_src"),
+        # ── v3.7 신규 엣지 ────────────────────────────────────────────
+        "belongs_to_cluster":  ("vt_petition", "pt_cluster"),
+        "used_in_device":      ("vt_telno",    "vt_dev"),
+        "belongs_to_campaign": ("vt_site",     "site_cluster"),
+    }
+
     # 스키마 캐시 (graph_path 별 저장)
     _SCHEMA_CACHE = {}
     _CACHE_TTL = 300 # 5분
@@ -46,68 +129,122 @@ class GraphService:
     def determine_node_label(props):
         """
         노드 속성을 기반으로 적절한 label(타입) 결정
-        KICS 컬럼 속성 기준으로 라벨 자동 분류
-        
-        Returns:
-            - 'vt_flnm': 접수번호 (flnm)
-            - 'vt_bacnt': 계좌번호 (actno, bank)
-            - 'vt_site': 사이트 (site, url, domain)
-            - 'vt_telno': 전화번호 (telno, phone)
-            - 'vt_ip': IP 주소 (ip, ip_addr)
-            - 'vt_atm': ATM (atm, atm_id)
-            - 'vt_file': 파일명 (file, filename)
-            - 'vt_id': ID (id, user_id)
-            - 기본값: 'vt_psn'
+        v3.7 POLE 6레이어 온톨로지 기준 (docs/ONTOLOGY_FINAL_ARCHITECTURE_v3.7.md)
+
+        반환 가능 레이블:
+            SOURCE  : vt_src
+            CASE    : vt_case, vt_petition
+            PERSON  : vt_psn, vt_org
+            OBJECT  : vt_bacnt, vt_crypto, vt_ip, vt_site, vt_file,
+                      vt_id, vt_email, vt_telno, vt_vhcl, vt_dev, vt_atm
+            LOCATION: vt_loc
+            EVENT   : vt_transfer, vt_call, vt_access, vt_msg, vt_movement
+            기본값  : vt_psn
+        ※ vt_event / vt_persona 는 v3에서 폐기 (vt_movement / vt_id 로 통합)
         """
         if not props or not isinstance(props, dict):
             return 'vt_psn'
-        
-        # 우선순위 기반 분류
-        
-        # 0. 이벤트 (Dynamic Ontology)
-        if 'event_type' in props or 'event_id' in props:
-            return 'vt_event'
 
-        # 0.1 페르소나
-        if 'persona_type' in props or 'persona_id' in props:
-            return 'vt_persona'
+        # ── SOURCE LAYER ────────────────────────────────────────────
+        if 'src_id' in props or 'reliability_tier' in props:
+            return 'vt_src'
 
-        # 1. IP 주소 (가장 구체적)
-        if 'ip' in props or 'ip_addr' in props or 'ipaddr' in props:
+        # ── CASE LAYER ──────────────────────────────────────────────
+        if 'petition_id' in props or 'rcpt_dt' in props or 'rcpt_channel' in props:
+            return 'vt_petition'
+        if 'flnm' in props or 'incdnt_no' in props or 'incdnt_nm' in props:
+            return 'vt_case'
+
+        # ── OBJECT LAYER (가장 구체적 속성 우선) ──────────────────────
+
+        # IP 주소 (v3: ip_addr 표준, is_tor/is_proxy/asn 추가 속성)
+        if 'ip_addr' in props or 'ip' in props or 'ipaddr' in props \
+                or 'is_tor' in props or 'is_proxy' in props or 'asn' in props:
             return 'vt_ip'
-        
-        # 2. ATM
-        if 'atm' in props or 'atm_id' in props:
+
+        # ATM
+        if 'atm_id' in props or 'atm' in props:
             return 'vt_atm'
-        
-        # 3. 사이트/URL
-        if 'site' in props or 'url' in props or 'domain' in props:
+
+        # 사이트/URL (v3: url_addr 표준, site/domain 구형 컬럼 호환)
+        if 'url_addr' in props or 'site' in props or 'url' in props \
+                or 'dmn_addr' in props or 'domain' in props:
             return 'vt_site'
-        
-        # 4. 계좌번호
-        if 'actno' in props or 'bank' in props or 'account' in props or 'bacnt' in props:
+
+        # 가상자산
+        if 'wallet_addr' in props or 'blockchain' in props:
+            return 'vt_crypto'
+
+        # 이메일
+        if 'email_addr' in props or 'email' in props:
+            return 'vt_email'
+
+        # 계좌번호 (v3: account_no/bank_cd 경찰청 표준, 구형 actno/bank 호환)
+        if 'account_no' in props or 'bank_cd' in props \
+                or 'actno' in props or 'bank' in props or 'bacnt' in props:
             return 'vt_bacnt'
-        
-        # 5. 전화번호
-        if 'telno' in props or 'phone' in props:
+
+        # 전화번호 (v3: telco_nm/join_typ_cd/imsi 추가 속성)
+        if 'telno' in props or 'phone' in props \
+                or 'telco_nm' in props or 'imsi' in props:
             return 'vt_telno'
-        
-        # 6. 파일명
-        if 'file' in props or 'filename' in props or 'filepath' in props:
+
+        # 차량
+        if 'vhclno' in props or 'carmdl_nm' in props:
+            return 'vt_vhcl'
+
+        # 기기 (스마트폰/PC 등)
+        if 'device_id' in props or 'imei' in props or 'mac_addr' in props:
+            return 'vt_dev'
+
+        # 파일 (v3: hash_val 표준, hash_md5/hash_sha256 구형 호환)
+        if 'hash_val' in props or 'hash_sha256' in props or 'hash_md5' in props \
+                or 'file_nm' in props or 'filename' in props or 'filepath' in props \
+                or 'file' in props:
             return 'vt_file'
-        
-        # 7. 접수번호 (flnm)
-        if 'flnm' in props:
-            return 'vt_flnm'
-        
-        # 8. ID
-        if 'id' in props or 'user_id' in props or 'userid' in props:
+
+        # 디지털ID/계정 (v3: id_val+platform 복합 PK, vt_persona 흡수)
+        if 'id_val' in props or 'platform' in props \
+                or 'user_id' in props or 'userid' in props:
             return 'vt_id'
-        
-        # 9. 이름 (person)
-        if 'name' in props:
+
+        # ── LOCATION LAYER ──────────────────────────────────────────
+        if 'loc_id' in props or 'bsst_nm' in props or 'cctv_id' in props \
+                or ('lat' in props and 'lng' in props):
+            return 'vt_loc'
+
+        # ── EVENT LAYER ─────────────────────────────────────────────
+        # 이동이벤트 (v3: vt_lpr_evt + vt_loc_evt 통합, vt_movement)
+        if 'mov_id' in props or 'mov_type' in props \
+                or 'rcgn_sn' in props or 'loc_evt_sn' in props:
+            return 'vt_movement'
+
+        # 네트워크 접속
+        if 'access_id' in props or 'action' in props or 'status_code' in props:
+            return 'vt_access'
+
+        # 메시지
+        if 'msg_id' in props or 'msg_type' in props or 'app_nm' in props:
+            return 'vt_msg'
+
+        # 이체 (v3: transfer_id / dlng_sn)
+        if 'transfer_id' in props or 'dlng_sn' in props or 'dlng_amt' in props:
+            return 'vt_transfer'
+
+        # 통화 (v3: call_id / call_sn)
+        if 'call_id' in props or 'call_sn' in props or 'call_dur_sec' in props:
+            return 'vt_call'
+
+        # ── PERSON LAYER ────────────────────────────────────────────
+        # 조직
+        if 'org_id' in props or 'org_name' in props or 'brno' in props:
+            return 'vt_org'
+
+        # 인물 (이름 또는 인물 식별자)
+        if 'psn_id' in props or 'name' in props or 'korn_flnm' in props \
+                or 'rrno_hash' in props:
             return 'vt_psn'
-        
+
         # 기본값
         return 'vt_psn'
 
@@ -153,17 +290,38 @@ class GraphService:
 
             # Edge 라벨 조회
             cur.execute(f"""
-                SELECT table_name 
-                FROM information_schema.tables 
-                WHERE table_schema = '{graph_path}' 
+                SELECT table_name
+                FROM information_schema.tables
+                WHERE table_schema = '{graph_path}'
                   AND table_name NOT LIKE 'vt_%'
                   AND table_name NOT IN ('ag_vertex', 'ag_label', 'ag_edge')
             """)
             edge_labels = [r[0] for r in cur.fetchall()]
-            
+
+            # 엣지 방향 조회: 각 엣지 테이블에서 시작/끝 노드 레이블 샘플링
+            edge_directions = {}
+            for edge in edge_labels:
+                # KICS 매핑에 있으면 바로 사용 (DB 쿼리 절약)
+                if edge in GraphService._KICS_EDGE_DIRECTIONS:
+                    edge_directions[edge] = GraphService._KICS_EDGE_DIRECTIONS[edge]
+                    continue
+                # 미지의 엣지는 AgensGraph 네이티브 Cypher로 실제 방향 샘플링
+                try:
+                    cur.execute(
+                        f"MATCH (a)-[:{edge}]->(b) RETURN label(a), label(b) LIMIT 1"
+                    )
+                    row = cur.fetchone()
+                    if row:
+                        src = str(row[0]).strip('"')
+                        dst = str(row[1]).strip('"')
+                        edge_directions[edge] = (src, dst)
+                except Exception as e_dir:
+                    logger.warning(f"엣지 방향 조회 실패 ({edge}): {e_dir}")
+
             schema_data = {
-                "node_labels": node_info,
-                "edge_types": edge_labels
+                "node_labels":     node_info,
+                "edge_types":      edge_labels,
+                "edge_directions": edge_directions,
             }
             
             # 캐시 저장
@@ -1101,6 +1259,25 @@ class GraphService:
                 except Exception as e:
                     logger.error(f"[Fallback Sequence Parse Error] {e}")
                 
+            if not elements and rows:
+                try:
+                    col_aliases = [d[0] for d in cur.description] if cur.description else []
+                except Exception:
+                    col_aliases = []
+                for idx, r in enumerate(rows):
+                    if all(not isinstance(v, (list, tuple, dict)) or v is None for v in r):
+                        cleaned = [
+                            v.strip('"') if isinstance(v, str) and v.startswith('"') and v.endswith('"') else v
+                            for v in r
+                        ]
+                        row_props = {
+                            (col_aliases[i] if i < len(col_aliases) else f"col{i}"): cleaned[i]
+                            for i in range(len(cleaned))
+                        }
+                        elements.append({
+                            "group": "scalar",
+                            "data": {"id": f"row_{idx}", "label": "row", "props": row_props}
+                        })
             return True, elements
 
         except Exception as e:
@@ -1110,12 +1287,52 @@ class GraphService:
             conn.close()
 
     # ---------------------------------------------------------
-    # 📚 [Feature 5] GraphRAG (AIService 연동)
+    # 📚 [Feature 5] GraphRAG
     # ---------------------------------------------------------
+    @staticmethod
+    def _generate_rag_report(question, context_texts, semantic_analysis=None):
+        """그래프 조회 결과 기반 수사 보고서 생성 (AIService 의존성 제거)"""
+        client = AIService.get_client()
+
+        ontology_info = ""
+        if semantic_analysis:
+            ontology_info = "\n\n[온톨로지 분석]\n" + semantic_analysis.get('summary', '')
+
+        safe_context = str(context_texts[:80]) + ontology_info
+
+        prompt = f"""
+        [사이버 범죄 수사 정보분석관 분석 보고서]
+
+        당신은 경찰청 소속 최고 수준의 사이버 범죄 수사 정보분석관입니다.
+        제공된 그래프 데이터베이스의 노드와 엣지 추적 결과를 바탕으로 명확하고 팩트 기반의 수사 보고서를 작성하십시오.
+
+        [조회 결과 데이터]
+        {safe_context}
+
+        [작성 가이드라인]
+        - 어조: 단호하고 객관적인 수사관 어조 사용.
+        - 원칙: 제공된 결과 데이터 외부에 있는 상상을 덧붙이지 말 것.
+
+        ### 1. 사건 개요 및 분석 대상
+        ### 2. 식별된 주요 개체
+        ### 3. 자금 및 통신 흐름 분석
+        ### 4. 수사 종합 평가 및 제언
+        """
+        try:
+            resp = client.chat.completions.create(
+                model=current_app.config.get('SLLM_MODEL_NAME', 'gpt-4o'),
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.3
+            )
+            return resp.choices[0].message.content.strip()
+        except Exception as e:
+            logger.error(f"!!! RAG Report Gen Error: {e}")
+            return f"보고서 생성 실패: {e}"
+
     @staticmethod
     def quick_query(question, graph_path):
         """빠른 그래프 조회 (온톨로지 인식 강화 - 노드 + 엣지 속성)"""
-        target_kw = AIService.extract_keywords(question)
+        target_kw = _extract_keyword(question)
         logger.info(f"▶ [Quick Query] 키워드 추출: '{target_kw}'")
         
         conn, cur = get_db_connection()
@@ -1177,7 +1394,7 @@ class GraphService:
     @staticmethod
     def rag_query(question, graph_path):
         """그래프 조회 + AI 보고서 생성 (온톨로지 인식 강화 - 노드 + 엣지)"""
-        target_kw = AIService.extract_keywords(question)
+        target_kw = _extract_keyword(question)
         logger.info(f"▶ [RAG] 키워드 추출: '{target_kw}'")
         
         conn, cur = get_db_connection()
@@ -1266,7 +1483,7 @@ class GraphService:
             from app.services.ontology_service import SemanticAnalyzer
             semantic_analysis = SemanticAnalyzer.analyze(elements, context_texts)
             
-            report = AIService.generate_rag_report(question, context_texts, semantic_analysis)
+            report = GraphService._generate_rag_report(question, context_texts, semantic_analysis)
             return report, elements
         except Exception as e:
             return str(e), []

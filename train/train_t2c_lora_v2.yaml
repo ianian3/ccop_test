@@ -1,0 +1,65 @@
+### CCOP Text2Cypher v2 SFT — EXAONE-3.5-7.8B LoRA
+### 학습 데이터: t2c_v2 (6,075개 → 5,467 train / 608 eval)
+### 목표: AgensGraph Cypher 특화 Text2Cypher v2 (v3.6 온톨로지 기준)
+### v1 대비: 멀티홉 89.1%, 신규 엣지 15종, GUARD/GENERAL 강화
+### 기준: ONTOLOGY_FINAL_ARCHITECTURE_v3.6.md (23노드, 52엣지)
+
+### ── 모델 ──────────────────────────────────────────────────────────
+model_name_or_path: LGAI-EXAONE/EXAONE-3.5-7.8B-Instruct
+trust_remote_code: true
+
+### ── 학습 방식 ──────────────────────────────────────────────────────
+stage: sft
+do_train: true
+finetuning_type: lora
+
+### ── LoRA 설정 ─────────────────────────────────────────────────────
+### v2: rank 64 (v1의 32 → 상향) — 멀티홉·신규 엣지 복잡도 증가 대응
+### lora_alpha = rank * 2 (표준 비율 유지)
+lora_rank: 64
+lora_alpha: 128
+lora_dropout: 0.05
+lora_target: q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj
+
+### ── 데이터셋 ───────────────────────────────────────────────────────
+dataset: t2c_v2
+eval_dataset: t2c_v2_eval
+dataset_dir: /home/ai-kyw-dev/ccop_train/train
+template: exaone
+
+### v2: cutoff_len 1536 (v1의 1280 → 상향)
+### 멀티홉 체인 쿼리 + 스키마 스니펫 멀티노드 → 컨텍스트 확장 필요
+cutoff_len: 1536
+overwrite_cache: true
+preprocessing_num_workers: 4
+
+### ── 학습 하이퍼파라미터 ────────────────────────────────────────────
+output_dir: /home/ai-kyw-dev/ccop_train/train/output/exaone_t2c_v2
+per_device_train_batch_size: 2      # rank 64 → 메모리 증가, 배치 축소
+gradient_accumulation_steps: 8     # 유효 배치 크기: 16 (v1과 동일)
+num_train_epochs: 4                 # v2 복잡도 증가 → 에폭 추가
+learning_rate: 1.5e-4              # 데이터 복잡도↑ → lr 소폭 하향
+lr_scheduler_type: cosine
+warmup_ratio: 0.05
+weight_decay: 0.01
+
+### ── 정밀도 및 메모리 ───────────────────────────────────────────────
+bf16: true
+quantization_bit: 4                # QLoRA — RTX 5090 32GB 기준
+optim: adamw_torch_fused
+ddp_find_unused_parameters: false
+
+### ── 저장 및 로깅 ───────────────────────────────────────────────────
+save_strategy: epoch
+save_total_limit: 3
+logging_steps: 30
+report_to: none
+
+### ── 평가 ─────────────────────────────────────────────────────────
+### t2c_v2_eval (608개) — 층화 추출 (단일노드/멀티홉/GUARD/GENERAL)
+eval_strategy: epoch
+per_device_eval_batch_size: 4
+
+### ── 추론 최적화 (학습 후 vLLM 서빙용) ────────────────────────────
+### merge 후: python train/merge_lora.py --base EXAONE-3.5-7.8B --adapter output/exaone_t2c_v2
+### 서빙: bash train/run_vllm_lora.sh exaone_t2c_v2

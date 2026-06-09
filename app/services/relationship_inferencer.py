@@ -18,6 +18,8 @@ from openai import OpenAI
 from flask import current_app
 import logging
 
+logger = logging.getLogger(__name__)
+
 
 class RelationshipInferencer:
     """LLM 기반 관계 추론 서비스"""

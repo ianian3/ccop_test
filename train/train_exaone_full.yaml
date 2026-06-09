@@ -1,0 +1,44 @@
+### 모델 설정
+model_name_or_path: LGAI-EXAONE/EXAONE-3.5-7.8B-Instruct
+trust_remote_code: true
+
+### 학습 방식 (Full Fine-tuning)
+stage: sft
+do_train: true
+finetuning_type: full
+
+### 데이터셋
+dataset: korean_cybercrime_sft
+dataset_dir: ~/ccop_train/train
+template: exaone
+cutoff_len: 512
+max_samples: 10143
+overwrite_cache: true
+preprocessing_num_workers: 4
+
+### 학습 하이퍼파라미터
+output_dir: ~/ccop_train/train/output/exaone-full
+per_device_train_batch_size: 2
+gradient_accumulation_steps: 16  # 실질 배치: 32
+learning_rate: 5.0e-5             # Full FT는 낮은 lr 사용
+num_train_epochs: 3
+lr_scheduler_type: cosine
+warmup_ratio: 0.05
+weight_decay: 0.01
+
+### 정밀도 및 메모리 (Full FT는 VRAM 많이 사용)
+bf16: true
+optim: adamw_torch_fused
+gradient_checkpointing: true      # VRAM 절약 필수
+ddp_find_unused_parameters: false
+
+### 저장 및 로깅
+save_strategy: epoch
+save_total_limit: 2
+logging_steps: 10
+report_to: none
+
+### 평가
+val_size: 0.05
+eval_strategy: epoch
+per_device_eval_batch_size: 4
