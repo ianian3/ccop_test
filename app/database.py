@@ -1,10 +1,28 @@
 import psycopg2
+import psycopg2.pool
 import json
 import re
 import logging
 from flask import current_app
 
 logger = logging.getLogger(__name__)
+
+# 커넥션 풀 싱글톤
+_connection_pool: psycopg2.pool.SimpleConnectionPool = None
+
+
+def get_connection_pool() -> psycopg2.pool.SimpleConnectionPool:
+    """앱 설정 기반 커넥션 풀 싱글톤 반환 (최소 2, 최대 10 연결)"""
+    global _connection_pool
+    if _connection_pool is None or _connection_pool.closed:
+        db_config = current_app.config['DB_CONFIG']
+        _connection_pool = psycopg2.pool.SimpleConnectionPool(
+            minconn=2,
+            maxconn=10,
+            **db_config
+        )
+        logger.info("DB 커넥션 풀 초기화 완료 (min=2, max=10)")
+    return _connection_pool
 
 
 def validate_graph_path(name):
@@ -34,15 +52,27 @@ def safe_set_graph_path(cur, graph_path):
 
 
 def get_db_connection():
-    """AgensGraph DB 연결 (네이티브 Cypher 지원)"""
+    """커넥션 풀에서 연결 획득. 사용 후 반드시 release_db_connection() 호출 필요."""
     try:
-        conn = psycopg2.connect(**current_app.config['DB_CONFIG'])
+        pool = get_connection_pool()
+        conn = pool.getconn()
         conn.autocommit = True
         cur = conn.cursor()
         return conn, cur
     except Exception as e:
         logger.error(f"DB 접속 오류: {e}")
         return None, None
+
+
+def release_db_connection(conn):
+    """커넥션을 풀에 반환"""
+    if conn is None:
+        return
+    try:
+        pool = get_connection_pool()
+        pool.putconn(conn)
+    except Exception as e:
+        logger.error(f"DB 커넥션 반환 오류: {e}")
 
 def safe_props(val):
     """JSON 파싱 안전장치"""
@@ -57,14 +87,12 @@ def safe_props(val):
 def execute_query(query, graph_path=None, fetch=True):
     """쿼리 실행을 단순화하는 헬퍼 함수"""
     conn, cur = get_db_connection()
-    if not conn: return None
-    
+    if not conn:
+        return None
     try:
         if graph_path:
             safe_set_graph_path(cur, graph_path)
-        
         cur.execute(query)
-        
         if fetch:
             return cur.fetchall()
         return None
@@ -72,4 +100,4 @@ def execute_query(query, graph_path=None, fetch=True):
         logger.error(f"Query Error: {e}")
         return None
     finally:
-        conn.close()
+        release_db_connection(conn)

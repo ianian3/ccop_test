@@ -383,7 +383,12 @@ def rdb_to_graph():
     try:
         data = request.get_json() or {}
         graph_name = data.get('graph_name', 'test_ai01')
-        
+
+        # V4.0 격리 스키마 — 기본 test_v40 (DA팀 V3.7 운영 적용 전 안전 격리)
+        source_schema = (data.get('source_schema') or 'test_v40').strip()
+        current_app.config['_V40_TARGET_SCHEMA'] = source_schema
+        current_app.logger.info(f"[V4.0] /api/rdb/to-graph graph={graph_name} source_schema={source_schema}")
+
         success, stats = RdbToGraphService.transfer_data(graph_name)
         
         if success:
@@ -1169,9 +1174,29 @@ def rdb_import():
                             "message": f"Invalid source_domain '{source_domain}'. "
                                        f"Allowed: {sorted(ALLOWED_DOMAINS)}"}), 400
         source_id = request.form.get('source_id') or None
+
+        # V4.0 격리 스키마 — 표준화 RDB 적재 위치 (기본: test_v40)
+        # DA팀 V3.7 운영 적용 전까지 public 충돌 방지
+        target_schema = request.form.get('target_schema', 'test_v40').strip() or 'test_v40'
         current_app.logger.info(
-            f"[V4.0] /api/rdb/import source_domain={source_domain} source_id={source_id}"
+            f"[V4.0] /api/rdb/import source_domain={source_domain} source_id={source_id} target_schema={target_schema}"
         )
+
+        # search_path 사전 설정 — INSERT 가 target_schema 로 가도록
+        import psycopg2 as _pg2
+        try:
+            _conn = _pg2.connect(**current_app.config['DB_CONFIG'])
+            _conn.autocommit = True
+            _cur = _conn.cursor()
+            _cur.execute(f'SET search_path = "{target_schema}", public;')
+            # search_path 는 connection 별이므로 RDBService 내부 재연결 시 무효
+            # → RDBService 호출 직전 환경변수로 전달하기 위해 g.* 또는 config 활용
+            _cur.close(); _conn.close()
+        except Exception as _e:
+            current_app.logger.warning(f"search_path 사전 설정 실패: {_e}")
+
+        # RDBService 가 사용할 search_path 를 config 에 임시 주입
+        current_app.config['_V40_TARGET_SCHEMA'] = target_schema
 
         try:
             # 스마트 라우팅 분기: 파일명이 tbl_ 로 시작하면 사전 정의된 RDB 스키마로 간주

@@ -1,6 +1,4 @@
 """
-logger = logging.getLogger(__name__)
-
 LLM 기반 관계 추론 서비스 (RELATE 스타일)
 
 CSV 데이터에서 자동으로 엔티티와 관계를 추론하여
@@ -13,10 +11,10 @@ KICS 온톨로지에 매핑하는 서비스
 """
 
 import json
+import logging
 import re
 from openai import OpenAI
 from flask import current_app
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -33,59 +31,68 @@ class RelationshipInferencer:
     
     # 관계 추론 규칙 - ontology_service.py에서 통합 관리
     # 아래는 fallback용으로 유지 (import 실패 시 사용)
+    # v3.4 온톨로지 기반 fallback 규칙 (45종 엣지)
     _FALLBACK_RELATIONSHIP_RULES = {
         # ═══════════════════════════════════════════════════════════
-        # [Layer 1 → Layer 2] Case (사건) → Actor (행위자)
-        # 사건은 오직 행위자(인물/조직/기기)와만 직접 연결
+        # Cat.1 — 사건 역할 엣지 (Person → Case 방향)
         # ═══════════════════════════════════════════════════════════
-        ("case_id", "person"): {"type": "involves", "description": "관련 인물"},
-        ("case_id", "organization"): {"type": "involves", "description": "관련 조직"},
-        ("case_id", "device"): {"type": "involves", "description": "관련 기기"},
-        
+        ("person", "case"): {"type": "suspect_in", "description": "피의자 사건 연결"},
+        ("suspect", "case_id"): {"type": "suspect_in", "description": "피의자 사건 연결"},
+        ("victim", "case_id"): {"type": "victim_in", "description": "피해자 사건 연결"},
+        ("witness", "case_id"): {"type": "witness_in", "description": "참고인 사건 연결"},
+
         # ═══════════════════════════════════════════════════════════
-        # [Layer 2 → Layer 3] Actor (행위자) → Action (행위)
-        # 행위자가 수행한 행위와 연결
+        # Cat.2 — 신원/소유 (Person → Object)
         # ═══════════════════════════════════════════════════════════
-        ("person", "transfer"): {"type": "performed", "description": "이체 행위"},
-        ("person", "call"): {"type": "performed", "description": "통화 행위"},
-        ("person", "access"): {"type": "performed", "description": "접속 행위"},
-        ("person", "message"): {"type": "performed", "description": "메시지 행위"},
-        
-        # ═══════════════════════════════════════════════════════════
-        # [Layer 2 → Layer 4] Actor (행위자) → Evidence (증거) [소유/귀속 관계]
-        # 행위자가 직접 소유하거나 사용하는 증거 객체 (핵심 수사단서)
-        # ═══════════════════════════════════════════════════════════
-        ("person", "phone"): {"type": "owns_phone", "description": "소유 전화"},
-        ("person", "account"): {"type": "has_account", "description": "소유 계좌"},
-        ("person", "ip"): {"type": "used_ip", "description": "사용 IP"},
-        ("person", "user_id"): {"type": "uses_id", "description": "사용 ID"},
-        ("person", "device"): {"type": "uses_device", "description": "사용 기기"},
+        ("person", "phone"): {"type": "owns_phone", "description": "전화 소유"},
+        ("person", "account"): {"type": "has_account", "description": "계좌 소유"},
+        ("person", "ip"): {"type": "used_ip", "description": "IP 사용"},
+        ("person", "user_id"): {"type": "uses_id", "description": "ID 사용"},
+        ("person", "device"): {"type": "owns_device", "description": "기기 소유"},
+        ("person", "email"): {"type": "uses_email", "description": "이메일 사용"},
+        ("person", "vehicle"): {"type": "owns_vehicle", "description": "차량 소유"},
         ("organization", "account"): {"type": "has_account", "description": "법인 계좌"},
-        # 닉네임/ID → 소유 자산 (핵심 수사단서)
+        ("controller", "account"): {"type": "controls", "description": "계좌 실지배"},
+        # 닉네임/ID → 소유 자산
         ("user_id", "account"): {"type": "has_account", "description": "닉네임 소유 계좌"},
         ("user_id", "phone"): {"type": "owns_phone", "description": "닉네임 소유 전화"},
         ("user_id", "ip"): {"type": "used_ip", "description": "닉네임 사용 IP"},
-        
+
         # ═══════════════════════════════════════════════════════════
-        # [Layer 3 → Layer 4] Action (행위) → Evidence (증거)
-        # 행위가 사용하거나 생성한 증거 객체
+        # Cat.3 — 인물 관계 (v3.4 신규 포함)
         # ═══════════════════════════════════════════════════════════
-        ("transfer", "account"): {"type": "from_account", "description": "출금/입금 계좌"},
-        ("call", "phone"): {"type": "caller", "description": "발신/수신 번호"},
-        ("access", "ip"): {"type": "accessed_from", "description": "접속 IP"},
-        ("access", "site"): {"type": "accessed_to", "description": "접속 사이트"},
-        ("message", "phone"): {"type": "sent_by", "description": "발신 번호"},
-        ("message", "file"): {"type": "attached", "description": "첨부 파일"},
-        
+        ("recruiter", "recruit"): {"type": "recruits", "description": "모집 관계"},
+        ("blackmailer", "victim"): {"type": "blackmails", "description": "협박 관계"},
+
         # ═══════════════════════════════════════════════════════════
-        # [Layer 4 → Layer 4] Evidence (증거) Peer-to-Peer 연결
-        # 증거 객체 간의 직접 연결 (핵심 분석 대상)
+        # Cat.4 — 운영/인프라 (v3.4 신규)
         # ═══════════════════════════════════════════════════════════
+        ("person", "site"): {"type": "operates", "description": "사이트 운영"},
+        ("org", "site"): {"type": "operates", "description": "사이트 운영"},
+        ("server_ip", "domain"): {"type": "hosts", "description": "서버 호스팅"},
+        ("ip", "site"): {"type": "hosts", "description": "서버 호스팅"},
+        ("site", "file"): {"type": "contains_file", "description": "파일 내장"},
+        ("message", "file"): {"type": "contains_file", "description": "파일 첨부"},
+        ("atm", "location"): {"type": "located_at", "description": "ATM 위치"},
+        ("device", "location"): {"type": "located_at", "description": "기기 위치"},
+
+        # ═══════════════════════════════════════════════════════════
+        # Cat.5/7 — 자금흐름 / 통신 이벤트
+        # ═══════════════════════════════════════════════════════════
+        ("from_account", "transfer"): {"type": "from_account", "description": "출금 계좌"},
+        ("transfer", "to_account"): {"type": "to_account", "description": "입금 계좌"},
         ("account", "account"): {"type": "transferred_to", "description": "자금 이체"},
-        ("phone", "phone"): {"type": "contacted", "description": "통화/연락"},
-        ("ip", "ip"): {"type": "communicated_with", "description": "IP 통신"},
+        ("caller", "call"): {"type": "caller", "description": "발신 번호"},
+        ("call", "callee"): {"type": "callee", "description": "수신 번호"},
+        ("sender", "message"): {"type": "sent_msg", "description": "메시지 발신"},
+        ("message", "phone"): {"type": "received_msg", "description": "메시지 수신"},
+
+        # ═══════════════════════════════════════════════════════════
+        # Cat.8 — 디지털 접속
+        # ═══════════════════════════════════════════════════════════
+        ("access", "ip"): {"type": "accessed_from", "description": "접속 IP"},
         ("phone", "account"): {"type": "linked_to", "description": "번호-계좌 연결"},
-        ("ip", "site"): {"type": "accessed", "description": "사이트 접속"},
+        ("site", "ip"): {"type": "resolves_to", "description": "DNS 조회"},
     }
     
     @classmethod

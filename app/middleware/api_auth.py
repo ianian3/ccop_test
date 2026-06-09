@@ -9,7 +9,9 @@ import hashlib
 import json
 import os
 import logging
-from datetime import datetime
+import fcntl
+from datetime import datetime, timezone
+from collections import defaultdict
 
 logger = logging.getLogger(__name__)
 
@@ -55,12 +57,18 @@ def _load_json(filepath, default=None):
 
 
 def _save_json(filepath, data):
-    """JSON 파일에 안전하게 저장"""
+    """JSON 파일에 파일 락을 사용하여 안전하게 저장 (멀티프로세스 Race Condition 방지)"""
     _ensure_data_dir()
+    lock_path = filepath + ".lock"
     try:
-        with open(filepath, 'w', encoding='utf-8') as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-        logger.info(f"데이터 저장 완료: {filepath}")
+        with open(lock_path, 'w') as lock_file:
+            fcntl.flock(lock_file, fcntl.LOCK_EX)
+            try:
+                with open(filepath, 'w', encoding='utf-8') as f:
+                    json.dump(data, f, ensure_ascii=False, indent=2)
+                logger.info(f"데이터 저장 완료: {filepath}")
+            finally:
+                fcntl.flock(lock_file, fcntl.LOCK_UN)
     except IOError as e:
         logger.error(f"JSON 파일 저장 실패 ({filepath}): {e}")
 
@@ -95,9 +103,17 @@ def load_plaintext_keys():
         API_KEYS_PLAINTEXT.update(loaded)
 
 
+def _mask_api_key(api_key: str) -> str:
+    """API 키를 마스킹하여 저장 (앞 4자 + **** + 뒤 4자)"""
+    if len(api_key) <= 8:
+        return "*" * len(api_key)
+    return api_key[:4] + "*" * (len(api_key) - 8) + api_key[-4:]
+
+
 def save_plaintext_keys():
-    """평문 키 저장소를 파일에 저장"""
-    _save_json(_PLAINTEXT_KEYS_FILE, API_KEYS_PLAINTEXT)
+    """API 키를 마스킹하여 파일에 저장 (평문 저장 금지)"""
+    masked = {k: _mask_api_key(v) for k, v in API_KEYS_PLAINTEXT.items()}
+    _save_json(_PLAINTEXT_KEYS_FILE, masked)
 
 
 # ============================================
@@ -106,6 +122,20 @@ def save_plaintext_keys():
 
 API_KEYS_STORE = {}
 API_KEYS_PLAINTEXT = {}
+
+# 인메모리 Rate Limiter: {(partner_name, minute_bucket): request_count}
+_rate_limit_counters: dict = defaultdict(int)
+
+
+def _check_rate_limit(partner_name: str, rate_limit: int) -> bool:
+    """
+    분당 요청 수 제한 확인.
+    Returns: True(허용) / False(초과)
+    """
+    minute_bucket = datetime.now(timezone.utc).strftime("%Y%m%d%H%M")
+    key = (partner_name, minute_bucket)
+    _rate_limit_counters[key] += 1
+    return _rate_limit_counters[key] <= rate_limit
 
 
 # ============================================
@@ -172,9 +202,18 @@ def require_api_key(f):
         # 요청 객체에 파트너 정보 추가
         request.partner = partner_data['partner_name']
         request.partner_data = partner_data
-        
+
+        # Rate Limit 검사
+        rate_limit = partner_data.get('rate_limit', 60)
+        if not _check_rate_limit(request.partner, rate_limit):
+            current_app.logger.warning(f"Rate limit exceeded: {request.partner}")
+            return jsonify({
+                "error": "Rate limit exceeded",
+                "message": f"최대 {rate_limit}회/분 요청을 초과했습니다."
+            }), 429
+
         current_app.logger.info(f"API request from partner: {request.partner}")
-        
+
         return f(*args, **kwargs)
     
     return decorated_function
