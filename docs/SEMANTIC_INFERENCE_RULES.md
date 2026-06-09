@@ -1,5 +1,8 @@
 # CCOP 시맨틱 추론 엔진 (Semantic Inference Engine) 도입 전략 및 룰 설계
 
+> **온톨로지 버전**: v3.4 | **최종 수정**: 2026-04-20  
+> ⚠️ v3.4 변경사항: `involves`, `performed`, `contacted`, `communicated_with` → 제거됨. 아래 쿼리는 v3.4 기준으로 업데이트됨.
+
 LPG(속성 그래프) 기반인 현 CCOP 시스템에 시맨틱 웹의 "추론(Reasoning)" 개념을 차용하여, 하이브리드 형태의 **추론 엔진(Inference Engine)**을 도입할 때 사용할 수 있는 구체적인 시맨틱 룰(Semantic Rule) 패턴들입니다.
 
 이 엔진은 야간 배치(Batch)나 데이터 적재 직후 `relationship_inferencer.py` 같은 모듈을 통해 실행되며, 수사관이 눈치채지 못한 숨겨진 범죄 연관성(새로운 Edge)을 자동으로 생성합니다.
@@ -11,13 +14,14 @@ LPG(속성 그래프) 기반인 현 CCOP 시스템에 시맨틱 웹의 "추론(R
 사이버 수사에서 가장 기본적인 공범/조직 추론 방식입니다. 물리적으로 분리된 인물이나 계좌가 동일한 인프라(IP, 전화번호)를 공유할 때 작동합니다.
 
 ### 룰 1-1. `same_location` (동일 접속지 기반 연관성)
-*   **시맨틱 논리 (OWL 개념화):** `has_ip(Person A, IP x) ^ has_ip(Person B, IP x) -> same_location(Person A, Person B)`
+*   **시맨틱 논리 (OWL 개념화):** `used_ip(Person A, IP x) ^ used_ip(Person B, IP x) -> same_location(Person A, Person B)`
 *   **수사적 의미:** 서로 다른 피의자 A와 피의자 B가 **동일한 해외 IP**나 **동일한 Mac 주소**로 접속한 기록이 있다면, 이들은 같은 조직이거나 합숙 중일 확률이 높습니다.
 *   **LPG 구현 (Cypher):**
     ```cypher
+    -- v3.4: used_ip 엣지 사용 (accessed 제거됨)
     MATCH (p1:vt_psn)-[:used_ip]->(ip:vt_ip)<-[:used_ip]-(p2:vt_psn)
     WHERE id(p1) > id(p2)
-    MERGE (p1)-[r:same_location {ip: ip.ip_addr, weight: 0.8}]-(p2)
+    MERGE (p1)-[r:accomplice_of {basis:'동일IP', ip: ip.ip_addr, confidence: 0.8}]-(p2)
     ```
 
 ### 룰 1-2. `shared_device` (대포폰/기기 공유 기반 연관성)
@@ -32,8 +36,15 @@ LPG(속성 그래프) 기반인 현 CCOP 시스템에 시맨틱 웹의 "추론(R
 
 ### 룰 2-1. `accomplice_of` (공범 확률 추론 - Transitive)
 *   **시맨틱 논리 (OWL 개념화):** `accomplice_of` 속성을 **Transitive Property**로 선언. 즉, `accomplice_of(A, B) ^ accomplice_of(B, C) -> accomplice_of(A, C)`
+*   **v3.4 보완**: `recruits` 체인에서도 공범 추론 가능. `recruits(A, B) ^ recruits(B, C) -> accomplice_of(A, C)`
 *   **수사적 의미:** 점조직으로 운영되는 보이스피싱 하부 조직원들을 하나로 묶어 일망타진하기 위한 연결 고리를 찾습니다.
-*   **LPG 구현 (Cypher):** 공범 증거가 N단계 이상 이어질 경우 새로운 `accomplice_of` 엣지를 생성.
+*   **LPG 구현 (Cypher):**
+    ```cypher
+    -- v3.4: recruits 체인 → accomplice_of 추론
+    MATCH (a:vt_psn)-[:recruits*2..]->(c:vt_psn)
+    WHERE a <> c
+    MERGE (a)-[:accomplice_of {basis:'recruits_chain', confidence:0.75}]-(c)
+    ```
 
 ### 룰 2-2. `indirect_transfer` (자금 세탁/세탁 계좌 추론 - Chaining)
 *   **시맨틱 논리:** `transfer(Account A, Account B) ^ transfer(Account B, Account C) [조건: 시간차 < 10분, 금액 거의 일치] -> indirect_transfer(Account A, Account C)`
