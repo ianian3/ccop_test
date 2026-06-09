@@ -1,0 +1,139 @@
+version: '3.8'
+
+# ============================================================
+# CCOP v1.0 — CSLEE 통합 플랫폼 배포용 Docker Compose
+# 사용: docker-compose -f docker-compose.cslee.yml up -d
+# ============================================================
+
+services:
+
+  # ── 1. AgensGraph (그래프 DB) ──────────────────────────────
+  agensgraph:
+    image: bitnine/agensgraph:v2.13
+    container_name: ccop_agensgraph
+    environment:
+      POSTGRES_DB:       ${DB_NAME:-ccopdb}
+      POSTGRES_USER:     ${DB_USER:-ccop}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "5432:5432"          # 내부망 DB 접근용 (필요 시 제거)
+    volumes:
+      - agensgraph_data:/var/lib/postgresql/data
+      - ./scripts/init_db.sh:/docker-entrypoint-initdb.d/init_db.sh:ro
+    networks:
+      - ccop_internal        # Flask만 접근 (외부 미노출)
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-ccop}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  # ── 2. Flask 애플리케이션 ─────────────────────────────────
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ccop_app
+    environment:
+      # DB 연결
+      DB_NAME:     ${DB_NAME:-ccopdb}
+      DB_USER:     ${DB_USER:-ccop}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_HOST:     agensgraph
+      DB_PORT:     5432
+
+      # LLM 설정 — 두 가지 중 하나 선택
+      # [인터넷 가능] OpenAI GPT-4o 사용
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      # [망분리] 온프레미스 sLLM 사용 (아래 주석 해제)
+      # SLLM_ENDPOINT:    http://sllm:8000/v1
+      # SLLM_MODEL_NAME:  exaone-3.5-7.8b
+
+      # 보안
+      SECRET_KEY:     ${SECRET_KEY}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      FLASK_ENV:      production
+
+      # CORS — CSLEE 플랫폼 도메인 허용
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost,https://cslee-platform.internal}
+
+      # 기본 그래프
+      DEFAULT_GRAPH_PATH: ${DEFAULT_GRAPH_PATH:-tccop_graph_v6}
+
+    ports:
+      - "5001:5001"          # Nginx가 없는 직접 접근 시
+    volumes:
+      - ./logs:/app/logs
+      - ./chroma_data:/app/chroma_data    # Legal RAG ChromaDB
+      - ./data:/app/data                  # API 키, 온톨로지 등
+    depends_on:
+      agensgraph:
+        condition: service_healthy
+    networks:
+      - ccop_internal
+      - ccop_external        # Nginx와 통신
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5001/api/v1/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    restart: unless-stopped
+
+  # ── 3. Nginx 리버스 프록시 ────────────────────────────────
+  nginx:
+    image: nginx:alpine
+    container_name: ccop_nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/nginx.cslee.conf:/etc/nginx/nginx.conf:ro
+      - ./deploy/ssl:/etc/nginx/ssl:ro          # SSL 인증서
+      - ./app/static:/usr/share/nginx/html/static:ro
+    depends_on:
+      - app
+    networks:
+      - ccop_external
+    restart: unless-stopped
+
+  # ── 4. sLLM (망분리 환경용, 선택사항) ─────────────────────
+  # 인터넷이 안 되는 경우 주석 해제하여 사용
+  # sllm:
+  #   image: vllm/vllm-openai:latest
+  #   container_name: ccop_sllm
+  #   runtime: nvidia           # GPU 필요
+  #   environment:
+  #     HUGGING_FACE_HUB_TOKEN: ${HF_TOKEN}
+  #   command: >
+  #     --model LGAI-EXAONE/EXAONE-3.5-7.8B-Instruct
+  #     --port 8000
+  #     --max-model-len 4096
+  #     --dtype float16
+  #   ports:
+  #     - "8000:8000"
+  #   volumes:
+  #     - sllm_model_cache:/root/.cache/huggingface
+  #   networks:
+  #     - ccop_internal
+  #   deploy:
+  #     resources:
+  #       reservations:
+  #         devices:
+  #           - driver: nvidia
+  #             count: 1
+  #             capabilities: [gpu]
+  #   restart: unless-stopped
+
+volumes:
+  agensgraph_data:
+    driver: local
+  # sllm_model_cache:
+  #   driver: local
+
+networks:
+  ccop_internal:             # DB ↔ App 내부 통신 (외부 미노출)
+    driver: bridge
+    internal: true
+  ccop_external:             # Nginx ↔ App 통신
+    driver: bridge
