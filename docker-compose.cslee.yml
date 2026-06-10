@@ -9,7 +9,7 @@ services:
 
   # ── 1. AgensGraph (그래프 DB) ──────────────────────────────
   agensgraph:
-    image: bitnine/agensgraph:v2.13
+    image: bitnine/agensgraph:v2.13.2
     container_name: ccop_agensgraph
     environment:
       POSTGRES_DB:       ${DB_NAME:-ccopdb}
@@ -40,8 +40,8 @@ services:
       DB_NAME:     ${DB_NAME:-ccopdb}
       DB_USER:     ${DB_USER:-ccop}
       DB_PASSWORD: ${DB_PASSWORD}
-      DB_HOST:     agensgraph
-      DB_PORT:     5432
+      DB_HOST:     ${DB_HOST:-agensgraph}
+      DB_PORT:     ${DB_PORT:-5432}
 
       # LLM 설정 — 두 가지 중 하나 선택
       # [인터넷 가능] OpenAI GPT-4o 사용

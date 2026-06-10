@@ -3,7 +3,7 @@ version: '3.8'
 services:
   # AgensGraph Database
   agensgraph:
-    image: bitnine/agensgraph:v2.13
+    image: bitnine/agensgraph:v2.13.2
     container_name: ccop_agensgraph
     environment:
       POSTGRES_DB: ${DB_NAME:-ccopdb}

@@ -14,6 +14,9 @@ python-dotenv==1.0.0
 # AI/ML
 openai==2.15.0
 
+# Agentic workflow (LangGraph) — required by app/services/langgraph_agent.py (routes.py import)
+langgraph
+
 # Production WSGI Server
 gunicorn==21.2.0
 
