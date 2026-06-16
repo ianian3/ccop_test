@@ -4,6 +4,7 @@ import logging
 import os
 import gzip
 import io
+import hmac
 from config import Config
 
 def create_app():
@@ -14,6 +15,25 @@ def create_app():
 
     # Enable CORS
     CORS(app, origins=Config.CORS_ORIGINS)
+
+    # 선택적 Basic Auth — BASIC_AUTH_USER/PASS env 설정 시에만 활성 (공개 데모 보호용).
+    # env 미설정 시 완전 무동작 (예: skai2_vm). 헬스체크는 모니터링/watchdog 위해 예외.
+    _ba_user = os.getenv('BASIC_AUTH_USER')
+    _ba_pass = os.getenv('BASIC_AUTH_PASS')
+    if _ba_user and _ba_pass:
+        from flask import Response
+
+        @app.before_request
+        def _require_basic_auth():
+            if request.path == '/api/v1/health':
+                return None
+            auth = request.authorization
+            if (auth and (auth.password is not None) and
+                    hmac.compare_digest(auth.username or '', _ba_user) and
+                    hmac.compare_digest(auth.password or '', _ba_pass)):
+                return None
+            return Response('Authentication required', 401,
+                            {'WWW-Authenticate': 'Basic realm="CCOP"'})
 
     # Sprint 1 — gzip 응답 압축 (JSON/text 응답 -60~80% 네트워크)
     @app.after_request
