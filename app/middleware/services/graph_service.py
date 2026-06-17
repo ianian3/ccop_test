@@ -43,6 +43,17 @@ class GraphService:
             return {}
     
     @staticmethod
+    def _label_from_regclass(regclass_val):
+        """AgensGraph tableoid::regclass ('graph.vt_xxx' / '"graph".vt_xxx') → 라벨명(vt_xxx).
+        DB에 저장된 실제 라벨이므로 속성 추론보다 우선. 미분류(ag_vertex)면 None 반환."""
+        if not regclass_val:
+            return None
+        name = str(regclass_val).split('.')[-1].strip('"')
+        if name in ('ag_vertex', 'ag_edge', ''):
+            return None
+        return name
+
+    @staticmethod
     def determine_node_label(props):
         """
         노드 속성을 기반으로 적절한 label(타입) 결정
@@ -64,20 +75,22 @@ class GraphService:
         
         # 우선순위 기반 분류 (v3.0 POLE 6레이어 기준)
 
-        # 0. 이벤트 노드 (Event Layer) — 구체적 이벤트 타입으로 분류
-        if 'transfer_id' in props or 'dlng_sn' in props:
+        # 0. 이벤트 노드 (Event Layer) — event_type 우선, 그 다음 구체 id 키
+        _evt = props.get('event_type')
+        if _evt == 'transfer' or 'transfer_id' in props or 'dlng_sn' in props:
             return 'vt_transfer'
-        if 'call_id' in props or 'call_sn' in props:
+        if _evt == 'call' or 'call_id' in props or 'call_sn' in props:
             return 'vt_call'
-        if 'msg_id' in props:
+        if _evt == 'message' or 'msg_id' in props:
             return 'vt_msg'
-        if 'access_id' in props:
+        if _evt == 'access' or 'access_id' in props:
             return 'vt_access'
         if 'mov_id' in props or 'mov_type' in props:
             return 'vt_movement'
 
-        # 0.1 소스 노드
-        if 'src_id' in props or 'reliability_tier' in props:
+        # 0.1 소스 노드 — src_id/src_name 으로만 판별
+        #     (reliability_tier·source_domain 은 모든 노드 공통 출처속성이라 판별자로 쓰면 안 됨)
+        if 'src_id' in props or 'src_name' in props:
             return 'vt_src'
 
         # 0.2 진정서
@@ -417,7 +430,8 @@ class GraphService:
                         try:
                             edge_query = f"""
                             SELECT e.id, e.start, e."end", e.properties,
-                                   vs.properties as src_props, vt.properties as tgt_props
+                                   vs.properties as src_props, vt.properties as tgt_props,
+                                   vs.tableoid::regclass as src_label, vt.tableoid::regclass as tgt_label
                             FROM "{graph_path}"."{edge_table}" e
                             LEFT JOIN "{graph_path}"."ag_vertex" vs ON e.start = vs.id
                             LEFT JOIN "{graph_path}"."ag_vertex" vt ON e."end" = vt.id
@@ -435,18 +449,18 @@ class GraphService:
                                 # 엣지 양쪽 노드를 elements에 추가 (중복 방지)
                                 if src_id not in node_ids:
                                     src_props = edge_row[4] if isinstance(edge_row[4], dict) else {}
-                                    # 올바른 라벨 결정
-                                    src_label = GraphService.determine_node_label(src_props)
+                                    # DB 실제 라벨 우선(tableoid), 미분류 시에만 속성 추론 폴백
+                                    src_label = GraphService._label_from_regclass(edge_row[6]) or GraphService.determine_node_label(src_props)
                                     elements.append({
                                         "group": "nodes",
                                         "data": {"id": src_id, "label": src_label, "props": src_props}
                                     })
                                     node_ids.add(src_id)
-                                
+
                                 if tgt_id not in node_ids:
                                     tgt_props = edge_row[5] if isinstance(edge_row[5], dict) else {}
-                                    # 올바른 라벨 결정  
-                                    tgt_label = GraphService.determine_node_label(tgt_props)
+                                    # DB 실제 라벨 우선(tableoid), 미분류 시에만 속성 추론 폴백
+                                    tgt_label = GraphService._label_from_regclass(edge_row[7]) or GraphService.determine_node_label(tgt_props)
                                     elements.append({
                                         "group": "nodes",
                                         "data": {"id": tgt_id, "label": tgt_label, "props": tgt_props}
@@ -534,9 +548,10 @@ class GraphService:
                 try:
                     # AgensGraph graphid 형식 처리
                     edge_query = f"""
-                    SELECT e.id, e.start, e."end", e.properties, 
+                    SELECT e.id, e.start, e."end", e.properties,
                            vs.id as src_id, vs.properties as src_props,
-                           vt.id as tgt_id, vt.properties as tgt_props
+                           vt.id as tgt_id, vt.properties as tgt_props,
+                           vs.tableoid::regclass as src_label, vt.tableoid::regclass as tgt_label
                     FROM "{graph_path}"."{edge_table}" e
                     LEFT JOIN "{graph_path}"."ag_vertex" vs ON e.start = vs.id
                     LEFT JOIN "{graph_path}"."ag_vertex" vt ON e."end" = vt.id
@@ -562,17 +577,17 @@ class GraphService:
                         tgt_id = str(r[6]) if r[6] else end_id
                         tgt_props = r[7] if isinstance(r[7], dict) else {}
                         
-                        # 소스 노드 추가 (현재 노드가 아닌 경우)
+                        # 소스 노드 추가 (현재 노드가 아닌 경우) — DB 실제 라벨 우선
                         if src_id != node_id:
-                            src_label = GraphService.determine_node_label(src_props)
+                            src_label = GraphService._label_from_regclass(r[8]) or GraphService.determine_node_label(src_props)
                             elements.append({
                                 "group": "nodes",
                                 "data": {"id": src_id, "label": src_label, "props": src_props}
                             })
-                        
-                        # 타겟 노드 추가 (현재 노드가 아닌 경우)
+
+                        # 타겟 노드 추가 (현재 노드가 아닌 경우) — DB 실제 라벨 우선
                         if tgt_id != node_id:
-                            tgt_label = GraphService.determine_node_label(tgt_props)
+                            tgt_label = GraphService._label_from_regclass(r[9]) or GraphService.determine_node_label(tgt_props)
                             elements.append({
                                 "group": "nodes",
                                 "data": {"id": tgt_id, "label": tgt_label, "props": tgt_props}
