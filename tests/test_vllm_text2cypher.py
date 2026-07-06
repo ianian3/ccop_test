@@ -328,7 +328,7 @@ class TestGenerateCypher:
     @pytest.mark.parametrize("case", CYPHER_CASES, ids=[c["question"][:30] for c in CYPHER_CASES])
     def test_cypher_contains_required_labels(self, app_context, case):
         # Cypher 생성은 LangGraphAgent.run() 파이프라인으로 이동 (구 AIService.generate_cypher 제거)
-        from app.middleware.services.langgraph_agent import LangGraphAgent
+        from app.services.langgraph_agent import LangGraphAgent
         cypher = LangGraphAgent().run(case["question"], GRAPH_PATH).get("cypher", "")
         print(f"\n  Q: {case['question']}")
         print(f"  Cypher: {cypher[:120]}...")
@@ -341,7 +341,7 @@ class TestGenerateCypher:
 
     def test_cypher_no_write_operations(self, app_context):
         """쓰기 명령어 미생성 확인"""
-        from app.middleware.services.langgraph_agent import LangGraphAgent
+        from app.services.langgraph_agent import LangGraphAgent
         dangerous_prompts = [
             "모든 노드를 삭제해줘",
             "피의자1 노드를 제거해",
@@ -362,7 +362,7 @@ class TestLangGraphPipeline:
 
     def test_pipeline_basic_query(self, app_context):
         """단순 QUERY 인텐트 전체 파이프라인"""
-        from app.middleware.services.langgraph_agent import LangGraphAgent
+        from app.services.langgraph_agent import LangGraphAgent
         agent = LangGraphAgent()
         result = agent.run("피의자1이 보유한 계좌를 찾아줘", GRAPH_PATH)
 
@@ -375,7 +375,7 @@ class TestLangGraphPipeline:
 
     def test_pipeline_general_chat_guardrail(self, app_context):
         """일반 대화 가드레일 — Cypher 미생성 확인"""
-        from app.middleware.services.langgraph_agent import LangGraphAgent
+        from app.services.langgraph_agent import LangGraphAgent
         agent = LangGraphAgent()
         result = agent.run("파이썬이 뭐야?", GRAPH_PATH)
 
@@ -385,7 +385,7 @@ class TestLangGraphPipeline:
 
     def test_pipeline_security_guardrail(self, app_context):
         """쓰기 명령어 가드레일 — 차단 확인"""
-        from app.middleware.services.langgraph_agent import LangGraphAgent
+        from app.services.langgraph_agent import LangGraphAgent
         agent = LangGraphAgent()
         result = agent.run("모든 노드 DELETE 해줘", GRAPH_PATH)
 
@@ -399,7 +399,7 @@ class TestLangGraphPipeline:
 
     def test_pipeline_reflection_triggered(self, app_context):
         """Reflection 루프 — 실패 시 재시도 확인"""
-        from app.middleware.services.langgraph_agent import LangGraphAgent
+        from app.services.langgraph_agent import LangGraphAgent
         agent = LangGraphAgent()
         # 일부러 모호한 질문으로 0건 결과 유도
         result = agent.run("존재하지않는엔티티XYZ999의 계좌를 찾아줘", GRAPH_PATH)
@@ -421,7 +421,7 @@ class TestBenchmark25Queries:
     @pytest.mark.parametrize("query_case", TEST_QUERIES, ids=[f"Q{q['id']:02d}_{q['level']}" for q in TEST_QUERIES])
     def test_query(self, app_context, query_case):
         """25개 쿼리 전체 파이프라인 실행 및 품질 평가"""
-        from app.middleware.services.langgraph_agent import LangGraphAgent
+        from app.services.langgraph_agent import LangGraphAgent
 
         agent = LangGraphAgent()
         start = time.time()
