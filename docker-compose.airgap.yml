@@ -1,0 +1,138 @@
+version: '3.8'
+
+# ============================================================
+# CCOP v1.0 — 폐쇄망(Air-gap) 배포용 Docker Compose
+#
+#   1차(인프라):  docker compose -f docker-compose.airgap.yml up -d
+#                 → agensgraph + app(사전적재 이미지) + nginx   (sllm 제외)
+#
+#   2차(GPU+T2C): 사전에 .env 의 SLLM_ENDPOINT / SLLM_MODEL_NAME 설정 후
+#                 docker compose -f docker-compose.airgap.yml --profile gpu up -d
+#                 docker compose -f docker-compose.airgap.yml up -d app   # .env 재반영
+#
+# ⚠️ 기존 docker-compose.cslee.yml 은 인터넷 운영(skai2_vm)용 — 이 파일은 폐쇄망 전용.
+# ⚠️ app 은 폐쇄망에서 build 하지 않고, staging 에서 만들어 반입한 이미지(ccop_app:1.0)를 사용한다.
+# ============================================================
+
+services:
+
+  # ── 1. AgensGraph (그래프 DB) ──────────────────────────────
+  agensgraph:
+    image: bitnine/agensgraph:v2.13.2
+    container_name: ccop_agensgraph
+    environment:
+      POSTGRES_DB:       ${DB_NAME:-tccopdb}
+      POSTGRES_USER:     ${DB_USER:-ccop}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "5432:5432"          # 내부망 DB 점검용 (불필요 시 주석)
+    volumes:
+      - agensgraph_data:/var/lib/postgresql/data
+      - ./scripts/init_db.sh:/docker-entrypoint-initdb.d/init_db.sh:ro
+    networks:
+      - ccop_internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-ccop}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  # ── 2. Flask 앱 (사전 반입 이미지) ────────────────────────
+  app:
+    image: ccop_app:1.0            # ⚠️ 폐쇄망: build 대신 docker load 한 이미지 사용
+    container_name: ccop_app
+    environment:
+      DB_NAME:     ${DB_NAME:-tccopdb}
+      DB_USER:     ${DB_USER:-ccop}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_HOST:     ${DB_HOST:-agensgraph}
+      DB_PORT:     ${DB_PORT:-5432}
+
+      # LLM — 1차: 비움(자연어 질의만 유예) / 2차: .env 에서 SLLM_* 설정
+      SLLM_ENDPOINT:   ${SLLM_ENDPOINT:-}
+      SLLM_MODEL_NAME: ${SLLM_MODEL_NAME:-}
+      # OPENAI_API_KEY 는 폐쇄망 미사용 (설정 시 자연어 질의 401 유발하므로 주입하지 않음)
+
+      SECRET_KEY:     ${SECRET_KEY}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      FLASK_ENV:      production
+      CORS_ORIGINS:   ${CORS_ORIGINS:-http://localhost}
+      DEFAULT_GRAPH_PATH: ${DEFAULT_GRAPH_PATH:-tccop_graph_v6}
+    ports:
+      - "5001:5001"          # nginx 우회 직접 접근용 (불필요 시 주석)
+    volumes:
+      - ./logs:/app/logs
+      - ./data:/app/data
+      - ./chroma_data:/app/chroma_data
+    depends_on:
+      agensgraph:
+        condition: service_healthy
+    networks:
+      - ccop_internal
+      - ccop_external
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5001/api/v1/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    restart: unless-stopped
+
+  # ── 3. Nginx 리버스 프록시 ────────────────────────────────
+  nginx:
+    image: nginx:alpine
+    container_name: ccop_nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/nginx.cslee.conf:/etc/nginx/nginx.conf:ro
+      - ./deploy/ssl:/etc/nginx/ssl:ro          # cert.pem / key.pem (scripts/gen_selfsigned_cert.sh 로 생성)
+      - ./app/static:/usr/share/nginx/html/static:ro
+    depends_on:
+      - app
+    networks:
+      - ccop_external
+    restart: unless-stopped
+
+  # ── 4. sLLM (vLLM) — 2차에서만 기동 (profile: gpu) ────────
+  #   기동: docker compose -f docker-compose.airgap.yml --profile gpu up -d
+  #   ⚠️ RTX 6000 Ada 는 NVLink 미지원 → tensor-parallel-size 1 (여러 장 묶지 말 것)
+  #   ⚠️ VLLM_TAG 는 폐쇄망 GPU 드라이버 CUDA 와 호환되는 태그로 .env 에 고정 (latest 금지)
+  sllm:
+    image: vllm/vllm-openai:${VLLM_TAG:-latest}
+    container_name: ccop_sllm
+    profiles: ["gpu"]
+    runtime: nvidia
+    environment:
+      - CUDA_VISIBLE_DEVICES=0
+    command: >
+      --model /models/qwen25-t2c-v42
+      --served-model-name qwen25-t2c-v42
+      --tensor-parallel-size 1
+      --host 0.0.0.0 --port 8000
+      --max-model-len 16384 --gpu-memory-utilization 0.9
+      --chat-template /models/qwen25-t2c-v42/chat_template.jinja
+    volumes:
+      - ./model/qwen25-t2c-v42:/models/qwen25-t2c-v42:ro
+    networks:
+      - ccop_internal
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped
+
+volumes:
+  agensgraph_data:
+    driver: local
+
+networks:
+  ccop_internal:             # DB ↔ App ↔ sLLM 내부 통신 (외부 미노출)
+    driver: bridge
+    internal: true
+  ccop_external:             # Nginx ↔ App 통신
+    driver: bridge

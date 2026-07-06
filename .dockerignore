@@ -46,3 +46,27 @@ show_nodes.py
 # Development
 age/
 *.md
+
+# 폐쇄망 슬림 빌드 — 런타임 불필요 대용량 (data 는 compose 볼륨 ./data 로 주입)
+/.venv/
+/data/
+/train/
+/results/
+/2025_demo_data/
+/tests/
+/docs/
+/scratchpad/
+/ccop_bundle_p1/
+.pytest_cache/
+.coverage
+/*.tar
+/*.tar.gz
+/benchmark_*.json
+/perf_results_*.json
+/vllm_bench_*.json
+/db_test_results_*.json
+/test_30q_results_*.json
+/graph.json
+/*.pdf
+/*.png
+/*.html

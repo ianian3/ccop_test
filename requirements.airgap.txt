@@ -1,0 +1,30 @@
+# CCOP v1.0 — 폐쇄망 슬림 런타임 의존성
+#   RAG 미사용(1차): chromadb / pypdf / sentence-transformers 제거 → torch 미포함
+#   → 앱 이미지 pip 레이어 5.65GB → ~0.5GB
+#   (app 전체에 chromadb/sentence_transformers/torch import 없음 = 죽은 의존성 확인 완료)
+
+# Web Framework
+Flask==3.0.0
+Werkzeug==3.0.1
+
+# Database
+psycopg2-binary==2.9.9
+
+# Data Processing (ETL)
+pandas==2.1.4
+
+# Environment
+python-dotenv==1.0.0
+
+# LLM / Agentic
+openai==2.15.0
+langgraph
+
+# WSGI
+gunicorn==21.2.0
+
+# Security & CORS
+flask-cors==4.0.0
+
+# HTTP (health check)
+requests==2.31.0
