@@ -1,0 +1,671 @@
+<title>CCOP Cypher 쿼리 가져오기 & 조회 안내서 (외부 기관용)</title>
+<meta name="description" content="외부 기관·협력 업체를 위한 CCOP read-only API 실무 가이드 — Cypher 쿼리를 가져오고 조회하는 방법">
+
+<style>
+  :root{
+    --bg:#F5F6F9; --surface:#FFFFFF; --surface-2:#FBFCFD;
+    --ink:#171C28; --ink-2:#3D4658; --muted:#6C7689;
+    --line:#E3E7EE; --line-soft:#EDF0F5;
+    --accent:#3647B0; --accent-press:#2A3893; --accent-soft:#ECEEF9;
+    --code-bg:#131826; --code-fg:#C9D3E6; --code-dim:#6B7794; --code-bar:#1B2233; --code-line:#252E44;
+    --ok:#1C8A5B; --ok-soft:#E7F4EE;
+    --block:#BE3A2B; --block-soft:#FBEAE7;
+    --warn:#8F6410; --warn-soft:#F6EEDB;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI","Apple SD Gothic Neo","Malgun Gothic",Roboto,Helvetica,Arial,sans-serif;
+    --mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,"D2Coding",monospace;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
+       font-size:16px;line-height:1.65;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+  a{color:var(--accent);text-decoration:none}
+  a:hover{text-decoration:underline}
+  :focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:3px}
+
+  /* ── Masthead ───────────────────────────── */
+  .masthead{position:relative;overflow:hidden;background:var(--surface);border-bottom:1px solid var(--line)}
+  .masthead-in{max-width:1140px;margin:0 auto;padding:44px 24px 38px;position:relative;z-index:1}
+  .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;
+           color:var(--accent);font-weight:600;margin:0 0 14px}
+  h1{font-size:clamp(1.9rem,4.2vw,2.7rem);line-height:1.12;letter-spacing:-.02em;font-weight:800;
+     margin:0;text-wrap:balance;max-width:18ch}
+  .lede{font-size:clamp(1rem,1.6vw,1.12rem);color:var(--ink-2);margin:14px 0 0;max-width:54ch}
+  .badges{display:flex;flex-wrap:wrap;gap:8px;margin:22px 0 26px}
+  .badge{font-family:var(--mono);font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;
+         font-weight:600;padding:5px 10px;border-radius:5px;border:1px solid var(--line)}
+  .badge-ext{background:var(--accent-soft);color:var(--accent-press);border-color:#D7DBF2}
+  .badge-ro{background:var(--ok-soft);color:var(--ok);border-color:#CDE7DA}
+  .metawrap{display:flex;flex-wrap:wrap;gap:0;border:1px solid var(--line);border-radius:10px;overflow:hidden;max-width:680px;background:var(--surface-2)}
+  .meta{flex:1;min-width:150px;padding:13px 16px;border-right:1px solid var(--line)}
+  .meta:last-child{border-right:0}
+  .meta dt{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:0}
+  .meta dd{margin:5px 0 0;font-size:14px;font-weight:600;color:var(--ink)}
+  .motif{position:absolute;top:0;right:0;width:420px;height:100%;z-index:0;opacity:.5;pointer-events:none}
+  @media(max-width:760px){.motif{display:none}}
+
+  /* ── Shell / layout ─────────────────────── */
+  .shell{max-width:1140px;margin:0 auto;padding:0 24px;display:grid;grid-template-columns:210px minmax(0,1fr);gap:56px;align-items:start}
+  @media(max-width:900px){.shell{grid-template-columns:1fr;gap:0}}
+
+  /* ── TOC ────────────────────────────────── */
+  .toc{position:sticky;top:24px;padding:28px 0;align-self:start}
+  @media(max-width:900px){.toc{display:none}}
+  .toc-h{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:0 0 14px;padding-left:12px}
+  .toc-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}
+  .toc-list a{display:flex;gap:10px;align-items:baseline;padding:7px 12px;border-left:2px solid transparent;
+              color:var(--ink-2);font-size:13.5px;border-radius:0 5px 5px 0}
+  .toc-list a:hover{color:var(--ink);background:var(--surface);text-decoration:none}
+  .toc-list a.active{color:var(--accent-press);border-left-color:var(--accent);background:var(--surface);font-weight:600}
+  .toc-num{font-family:var(--mono);font-size:11px;color:var(--muted);font-weight:600}
+  .toc-list a.active .toc-num{color:var(--accent)}
+
+  /* mobile contents */
+  .toc-m{display:none}
+  @media(max-width:900px){.toc-m{display:block;margin:22px 0 4px;border:1px solid var(--line);border-radius:10px;background:var(--surface)}}
+  .toc-m summary{cursor:pointer;list-style:none;padding:13px 16px;font-family:var(--mono);font-size:12px;
+                 letter-spacing:.08em;text-transform:uppercase;color:var(--ink-2);font-weight:600}
+  .toc-m summary::-webkit-details-marker{display:none}
+  .toc-m ol{margin:0;padding:0 16px 14px 34px;color:var(--ink-2);font-size:14px;line-height:2}
+
+  /* ── Doc content ────────────────────────── */
+  .doc{min-width:0;max-width:760px;padding:40px 0 90px}
+  .section{padding-top:46px;margin-top:46px;border-top:1px solid var(--line)}
+  .section:first-child{padding-top:8px;margin-top:0;border-top:0}
+  section[id]{scroll-margin-top:24px}
+  .sec-num{font-family:var(--mono);font-size:12px;letter-spacing:.12em;color:var(--accent);font-weight:600;display:block;margin-bottom:8px}
+  h2{font-size:clamp(1.4rem,2.6vw,1.72rem);line-height:1.2;letter-spacing:-.015em;font-weight:750;margin:0 0 4px;text-wrap:balance}
+  h3{font-size:1.12rem;font-weight:700;letter-spacing:-.01em;margin:34px 0 8px;color:var(--ink)}
+  h4{font-size:.95rem;font-weight:700;margin:24px 0 6px;color:var(--ink-2)}
+  .doc p{margin:12px 0;color:var(--ink-2)}
+  .doc p strong,.doc li strong{color:var(--ink);font-weight:650}
+  .doc ul{margin:12px 0;padding-left:0;list-style:none;display:flex;flex-direction:column;gap:9px}
+  .doc ul li{position:relative;padding-left:20px;color:var(--ink-2)}
+  .doc ul li::before{content:"";position:absolute;left:3px;top:11px;width:5px;height:5px;border-radius:50%;background:var(--accent);opacity:.55}
+  code:not(.code-body code){font-family:var(--mono);font-size:.86em;background:var(--accent-soft);
+       color:var(--accent-press);padding:.12em .4em;border-radius:4px;word-break:break-word}
+  .lead-note{color:var(--muted);font-size:14.5px;border-left:2px solid var(--line);padding-left:16px;margin:6px 0 0}
+
+  /* ── Flow (§0) ──────────────────────────── */
+  .flow{display:flex;gap:10px;align-items:stretch;margin:22px 0 6px}
+  .step{flex:1;min-width:0;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px 15px;display:flex;flex-direction:column;gap:9px}
+  .step-top{display:flex;align-items:baseline;gap:8px}
+  .step-n{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--accent)}
+  .step-tag{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+  .step-t{font-size:15px;font-weight:700;margin:0;color:var(--ink)}
+  .step-chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:auto}
+  .schip{font-family:var(--mono);font-size:11px;background:var(--surface-2);border:1px solid var(--line);color:var(--ink-2);padding:3px 7px;border-radius:5px;white-space:nowrap}
+  .schip.opt{color:var(--warn);background:var(--warn-soft);border-color:#EAD9B0}
+  .farrow{align-self:center;color:var(--muted);font-size:20px;flex:none}
+  @media(max-width:680px){.flow{flex-direction:column}.farrow{transform:rotate(90deg)}}
+
+  /* ── Method cards (§2/§3) ───────────────── */
+  .mcard{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:20px 22px;margin:18px 0}
+  .mcard-h{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:4px}
+  .mcard-k{font-family:var(--mono);font-size:13px;font-weight:700;color:var(--accent);background:var(--accent-soft);
+           width:30px;height:30px;border-radius:7px;display:grid;place-items:center;flex:none}
+  .mcard-t{font-size:1.08rem;font-weight:700;margin:0}
+  .pill{font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:.04em;padding:3px 9px;border-radius:20px;white-space:nowrap}
+  .pill-rec{background:var(--ok-soft);color:var(--ok)}
+  .pill-opt{background:var(--warn-soft);color:var(--warn)}
+
+  /* ── Code blocks ────────────────────────── */
+  .code-body{margin:14px 0;border-radius:10px;overflow:hidden;border:1px solid var(--code-line);background:var(--code-bg)}
+  .code-bar{display:flex;align-items:center;justify-content:space-between;background:var(--code-bar);
+            padding:8px 12px;border-bottom:1px solid var(--code-line)}
+  .code-lang{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#8E9BB5;font-weight:600}
+  .copy{font-family:var(--mono);font-size:11px;color:#9DA9C2;background:transparent;border:1px solid var(--code-line);
+        padding:4px 10px;border-radius:6px;cursor:pointer;transition:all .15s}
+  .copy:hover{color:#fff;border-color:#3A4660;background:#222C42}
+  .copy.done{color:#7FD8A8;border-color:#2F5A44}
+  .code-body pre{margin:0;overflow-x:auto;padding:15px 16px}
+  .code-body code{font-family:var(--mono);font-size:13px;line-height:1.65;color:var(--code-fg);white-space:pre}
+  .code-body .cm{color:var(--code-dim)}
+
+  /* ── Tables ─────────────────────────────── */
+  .tablewrap{overflow-x:auto;margin:16px 0;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+  table{border-collapse:collapse;width:100%;font-size:14px}
+  thead th{text-align:left;font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;
+           color:var(--muted);font-weight:600;padding:11px 16px;background:var(--surface-2);border-bottom:1px solid var(--line);white-space:nowrap}
+  tbody td{padding:11px 16px;border-bottom:1px solid var(--line-soft);color:var(--ink-2);vertical-align:top}
+  tbody tr:last-child td{border-bottom:0}
+  td code,th code{font-family:var(--mono);font-size:12.5px;color:var(--accent-press);background:var(--accent-soft);padding:.1em .35em;border-radius:4px}
+  .num{font-variant-numeric:tabular-nums;font-family:var(--mono);font-weight:600;color:var(--ink)}
+
+  /* chips for endpoint/keywords */
+  .chip{display:inline-block;font-family:var(--mono);font-size:11px;font-weight:600;padding:3px 8px;border-radius:5px;white-space:nowrap}
+  .c-get{background:var(--ok-soft);color:var(--ok)}
+  .c-post{background:var(--accent-soft);color:var(--accent-press)}
+  .c-bear{background:#EEF0F4;color:var(--ink-2)}
+  .c-xkey{background:#F0ECF7;color:#6A4BA0}
+  .kwrow{display:flex;flex-wrap:wrap;gap:7px;margin:10px 0}
+  .kw{font-family:var(--mono);font-size:12.5px;font-weight:600;padding:5px 10px;border-radius:6px}
+  .kw-ok{background:var(--ok-soft);color:var(--ok)}
+  .kw-block{background:var(--block-soft);color:var(--block)}
+
+  /* ── Callouts ───────────────────────────── */
+  .note{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:15px 18px;margin:16px 0}
+  .note-warn{background:var(--warn-soft);border-color:#EAD9B0}
+  .note-block{background:var(--block-soft);border-color:#F0CFC9}
+  .note-lab{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;font-weight:700;margin:0 0 6px}
+  .note-warn .note-lab{color:var(--warn)}
+  .note-block .note-lab{color:var(--block)}
+  .note p{margin:0;color:var(--ink-2);font-size:14.5px}
+  .note p+p{margin-top:8px}
+
+  hr.soft{border:0;border-top:1px solid var(--line-soft);margin:22px 0}
+
+  footer{border-top:1px solid var(--line);background:var(--surface);margin-top:30px}
+  .foot-in{max-width:1140px;margin:0 auto;padding:26px 24px 40px;color:var(--muted);font-size:13px;font-family:var(--mono)}
+
+  @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{transition:none!important;animation:none!important}}
+
+  /* ── Print / Save-as-PDF (외부 기관 전달용) ───────── */
+  @media print{
+    @page{margin:16mm 14mm}
+    html,body{background:#fff;font-size:11.5pt}
+    .motif,.toc,.toc-m,.copy{display:none!important}
+    .masthead{border-bottom:1.5px solid #222}
+    .masthead-in{padding:0 0 14px}
+    .shell{display:block;max-width:none;margin:0;padding:0}
+    .doc{max-width:none;padding:6px 0 0}
+    .section{padding-top:18px;margin-top:18px;border-top:1px solid #bbb;break-before:auto}
+    a{color:#1d2a78;text-decoration:none}
+    /* 인쇄 시 코드블록을 밝은 배경으로 (잉크 절약 + 줄바꿈) */
+    .code-body{background:#fff!important;border:1px solid #bbb!important}
+    .code-bar{background:#f1f2f4!important;border-bottom:1px solid #ccc!important}
+    .code-lang{color:#555!important}
+    .code-body code{color:#16203a!important;white-space:pre-wrap;word-break:break-word}
+    .code-body .cm{color:#6a747f!important}
+    .step,.mcard,.code-body,.tablewrap,table,tr,.note,.flow{break-inside:avoid}
+    h2,h3,h4{break-after:avoid}
+    .badge,.chip,.kw,.schip,.pill{print-color-adjust:exact;-webkit-print-color-adjust:exact}
+    footer{border-top:1px solid #bbb}
+  }
+</style>
+
+<header class="masthead">
+  <svg class="motif" viewBox="0 0 420 320" fill="none" aria-hidden="true">
+    <g stroke="#3647B0" stroke-width="1.4" opacity="0.55">
+      <line x1="120" y1="70" x2="250" y2="48"/>
+      <line x1="250" y1="48" x2="360" y2="110"/>
+      <line x1="120" y1="70" x2="170" y2="180"/>
+      <line x1="170" y1="180" x2="300" y2="210"/>
+      <line x1="300" y1="210" x2="360" y2="110"/>
+      <line x1="170" y1="180" x2="250" y2="48"/>
+      <line x1="300" y1="210" x2="250" y2="270"/>
+    </g>
+    <g fill="#3647B0">
+      <circle cx="120" cy="70" r="7" opacity="0.85"/>
+      <circle cx="250" cy="48" r="9" opacity="0.95"/>
+      <circle cx="360" cy="110" r="6" opacity="0.7"/>
+      <circle cx="170" cy="180" r="8" opacity="0.85"/>
+      <circle cx="300" cy="210" r="7" opacity="0.8"/>
+      <circle cx="250" cy="270" r="5" opacity="0.6"/>
+    </g>
+  </svg>
+  <div class="masthead-in">
+    <p class="eyebrow">CCOP · 사이버범죄 수사 그래프 플랫폼</p>
+    <h1>Cypher 쿼리 가져오기 &amp; 조회 안내서</h1>
+    <p class="lede">외부 기관·협력 업체가 CCOP 그래프 데이터베이스에서 Cypher 쿼리를 <strong>확보(가져오기)</strong>하고, 그 쿼리로 데이터를 <strong>조회</strong>하는 방법을 다루는 실무 가이드입니다.</p>
+    <div class="badges">
+      <span class="badge badge-ext">외부 기관용</span>
+      <span class="badge badge-ro">Read-only API</span>
+    </div>
+    <dl class="metawrap">
+      <div class="meta"><dt>대상</dt><dd>검찰 · 협력 경찰 · FIU · 통신사 등</dd></div>
+      <div class="meta"><dt>버전</dt><dd>2026-06-26 기준</dd></div>
+      <div class="meta"><dt>접근 방식</dt><dd>API 키 인증 HTTPS</dd></div>
+    </dl>
+  </div>
+</header>
+
+<div class="shell">
+  <aside class="toc">
+    <p class="toc-h">목차</p>
+    <ul class="toc-list" id="toc">
+      <li><a href="#s0"><span class="toc-num">00</span> 한눈에 보기</a></li>
+      <li><a href="#s1"><span class="toc-num">01</span> 사전 준비</a></li>
+      <li><a href="#s2"><span class="toc-num">02</span> 쿼리 가져오기</a></li>
+      <li><a href="#s3"><span class="toc-num">03</span> 조회하기</a></li>
+      <li><a href="#s4"><span class="toc-num">04</span> 자주 쓰는 쿼리</a></li>
+      <li><a href="#s5"><span class="toc-num">05</span> 규칙·제약</a></li>
+      <li><a href="#s6"><span class="toc-num">06</span> 문제 해결</a></li>
+      <li><a href="#s7"><span class="toc-num">07</span> Python 예시</a></li>
+      <li><a href="#s8"><span class="toc-num">08</span> 부록</a></li>
+    </ul>
+  </aside>
+
+  <main class="doc">
+    <details class="toc-m">
+      <summary>목차 펼치기</summary>
+      <ol>
+        <li><a href="#s0">한눈에 보기</a></li>
+        <li><a href="#s1">사전 준비</a></li>
+        <li><a href="#s2">쿼리 가져오기</a></li>
+        <li><a href="#s3">조회하기</a></li>
+        <li><a href="#s4">자주 쓰는 쿼리</a></li>
+        <li><a href="#s5">규칙·제약</a></li>
+        <li><a href="#s6">문제 해결</a></li>
+        <li><a href="#s7">Python 예시</a></li>
+        <li><a href="#s8">부록</a></li>
+      </ol>
+    </details>
+
+    <!-- 0 ───────────────────────────────── -->
+    <section id="s0" class="section">
+      <span class="sec-num">00</span>
+      <h2>한눈에 보기 — 전체 흐름</h2>
+      <p>쿼리를 <strong>가져와서</strong>, (선택적으로 검증한 뒤), <strong>조회</strong>하고, 결과를 받는 4단계 워크플로우입니다.</p>
+      <div class="flow">
+        <div class="step">
+          <div class="step-top"><span class="step-n">01</span><span class="step-tag">Get</span></div>
+          <p class="step-t">쿼리 가져오기</p>
+          <div class="step-chips"><span class="schip">카탈로그 복사</span><span class="schip">자연어→생성</span><span class="schip">직접 작성</span></div>
+        </div>
+        <div class="farrow" aria-hidden="true">→</div>
+        <div class="step">
+          <div class="step-top"><span class="step-n">02</span><span class="step-tag">Validate</span></div>
+          <p class="step-t">검증</p>
+          <div class="step-chips"><span class="schip">validate-cypher</span><span class="schip opt">선택</span></div>
+        </div>
+        <div class="farrow" aria-hidden="true">→</div>
+        <div class="step">
+          <div class="step-top"><span class="step-n">03</span><span class="step-tag">Execute</span></div>
+          <p class="step-t">조회 실행</p>
+          <div class="step-chips"><span class="schip">graph/read</span><span class="schip">graph-query</span></div>
+        </div>
+        <div class="farrow" aria-hidden="true">→</div>
+        <div class="step">
+          <div class="step-top"><span class="step-n">04</span><span class="step-tag">Result</span></div>
+          <p class="step-t">결과 수신</p>
+          <div class="step-chips"><span class="schip">columns · rows</span><span class="schip">노드·엣지</span></div>
+        </div>
+      </div>
+      <ul>
+        <li><strong>가장 쉬운 경로</strong> — <code>카탈로그에서 복사</code> → <code>graph/read</code> 로 실행. Cypher를 몰라도 됩니다.</li>
+        <li><strong>탐색이 필요할 때</strong> — <code>자연어로 자동 생성</code>. 한국어 질문을 보내면 Cypher 문자열을 돌려줍니다.</li>
+        <li><strong>직접 쿼리를 짤 때</strong> — 작성 후 <code>validate-cypher</code> 로 안전성만 점검하고 실행하세요.</li>
+      </ul>
+    </section>
+
+    <!-- 1 ───────────────────────────────── -->
+    <section id="s1" class="section">
+      <span class="sec-num">01</span>
+      <h2>사전 준비</h2>
+      <h3>발급받을 것</h3>
+      <div class="tablewrap"><table>
+        <thead><tr><th>항목</th><th>설명</th></tr></thead>
+        <tbody>
+          <tr><td><strong>API 키</strong></td><td>CCOP 운영팀에 기관명·용도·필요 그래프를 알려 발급. 형식 <code>ccop_xxxxxxxx…</code>, <strong>최초 1회만 평문 표시</strong>되니 안전히 보관</td></tr>
+          <tr><td><strong>베이스 URL (<code>$HOST</code>)</strong></td><td>운영팀이 안내하는 HTTPS 주소 (예: <code>https://&lt;발급-호스트&gt;</code>)</td></tr>
+          <tr><td><strong>graph_path</strong></td><td>조회 대상 그래프명 (예: <code>tccop_graph_v6</code>, <code>osint_ontology</code>). 권한 내 그래프만 접근 가능</td></tr>
+        </tbody>
+      </table></div>
+
+      <h3>인증 헤더 — 엔드포인트별로 다릅니다</h3>
+      <div class="tablewrap"><table>
+        <thead><tr><th>헤더</th><th>적용 엔드포인트</th></tr></thead>
+        <tbody>
+          <tr><td><span class="chip c-bear">Authorization: Bearer</span></td><td>text-to-cypher · validate-cypher · graph-query · graph/list</td></tr>
+          <tr><td><span class="chip c-xkey">X-API-Key</span></td><td>graph/read · graph/schema · graph/dump</td></tr>
+        </tbody>
+      </table></div>
+      <p class="lead-note">어떤 키·헤더를 쓸지는 발급 시 운영팀이 안내합니다. 예제에서는 <code>$KEY</code> 로 표기합니다.</p>
+
+      <h3>연결·환경 확인 (복사해서 실행)</h3>
+      <figure class="code-body" data-lang="bash"><figcaption class="code-bar"><span class="code-lang">bash</span><button class="copy" type="button">복사</button></figcaption><pre><code>export HOST="https://&lt;발급-호스트&gt;"
+export KEY="ccop_xxxxxxxx"
+
+# (1) 헬스체크 — 인증 불필요
+curl -s $HOST/api/v1/health
+# → {"service":"CCOP Partner API","status":"healthy","version":"1.0.0"}
+
+# (2) 사용 가능한 그래프 목록 (Bearer)
+curl -s -H "Authorization: Bearer $KEY" $HOST/api/v1/graph/list
+
+# (3) 그래프 스키마 — 어떤 라벨/엣지가 있는지 (X-API-Key)
+curl -s -H "X-API-Key: $KEY" "$HOST/api/v1/graph/schema?graph_path=tccop_graph_v6"
+# → node_labels[], edge_types[], total_nodes, total_edges</code></pre></figure>
+    </section>
+
+    <!-- 2 ───────────────────────────────── -->
+    <section id="s2" class="section">
+      <span class="sec-num">02</span>
+      <h2>① 사이퍼쿼리를 "가져오는" 방법</h2>
+      <p>목적과 숙련도에 따라 세 가지 방법 중 하나로 Cypher 쿼리 문자열을 확보합니다.</p>
+
+      <div class="mcard">
+        <div class="mcard-h"><span class="mcard-k">A</span><h3 class="mcard-t" style="margin:0">표준 쿼리 카탈로그에서 복사</h3><span class="pill pill-rec">권장 기본</span></div>
+        <p>사전 검증된 표준 쿼리 모음(<code>CCOP_GRAPH_QUERIES.md</code>)에서 목적에 맞는 쿼리를 복사해 <strong>조건값만 바꿔</strong> 사용합니다. Cypher 지식 없이도 안전하게 시작할 수 있습니다.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>카테고리</th><th>예시</th></tr></thead>
+          <tbody>
+            <tr><td>전체 조회</td><td>라벨/엣지 통계, 전체 노드+엣지</td></tr>
+            <tr><td>사건 중심</td><td>사건 관련 노드(2-hop), 피의자 목록, 자금 흐름</td></tr>
+            <tr><td>인물 중심</td><td>인물의 자산(계좌/전화/IP), 관계망, 위험도 필터</td></tr>
+            <tr><td>자금 추적</td><td>입출금 내역, 다단계 세탁(3-hop), 고액 이체</td></tr>
+            <tr><td>통신 분석</td><td>발신/수신 통화, 대포폰, 불법중계기</td></tr>
+            <tr><td>OSINT/위협</td><td>위협점수 필터, 악성 사이트, C2 통신, 피싱 군집</td></tr>
+            <tr><td>신뢰도 필터</td><td>공식 출처(tier1)만 / OSINT만</td></tr>
+          </tbody>
+        </table></div>
+        <h4>예) "고액 이체(5천만원 이상)" 쿼리</h4>
+        <figure class="code-body" data-lang="cypher"><figcaption class="code-bar"><span class="code-lang">cypher</span><button class="copy" type="button">복사</button></figcaption><pre><code>MATCH (b:vt_bacnt)-[:from_account]-&gt;(t:vt_transfer)-[:to_account]-&gt;(b2:vt_bacnt)
+WHERE t.amount &gt;= 50000000
+RETURN b, t, b2 ORDER BY t.amount DESC</code></pre></figure>
+        <p class="lead-note">금액·이름·번호·기간 등 <strong>조건만 교체</strong>해 재사용하세요. 신규 패턴이 필요하면 운영팀에 카탈로그 추가를 요청할 수 있습니다.</p>
+      </div>
+
+      <div class="mcard">
+        <div class="mcard-h"><span class="mcard-k">B</span><h3 class="mcard-t" style="margin:0">자연어 → Cypher 자동 생성</h3><span class="chip c-post">POST</span><code>/api/v1/text-to-cypher</code></div>
+        <p>한국어 질문을 보내면 CCOP가 Cypher 쿼리 문자열을 생성해 돌려줍니다. <strong>쿼리가 생성과 동시에 실행</strong>되어 결과(<code>elements</code>, <code>results_count</code>)도 함께 옵니다. 쿼리 문자열만 필요하면 <code>cypher</code> 필드만 쓰면 됩니다.</p>
+        <figure class="code-body" data-lang="bash"><figcaption class="code-bar"><span class="code-lang">bash</span><button class="copy" type="button">복사</button></figcaption><pre><code>curl -s -X POST $HOST/api/v1/text-to-cypher \
+  -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" \
+  -d '{"question":"피의자2가 보유한 계좌를 보여줘",
+       "schema":{"graph_path":"tccop_graph_v6"}}'</code></pre></figure>
+        <h4>응답 (요약)</h4>
+        <figure class="code-body" data-lang="json"><figcaption class="code-bar"><span class="code-lang">json</span><button class="copy" type="button">복사</button></figcaption><pre><code>{
+  "status": "success",
+  "cypher": "MATCH (p:vt_psn {name:'피의자2'})-[:has_account]-&gt;(b:vt_bacnt) RETURN p, b",
+  "intent": "...",
+  "elements": [ ... ],
+  "results_count": 5
+}</code></pre></figure>
+        <h4>Cypher 문자열만 뽑아내기 (jq 사용)</h4>
+        <figure class="code-body" data-lang="bash"><figcaption class="code-bar"><span class="code-lang">bash</span><button class="copy" type="button">복사</button></figcaption><pre><code>curl -s -X POST $HOST/api/v1/text-to-cypher \
+  -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" \
+  -d '{"question":"피의자2의 계좌","schema":{"graph_path":"tccop_graph_v6"}}' \
+  | jq -r '.cypher'</code></pre></figure>
+        <div class="note note-warn">
+          <p class="note-lab">주의</p>
+          <p>AI 추론이 포함되어 응답이 <strong>최대 약 120초</strong>까지 걸릴 수 있습니다. 호출 timeout 을 130초 이상으로 두세요. 생성된 Cypher는 실행 전 <strong>방법 C(검증)</strong> 로 한 번 확인하면 안전합니다.</p>
+        </div>
+      </div>
+
+      <div class="mcard">
+        <div class="mcard-h"><span class="mcard-k">C</span><h3 class="mcard-t" style="margin:0">직접 작성 후 검증</h3><span class="chip c-post">POST</span><code>/api/v1/validate-cypher</code></div>
+        <p>직접 작성했거나 방법 B로 받은 Cypher를 <strong>실행하지 않고</strong> 문법·안전성만 점검합니다.</p>
+        <figure class="code-body" data-lang="bash"><figcaption class="code-bar"><span class="code-lang">bash</span><button class="copy" type="button">복사</button></figcaption><pre><code>curl -s -X POST $HOST/api/v1/validate-cypher \
+  -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" \
+  -d '{"cypher":"MATCH (p:vt_psn) RETURN p LIMIT 10"}'</code></pre></figure>
+        <figure class="code-body" data-lang="json"><figcaption class="code-bar"><span class="code-lang">json</span><button class="copy" type="button">복사</button></figcaption><pre><code>{ "status": "valid", "is_safe": true, "warnings": [], "cypher": "MATCH (p:vt_psn) RETURN p LIMIT 10" }</code></pre></figure>
+        <p><code>is_safe: false</code> 이면 쓰기 명령어가 포함된 것 → 실행 시 차단됩니다(<a href="#s5">§05 규칙·제약</a>). <code>warnings</code> 를 보고 수정하세요.</p>
+      </div>
+    </section>
+
+    <!-- 3 ───────────────────────────────── -->
+    <section id="s3" class="section">
+      <span class="sec-num">03</span>
+      <h2>② 가져온 사이퍼쿼리로 "조회하는" 방법</h2>
+
+      <div class="mcard">
+        <div class="mcard-h"><span class="mcard-k">㉠</span><h3 class="mcard-t" style="margin:0">graph/read</h3><span class="pill pill-rec">권장</span><span class="chip c-post">POST</span><span class="chip c-xkey">X-API-Key</span></div>
+        <p>외부 read-only 조회의 <strong>표준 엔드포인트</strong>입니다. 쓰기 명령은 차단되고, <code>LIMIT</code> 미지정 시 자동으로 붙습니다.</p>
+        <figure class="code-body" data-lang="bash"><figcaption class="code-bar"><span class="code-lang">bash</span><button class="copy" type="button">복사</button></figcaption><pre><code>curl -s -X POST $HOST/api/v1/graph/read \
+  -H "X-API-Key: $KEY" -H "Content-Type: application/json" \
+  -d '{
+        "graph_path": "tccop_graph_v6",
+        "cypher": "MATCH (p:vt_psn)-[:has_account]-&gt;(b:vt_bacnt) RETURN p, b",
+        "limit": 500
+      }'</code></pre></figure>
+        <ul>
+          <li><code>limit</code> : 기본 <strong>500</strong>, 최대 <strong>5000</strong>. 쿼리에 <code>LIMIT</code> 이 없으면 이 값이 자동 적용됩니다.</li>
+          <li>응답 형식: <code>{graph_path, cypher, columns, row_count, rows}</code></li>
+        </ul>
+      </div>
+
+      <div class="mcard">
+        <div class="mcard-h"><span class="mcard-k">㉡</span><h3 class="mcard-t" style="margin:0">graph-query</h3><span class="chip c-post">POST</span><span class="chip c-bear">Bearer</span></div>
+        <p><code>Authorization: Bearer</code> 인증을 쓰는 경우의 조회 엔드포인트입니다. 기관 tier별 결과 상한이 적용됩니다.</p>
+        <figure class="code-body" data-lang="bash"><figcaption class="code-bar"><span class="code-lang">bash</span><button class="copy" type="button">복사</button></figcaption><pre><code>curl -s -X POST $HOST/api/v1/graph-query \
+  -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" \
+  -d '{
+        "graph_path": "tccop_graph_v6",
+        "cypher": "MATCH (b:vt_bacnt)-[:from_account]-&gt;(t:vt_transfer)-[:to_account]-&gt;(b2:vt_bacnt) WHERE t.amount &gt;= 50000000 RETURN b, t, b2 ORDER BY t.amount DESC LIMIT 100"
+      }'</code></pre></figure>
+        <ul>
+          <li>응답: <code>{status, results, count, limited, graph_path, response_time_ms}</code></li>
+          <li><code>limited: true</code> 이면 tier 상한 때문에 잘린 것 → 조건을 좁히거나 운영팀에 상한 상향을 문의하세요. <strong><code>LIMIT</code> 을 항상 명시</strong>하는 것을 권장합니다.</li>
+        </ul>
+      </div>
+
+      <h3>응답 읽는 법</h3>
+      <h4>graph/read 응답 — 행/열(table) 형태</h4>
+      <figure class="code-body" data-lang="json"><figcaption class="code-bar"><span class="code-lang">json</span><button class="copy" type="button">복사</button></figcaption><pre><code>{
+  "graph_path": "tccop_graph_v6",
+  "cypher": "MATCH (p:vt_psn)-[:has_account]-&gt;(b:vt_bacnt) RETURN p, b LIMIT 500",
+  "columns": ["p", "b"],
+  "row_count": 47,
+  "rows": [
+    [ {"id":"4.11","label":"vt_psn","props":{"name":"피의자2"}},
+      {"id":"8.23","label":"vt_bacnt","props":{"account_no":"110-1111-2222"}} ],
+    ...
+  ]
+}</code></pre></figure>
+      <ul>
+        <li><code>columns</code> = RETURN 절의 컬럼 순서. <code>rows[i][j]</code> = i번째 행의 j번째 컬럼 값.</li>
+        <li>각 값은 <strong>노드/엣지 객체</strong>(<code>{id, label, props}</code>) 또는 <strong>스칼라</strong>(숫자·문자열).</li>
+      </ul>
+      <h4>graph-query 응답 — 결과 리스트 형태</h4>
+      <figure class="code-body" data-lang="json"><figcaption class="code-bar"><span class="code-lang">json</span><button class="copy" type="button">복사</button></figcaption><pre><code>{ "status":"success", "results":[ ... ], "count":10, "limited":true, "graph_path":"tccop_graph_v6" }</code></pre></figure>
+    </section>
+
+    <!-- 4 ───────────────────────────────── -->
+    <section id="s4" class="section">
+      <span class="sec-num">04</span>
+      <h2>자주 쓰는 쿼리 — 복사 빠른 시작</h2>
+      <p>아래를 <code>graph/read</code> 의 <code>cypher</code> 값에 넣고 <strong>조건값만 교체</strong>하세요.</p>
+      <figure class="code-body" data-lang="cypher"><figcaption class="code-bar"><span class="code-lang">cypher</span><button class="copy" type="button">복사</button></figcaption><pre><code>-- (1) 이 그래프에 어떤 노드가 얼마나 있나
+MATCH (n) RETURN labels(n)[0] AS label, count(n) AS cnt ORDER BY cnt DESC
+
+-- (2) 특정 사건의 관련 노드 (2-hop) — 'CASE-2024-001' 만 교체
+MATCH (c:vt_case {flnm:'CASE-2024-001'})-[r*1..2]-(n) RETURN c, r, n LIMIT 200
+
+-- (3) 특정 인물의 보유 자산 — '김민준' 만 교체
+MATCH (p:vt_psn {name:'김민준'})-[r]-&gt;(asset)
+WHERE type(r) IN ['has_account','owns_phone','used_ip']
+RETURN p, r, asset
+
+-- (4) 특정 계좌의 입출금 — 계좌번호만 교체
+MATCH (b:vt_bacnt {account_no:'1002-110-100001'})-[r]-(t:vt_transfer) RETURN b, r, t
+
+-- (5) 위협점수 80 이상 IP
+MATCH (ip:vt_ip) WHERE ip.threat_score &gt;= 80 RETURN ip ORDER BY ip.threat_score DESC LIMIT 100</code></pre></figure>
+
+      <h3>주요 노드 / 엣지 타입 (KICS 온톨로지)</h3>
+      <div class="tablewrap"><table>
+        <thead><tr><th>라벨</th><th>의미</th><th>라벨</th><th>의미</th></tr></thead>
+        <tbody>
+          <tr><td><code>vt_psn</code></td><td>인물</td><td><code>vt_bacnt</code></td><td>계좌</td></tr>
+          <tr><td><code>vt_telno</code></td><td>전화번호</td><td><code>vt_call</code></td><td>통화</td></tr>
+          <tr><td><code>vt_transfer</code></td><td>이체</td><td><code>vt_ip</code></td><td>IP</td></tr>
+          <tr><td><code>vt_site</code></td><td>URL/사이트</td><td><code>vt_case</code></td><td>사건</td></tr>
+        </tbody>
+      </table></div>
+      <p class="lead-note">주요 엣지: <code>has_account</code>(인물→계좌), <code>owns_phone</code>(인물→전화), <code>from_account</code>/<code>to_account</code>(이체), <code>caller</code>/<code>callee</code>(통화), <code>suspect_in</code>(인물→사건). 정확한 스키마는 <a href="#s1">§01</a> <code>graph/schema</code> 로 확인하세요.</p>
+    </section>
+
+    <!-- 5 ───────────────────────────────── -->
+    <section id="s5" class="section">
+      <span class="sec-num">05</span>
+      <h2>규칙·제약 (반드시 준수)</h2>
+
+      <h3>Read-only 강제</h3>
+      <p>데이터 변경·구조변경·프로시저 호출 계열은 모두 <strong style="color:var(--block)">403 차단</strong>됩니다.</p>
+      <h4>차단 키워드 (단어 단위)</h4>
+      <div class="kwrow">
+        <span class="kw kw-block">CREATE</span><span class="kw kw-block">MERGE</span><span class="kw kw-block">SET</span>
+        <span class="kw kw-block">DELETE</span><span class="kw kw-block">REMOVE</span><span class="kw kw-block">DETACH</span><span class="kw kw-block">DROP</span>
+      </div>
+      <p class="lead-note">graph/read 는 추가로 <code>CALL</code> · <code>INSERT</code> · <code>UPDATE</code> · <code>ALTER</code> · <code>TRUNCATE</code> 도 차단합니다.</p>
+      <h4>허용되는 절</h4>
+      <div class="kwrow">
+        <span class="kw kw-ok">MATCH</span><span class="kw kw-ok">WHERE</span><span class="kw kw-ok">WITH</span>
+        <span class="kw kw-ok">RETURN</span><span class="kw kw-ok">ORDER BY</span><span class="kw kw-ok">LIMIT</span>
+      </div>
+      <div class="note note-block">
+        <p class="note-lab">차단 주의</p>
+        <p>문자열 값 안에 위 키워드가 <strong>단독 단어</strong>로 들어가도 차단될 수 있습니다 (예: <code>'DROP'</code>).</p>
+      </div>
+
+      <h3>그 외 운영 규칙</h3>
+      <ul>
+        <li><strong>LIMIT</strong> — graph/read 는 미지정 시 자동 주입(기본 500, 최대 5000). 대량 조회는 조건을 좁혀 <strong>나눠</strong> 호출하세요.</li>
+        <li><strong>graph_path</strong> — 영문/숫자/<code>_</code> 만 허용. 권한 외 그래프는 차단(400/403). 사용 가능 목록은 <code>graph/list</code> 로 확인.</li>
+        <li><strong>Rate limit</strong> — 기관 tier별 분당 요청 수 제한(기본 100 req/min, 협의 조정). 초과 시 429 → 잠시 후 재시도, 병렬 호출 자제.</li>
+      </ul>
+
+      <h3>보안·데이터 취급</h3>
+      <ul>
+        <li>API 키는 환경변수/시크릿 저장소에 보관, 코드·저장소에 <strong>하드코딩 금지</strong>. 유출 의심 시 즉시 운영팀에 키 회전 요청.</li>
+        <li><strong>HTTPS만</strong> 사용.</li>
+        <li>조회 결과에는 수사 관련 민감정보가 포함될 수 있습니다. 기관 내 <strong>개인정보·수사보안 규정</strong>에 따라 보관·파기하세요.</li>
+      </ul>
+    </section>
+
+    <!-- 6 ───────────────────────────────── -->
+    <section id="s6" class="section">
+      <span class="sec-num">06</span>
+      <h2>문제 해결 (에러 코드)</h2>
+      <div class="tablewrap"><table>
+        <thead><tr><th>HTTP</th><th>의미</th><th>조치</th></tr></thead>
+        <tbody>
+          <tr><td><span class="num">401</span></td><td>인증 헤더 누락/무효</td><td>엔드포인트에 맞는 <code>Authorization: Bearer</code> 또는 <code>X-API-Key</code> 확인</td></tr>
+          <tr><td><span class="num">403</span></td><td>권한 없음 / read-only 위반</td><td>쓰기 명령 제거, 키·graph_path 권한 확인</td></tr>
+          <tr><td><span class="num">400</span></td><td>잘못된 graph_path/파라미터</td><td><code>graph_path</code> 는 영문/숫자/<code>_</code> 만, <code>cypher</code> 필드 필수</td></tr>
+          <tr><td><span class="num">429</span></td><td>분당 한도 초과</td><td>다음 분에 재시도, 호출 빈도 축소</td></tr>
+          <tr><td><span class="num">500</span></td><td>쿼리 실행 오류</td><td>Cypher 문법/스키마 확인(<a href="#s1">§01</a>) 후에도 지속되면 운영팀 문의</td></tr>
+        </tbody>
+      </table></div>
+    </section>
+
+    <!-- 7 ───────────────────────────────── -->
+    <section id="s7" class="section">
+      <span class="sec-num">07</span>
+      <h2>Python 예시 — 가져오기 → 조회 end-to-end</h2>
+      <figure class="code-body" data-lang="python"><figcaption class="code-bar"><span class="code-lang">python</span><button class="copy" type="button">복사</button></figcaption><pre><code>import os, requests
+
+HOST = os.environ["CCOP_HOST"]          # 예: https://&lt;발급-호스트&gt;
+KEY  = os.environ["CCOP_API_KEY"]
+BEARER = {"Authorization": f"Bearer {KEY}", "Content-Type": "application/json"}
+XKEY   = {"X-API-Key": KEY,               "Content-Type": "application/json"}
+
+# ── ① 쿼리 가져오기: 자연어 → Cypher (방법 B) ──────────────
+r = requests.post(f"{HOST}/api/v1/text-to-cypher",
+        json={"question": "피의자2가 보유한 계좌",
+              "schema": {"graph_path": "tccop_graph_v6"}},
+        headers=BEARER, timeout=130)
+cypher = r.json()["cypher"]
+print("가져온 Cypher:", cypher)
+
+# ── ②(선택) 검증 (방법 C) ─────────────────────────────────
+v = requests.post(f"{HOST}/api/v1/validate-cypher",
+        json={"cypher": cypher}, headers=BEARER, timeout=30).json()
+assert v["is_safe"], f"안전하지 않은 쿼리: {v['warnings']}"
+
+# ── ③ 조회 실행: graph/read (방법 ㉠) ─────────────────────
+res = requests.post(f"{HOST}/api/v1/graph/read",
+        json={"graph_path": "tccop_graph_v6", "cypher": cypher, "limit": 500},
+        headers=XKEY, timeout=60).json()
+
+print("컬럼:", res["columns"], "| 행 수:", res["row_count"])
+for row in res["rows"][:5]:
+    print(row)</code></pre></figure>
+      <p class="lead-note">CCOP Python SDK(<code>sdk/</code>)도 제공됩니다 — <code>text_to_cypher()</code>, <code>execute_cypher()</code>, <code>list_graphs()</code> 등. 운영팀에 문의하세요.</p>
+    </section>
+
+    <!-- 8 ───────────────────────────────── -->
+    <section id="s8" class="section">
+      <span class="sec-num">08</span>
+      <h2>부록</h2>
+
+      <h3>A. 엔드포인트 요약</h3>
+      <div class="tablewrap"><table>
+        <thead><tr><th>용도</th><th>메서드 · 경로</th><th>인증</th><th>비고</th></tr></thead>
+        <tbody>
+          <tr><td>헬스체크</td><td><span class="chip c-get">GET</span> <code>/api/v1/health</code></td><td>—</td><td>연결 확인</td></tr>
+          <tr><td>그래프 목록</td><td><span class="chip c-get">GET</span> <code>/api/v1/graph/list</code></td><td><span class="chip c-bear">Bearer</span></td><td>사용 가능 graph_path</td></tr>
+          <tr><td>스키마 요약</td><td><span class="chip c-get">GET</span> <code>/api/v1/graph/schema</code></td><td><span class="chip c-xkey">X-API-Key</span></td><td>라벨/엣지 카운트</td></tr>
+          <tr><td><strong>쿼리 가져오기</strong> (자연어)</td><td><span class="chip c-post">POST</span> <code>/api/v1/text-to-cypher</code></td><td><span class="chip c-bear">Bearer</span></td><td>응답 <code>cypher</code> 회수</td></tr>
+          <tr><td><strong>쿼리 검증</strong></td><td><span class="chip c-post">POST</span> <code>/api/v1/validate-cypher</code></td><td><span class="chip c-bear">Bearer</span></td><td>실행 안 함</td></tr>
+          <tr><td><strong>조회 실행</strong> (권장)</td><td><span class="chip c-post">POST</span> <code>/api/v1/graph/read</code></td><td><span class="chip c-xkey">X-API-Key</span></td><td>read-only, LIMIT 자동</td></tr>
+          <tr><td><strong>조회 실행</strong></td><td><span class="chip c-post">POST</span> <code>/api/v1/graph-query</code></td><td><span class="chip c-bear">Bearer</span></td><td>tier 결과 상한</td></tr>
+        </tbody>
+      </table></div>
+
+      <h3>B. 함께 보면 좋은 자료</h3>
+      <ul>
+        <li><code>exports/queries/CCOP_GRAPH_QUERIES.md</code> — <strong>표준 Cypher 쿼리 카탈로그</strong> (방법 A의 원본, 8개 카테고리)</li>
+        <li><code>docs/EXTERNAL_GRAPH_QUERY_GUIDE.md</code> — 외부 기관용 <strong>전체</strong> 그래프 조회 가이드 (네트워크 투영·덤프 등 포함)</li>
+      </ul>
+
+      <h3>C. 문의</h3>
+      <p>기술/쿼리 지원, API 키 발급·권한·그래프 추가: <strong>CCOP 운영팀</strong> (연락처는 발급 시 안내)</p>
+    </section>
+  </main>
+</div>
+
+<footer>
+  <div class="foot-in">CCOP · Cybercrime Investigation Graph Platform — 외부 기관용 read-only API 안내서 · 2026-06-26</div>
+</footer>
+
+<script>
+(function(){
+  "use strict";
+
+  // ── 코드블록: 복사 버튼 + 주석 디밍 ──────────────
+  var blocks = document.querySelectorAll(".code-body");
+  blocks.forEach(function(fig){
+    var code = fig.querySelector("code");
+    var btn  = fig.querySelector(".copy");
+    var raw  = code.textContent;
+
+    // 주석 라인 디밍 (--, #, //)
+    var lines = raw.split("\n");
+    code.textContent = "";
+    lines.forEach(function(ln, i){
+      if(i) code.appendChild(document.createTextNode("\n"));
+      if(/^\s*(--|#|\/\/)/.test(ln)){
+        var s = document.createElement("span");
+        s.className = "cm";
+        s.textContent = ln;
+        code.appendChild(s);
+      } else {
+        code.appendChild(document.createTextNode(ln));
+      }
+    });
+
+    if(btn){
+      btn.addEventListener("click", function(){
+        navigator.clipboard.writeText(raw).then(function(){
+          btn.textContent = "복사됨";
+          btn.classList.add("done");
+          setTimeout(function(){ btn.textContent = "복사"; btn.classList.remove("done"); }, 1500);
+        }).catch(function(){
+          btn.textContent = "실패";
+          setTimeout(function(){ btn.textContent = "복사"; }, 1500);
+        });
+      });
+    }
+  });
+
+  // ── TOC 활성 섹션 하이라이트 ────────────────────
+  var links = {};
+  document.querySelectorAll("#toc a").forEach(function(a){
+    links[a.getAttribute("href").slice(1)] = a;
+  });
+  var sections = document.querySelectorAll("section[id]");
+  if("IntersectionObserver" in window){
+    var obs = new IntersectionObserver(function(entries){
+      entries.forEach(function(en){
+        if(en.isIntersecting){
+          Object.keys(links).forEach(function(k){ links[k].classList.remove("active"); });
+          var a = links[en.target.id];
+          if(a) a.classList.add("active");
+        }
+      });
+    }, { rootMargin: "-15% 0px -70% 0px", threshold: 0 });
+    sections.forEach(function(s){ obs.observe(s); });
+  }
+})();
+</script>
