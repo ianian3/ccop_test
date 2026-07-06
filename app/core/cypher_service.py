@@ -137,6 +137,7 @@ class CypherService:
 
             # 그래프 경로 설정
             safe_set_graph_path(cur, graph_path)
+            logger.info("[QUERY] graph=%s | %s", graph_path, " ".join(str(query).split()))
             cur.execute(query)
 
             rows = cur.fetchall()

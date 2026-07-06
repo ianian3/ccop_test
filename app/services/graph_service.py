@@ -13,6 +13,19 @@ from flask import current_app
 
 logger = logging.getLogger(__name__)
 
+import psycopg2.extensions
+
+
+class _QueryLoggingCursor(psycopg2.extensions.cursor):
+    """[시각화/그래프 조회 쿼리 로깅] 실행되는 모든 SQL·Cypher 를 INFO 레벨 [QUERY] 로 남긴다."""
+    def execute(self, query, vars=None):
+        try:
+            _q = self.mogrify(query, vars).decode("utf-8", "replace") if vars is not None else str(query)
+        except Exception:
+            _q = str(query)
+        logger.info("[QUERY] %s", " ".join(_q.split()))
+        return super().execute(query, vars)
+
 class GraphService:
 
     # KICS 온톨로지 엣지 방향 — v3.7 POLE 6레이어 기준
@@ -109,7 +122,7 @@ class GraphService:
                 port=current_app.config['DB_CONFIG']['port']
             )
             conn.autocommit = True
-            return conn, conn.cursor()
+            return conn, conn.cursor(cursor_factory=_QueryLoggingCursor)
         except Exception as e:
             logger.error(f"DB 접속 오류: {e}")
             return None, None
@@ -453,149 +466,81 @@ class GraphService:
 
     @staticmethod
     def search_nodes(keyword, graph_path):
-        """키워드로 노드 검색 (모든 라벨 타입) + 연결된 엣지 포함"""
+        """키워드로 노드 검색 (Cypher 전체 속성 CONTAINS) + 연결된 엣지 포함"""
         conn, cur = GraphService.get_db_connection()
         if not conn: return []
-        
+
+        elements = []
+        seen_nodes = set()
+        node_ids = []
+        # Cypher 문자열 리터럴 이스케이프
+        kw = (keyword or "").replace("\\", "\\\\").replace("'", "\\'")
         try:
-            # 1. 모든 vertex 라벨 테이블 찾기
-            cur.execute(f"""
-                SELECT table_name 
-                FROM information_schema.tables 
-                WHERE table_schema = '{graph_path}' 
-                  AND table_name LIKE 'vt_%'
-            """)
-            vertex_tables = [r[0] for r in cur.fetchall()]
-            
-            if not vertex_tables:
-                return []
-            
-            # 2. 각 테이블에서 노드 검색
-            elements = []
-            node_ids = set()  # 검색된 노드 ID 저장
-            
-            for table_name in vertex_tables:
-                try:
-                    query = f"""
-                    SELECT id, properties 
-                    FROM "{graph_path}"."{table_name}"
-                    WHERE properties::text LIKE '%{keyword}%'
-                    LIMIT 50
-                    """
-                    cur.execute(query)
-                    
-                    for r in cur.fetchall():
-                        node_id = str(r[0])
-                        props = r[1] if isinstance(r[1], dict) else {}
-                        
-                        node_ids.add(node_id)  # ID 저장
-                        
-                        # 테이블명으로부터 라벨 추출
-                        node_label = table_name
-                        
-                        elements.append({
-                            "group": "nodes", 
-                            "data": { 
-                                "id": node_id, 
-                                "label": node_label,
-                                "props": props 
-                            }
-                        })
-                except Exception as table_error:
-                    logger.info(f"Search error in {table_name}: {table_error}")
+            safe_set_graph_path(cur, graph_path)
+
+            # 1. 전체 속성에서 키워드 검색 (모든 라벨) — 기존 SQL "properties::text LIKE '%kw%'" 등가
+            cur.execute(
+                f"MATCH (n) WHERE properties(n)::text CONTAINS '{kw}' "
+                f"RETURN id(n), labels(n), properties(n) LIMIT 50"
+            )
+            for r in cur.fetchall():
+                nid = str(r[0])
+                if nid in seen_nodes:
                     continue
-            
-            # 3. 검색된 노드들 간의 엣지 찾기
+                seen_nodes.add(nid)
+                node_ids.append(nid)
+                labels = r[1]
+                props = GraphService.safe_props(r[2])
+                label = (labels[0] if labels else None) or GraphService.determine_node_label(props)
+                elements.append({
+                    "group": "nodes",
+                    "data": {"id": nid, "label": label, "props": props}
+                })
+
+            # 2. 검색된 노드가 포함된 엣지 + 상대 노드 (서브그래프 구성)
             if node_ids:
-                try:
-                    # 모든 엣지 테이블 찾기
-                    cur.execute(f"""
-                        SELECT table_name 
-                        FROM information_schema.tables 
-                        WHERE table_schema = '{graph_path}' 
-                          AND table_name NOT LIKE 'vt_%'
-                          AND table_name != 'ag_label'
-                          AND table_name != 'ag_vertex'
-                          AND table_name != 'ag_edge'
-                    """)
-                    edge_tables = [r[0] for r in cur.fetchall()]
-                    
-                    node_id_list = ','.join([f"'{nid}'" for nid in node_ids])
-                    
-                    for edge_table in edge_tables:
-                        try:
-                            edge_query = f"""
-                            SELECT e.id, e.start, e."end", e.properties,
-                                   vs.properties as src_props, vt.properties as tgt_props,
-                                   vs.tableoid::regclass as src_label, vt.tableoid::regclass as tgt_label
-                            FROM "{graph_path}"."{edge_table}" e
-                            LEFT JOIN "{graph_path}"."ag_vertex" vs ON e.start = vs.id
-                            LEFT JOIN "{graph_path}"."ag_vertex" vt ON e."end" = vt.id
-                            WHERE e.start IN ({node_id_list}) OR e."end" IN ({node_id_list})
-                            LIMIT 100
-                            """
-                            cur.execute(edge_query)
+                # ⚠️ AgensGraph 는 id() IN [list] 미지원(jsonb 오류) → id(a)='x' OR id(b)='x' 체인
+                cond = " OR ".join("id(a) = '%s' OR id(b) = '%s'" % (i, i) for i in node_ids)
+                cur.execute(
+                    f"MATCH (a)-[r]->(b) WHERE {cond} "
+                    f"RETURN id(r), type(r), properties(r), "
+                    f"id(a), labels(a), properties(a), id(b), labels(b), properties(b) LIMIT 100"
+                )
+                for r in cur.fetchall():
+                    edge_id = str(r[0])
+                    etype = r[1]
+                    edge_props = GraphService.safe_props(r[2])
+                    aid = str(r[3]); a_labels = r[4]; a_props = GraphService.safe_props(r[5])
+                    bid = str(r[6]); b_labels = r[7]; b_props = GraphService.safe_props(r[8])
 
-                            for edge_row in cur.fetchall():
-                                edge_id = str(edge_row[0])
-                                src_id = str(edge_row[1])
-                                tgt_id = str(edge_row[2])
-                                edge_props = edge_row[3] if isinstance(edge_row[3], dict) else {}
+                    # 엣지 양끝 노드 추가 (검색 안 된 상대 노드 포함, 중복 방지)
+                    for xid, xlabels, xprops in ((aid, a_labels, a_props), (bid, b_labels, b_props)):
+                        if xid not in seen_nodes:
+                            seen_nodes.add(xid)
+                            xlabel = (xlabels[0] if xlabels else None) or GraphService.determine_node_label(xprops)
+                            elements.append({
+                                "group": "nodes",
+                                "data": {"id": xid, "label": xlabel, "props": xprops}
+                            })
 
-                                # 엣지 양쪽 노드를 elements에 추가 (중복 방지)
-                                if src_id not in node_ids:
-                                    src_props = edge_row[4] if isinstance(edge_row[4], dict) else {}
-                                    # DB 실제 라벨 우선(tableoid), 미분류 시 속성 추론 폴백
-                                    src_label = GraphService._label_from_regclass(edge_row[6]) or GraphService.determine_node_label(src_props)
-                                    elements.append({
-                                        "group": "nodes",
-                                        "data": {"id": src_id, "label": src_label, "props": src_props}
-                                    })
-                                    node_ids.add(src_id)
+                    # 엣지 라벨 (generic ag_edge 는 속성에서 실제 관계 추출)
+                    edge_label = etype
+                    if etype == 'ag_edge':
+                        edge_label = (
+                            edge_props.get('semantic_relation') or
+                            edge_props.get('domain_meaning') or
+                            edge_props.get('edge_type') or
+                            edge_props.get('type') or
+                            'related_to'
+                        )
+                        if isinstance(edge_label, str):
+                            edge_label = edge_label.lower()
 
-                                if tgt_id not in node_ids:
-                                    tgt_props = edge_row[5] if isinstance(edge_row[5], dict) else {}
-                                    # DB 실제 라벨 우선(tableoid), 미분류 시 속성 추론 폴백
-                                    tgt_label = GraphService._label_from_regclass(edge_row[7]) or GraphService.determine_node_label(tgt_props)
-                                    elements.append({
-                                        "group": "nodes",
-                                        "data": {"id": tgt_id, "label": tgt_label, "props": tgt_props}
-                                    })
-                                    node_ids.add(tgt_id)
-                                
-                                # 엣지 추가 - 라벨 결정
-                                # ag_edge 테이블인 경우 properties에서 실제 관계 타입 추출
-                                edge_label = edge_table
-                                if edge_table == 'ag_edge':
-                                    # 속성에서 실제 관계 타입 찾기
-                                    edge_label = (
-                                        edge_props.get('semantic_relation') or 
-                                        edge_props.get('domain_meaning') or
-                                        edge_props.get('edge_type') or
-                                        edge_props.get('type') or
-                                        'related_to'  # 기본값
-                                    )
-                                    # 대문자를 소문자로 변환 (USED_ACCOUNT -> used_account)
-                                    if isinstance(edge_label, str):
-                                        edge_label = edge_label.lower()
-                                
-                                elements.append({
-                                    "group": "edges",
-                                    "data": {
-                                        "id": edge_id,
-                                        "source": src_id,
-                                        "target": tgt_id,
-                                        "label": edge_label,
-                                        "props": edge_props
-                                    }
-                                })
-                        except Exception as edge_error:
-                            logger.debug(f"Edge search error in {edge_table}: {edge_error}")
-                            continue
-                            
-                except Exception as e:
-                    logger.error(f"Edge retrieval error: {e}")
-            
+                    elements.append({
+                        "group": "edges",
+                        "data": {"id": edge_id, "source": aid, "target": bid, "label": edge_label, "props": edge_props}
+                    })
+
             return elements
         except Exception as e:
             logger.error(f"Search Error: {e}")
@@ -605,117 +550,75 @@ class GraphService:
 
     @staticmethod
     def expand_node(node_id, graph_path):
-        """노드 확장 (SQL 기반 엣지 조회 - 모든 엣지 테이블 동적 조회)"""
+        """노드 확장 (Cypher 기반 — outgoing/incoming 양방향 MATCH 조회)"""
         conn, cur = GraphService.get_db_connection()
         if not conn: return []
-        
+
         elements = []
+        added_edge_ids = set()
+        added_node_ids = set()
         try:
-            # 1. 엣지 테이블 목록 동적 조회 - 모든 엣지 테이블 포함
-            cur.execute(f"""
-                SELECT table_name 
-                FROM information_schema.tables 
-                WHERE table_schema = '{graph_path}' 
-                  AND table_name NOT IN ('ag_vertex', 'ag_label', 'ag_edge')
-                  AND table_name NOT LIKE 'vt_%'
-            """)
-            edge_tables = [r[0] for r in cur.fetchall()]
-            
-            # 기본 엣지 테이블 추가 (4-Layer 모델 기반)
-            core_edge_tables = [
-                'involves', 'owns', 'has_account', 'transferred_to', 
-                'contacted', 'communicated_with', 'accessed', 'linked_to',
-                'performed', 'from_account', 'to_account', 'caller', 'callee',
-                'uses_persona', 'participated_in', 'event_involved', 'supported_by'
+            safe_set_graph_path(cur, graph_path)
+
+            # 통일 RETURN 컬럼: id(r), type(r), properties(r), source_id, target_id, 이웃id, 이웃labels, 이웃props
+            queries = [
+                # outgoing: (현재노드 n)-[r]->(이웃 m)
+                f"MATCH (n)-[r]->(m) WHERE id(n) = '{node_id}' "
+                f"RETURN id(r), type(r), properties(r), id(n), id(m), id(m), labels(m), properties(m) LIMIT 200",
+                # incoming: (이웃 m)-[r]->(현재노드 n)
+                f"MATCH (n)<-[r]-(m) WHERE id(n) = '{node_id}' "
+                f"RETURN id(r), type(r), properties(r), id(m), id(n), id(m), labels(m), properties(m) LIMIT 200",
             ]
-            for t in core_edge_tables:
-                if t not in edge_tables:
-                    edge_tables.append(t)
-            
-            logger.debug(f"[expand_node] 조회할 엣지 테이블: {edge_tables}")
-            
-            # 중복 엣지 방지를 위한 ID 추적
-            added_edge_ids = set()
-            
-            # 2. 각 엣지 테이블에서 연결된 엣지 조회
-            for edge_table in edge_tables:
-                try:
-                    # AgensGraph graphid 형식 처리
-                    edge_query = f"""
-                    SELECT e.id, e.start, e."end", e.properties,
-                           vs.id as src_id, vs.properties as src_props,
-                           vt.id as tgt_id, vt.properties as tgt_props,
-                           vs.tableoid::regclass as src_label, vt.tableoid::regclass as tgt_label
-                    FROM "{graph_path}"."{edge_table}" e
-                    LEFT JOIN "{graph_path}"."ag_vertex" vs ON e.start = vs.id
-                    LEFT JOIN "{graph_path}"."ag_vertex" vt ON e."end" = vt.id
-                    WHERE e.start::text = '{node_id}' OR e."end"::text = '{node_id}'
-                    LIMIT 50
-                    """
-                    
-                    cur.execute(edge_query)
-                    for r in cur.fetchall():
-                        edge_id = str(r[0])
-                        
-                        # 이미 추가된 엣지면 건너뜀
-                        if edge_id in added_edge_ids:
-                            continue
-                            
-                        start_id = str(r[1])
-                        end_id = str(r[2])
-                        edge_props = r[3] if isinstance(r[3], dict) else {}
-                        
-                        src_id = str(r[4]) if r[4] else start_id
-                        src_props = r[5] if isinstance(r[5], dict) else {}
-                        
-                        tgt_id = str(r[6]) if r[6] else end_id
-                        tgt_props = r[7] if isinstance(r[7], dict) else {}
-                        
-                        # 소스 노드 추가 (현재 노드가 아닌 경우) — DB 실제 라벨 우선
-                        if src_id != node_id:
-                            src_label = GraphService._label_from_regclass(r[8]) or GraphService.determine_node_label(src_props)
-                            elements.append({
-                                "group": "nodes",
-                                "data": {"id": src_id, "label": src_label, "props": src_props}
-                            })
 
-                        # 타겟 노드 추가 (현재 노드가 아닌 경우) — DB 실제 라벨 우선
-                        if tgt_id != node_id:
-                            tgt_label = GraphService._label_from_regclass(r[9]) or GraphService.determine_node_label(tgt_props)
-                            elements.append({
-                                "group": "nodes",
-                                "data": {"id": tgt_id, "label": tgt_label, "props": tgt_props}
-                            })
-                        
-                        # 엣지 추가 - 라벨 결정 로직 적용
-                        edge_label = edge_table
-                        if edge_table == 'ag_edge':
-                            edge_label = (
-                                edge_props.get('semantic_relation') or 
-                                edge_props.get('domain_meaning') or
-                                edge_props.get('edge_type') or
-                                edge_props.get('type') or
-                                'related_to'
-                            )
-                            if isinstance(edge_label, str):
-                                edge_label = edge_label.lower()
+            for q in queries:
+                cur.execute(q)
+                for r in cur.fetchall():
+                    edge_id = str(r[0])
+                    if edge_id in added_edge_ids:
+                        continue
+                    added_edge_ids.add(edge_id)
 
+                    etype = r[1]
+                    edge_props = GraphService.safe_props(r[2])
+                    source_id = str(r[3])
+                    target_id = str(r[4])
+                    nbr_id = str(r[5])
+                    nbr_labels = r[6]
+                    nbr_props = GraphService.safe_props(r[7])
+
+                    # 이웃 노드 추가 (중복 방지) — Cypher labels() 우선, 미분류 시 속성 추론
+                    if nbr_id not in added_node_ids:
+                        added_node_ids.add(nbr_id)
+                        nbr_label = (nbr_labels[0] if nbr_labels else None) or GraphService.determine_node_label(nbr_props)
                         elements.append({
-                            "group": "edges",
-                            "data": {
-                                "id": edge_id,
-                                "source": start_id,
-                                "target": end_id,
-                                "label": edge_label,
-                                "props": edge_props
-                            }
+                            "group": "nodes",
+                            "data": {"id": nbr_id, "label": nbr_label, "props": nbr_props}
                         })
-                        added_edge_ids.add(edge_id)
-                
-                except Exception as table_error:
-                    # 테이블이 없는 경우는 무시 (동적으로 추가된 테이블 목록이므로)
-                    continue
-            
+
+                    # 엣지 라벨 결정 (generic ag_edge 는 속성에서 실제 관계 추출)
+                    edge_label = etype
+                    if etype == 'ag_edge':
+                        edge_label = (
+                            edge_props.get('semantic_relation') or
+                            edge_props.get('domain_meaning') or
+                            edge_props.get('edge_type') or
+                            edge_props.get('type') or
+                            'related_to'
+                        )
+                        if isinstance(edge_label, str):
+                            edge_label = edge_label.lower()
+
+                    elements.append({
+                        "group": "edges",
+                        "data": {
+                            "id": edge_id,
+                            "source": source_id,
+                            "target": target_id,
+                            "label": edge_label,
+                            "props": edge_props
+                        }
+                    })
+
             return elements
         except Exception as e:
             logger.error(f"Expand Error: {e}")
