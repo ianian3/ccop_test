@@ -24,18 +24,9 @@ _DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file_
 _API_KEYS_FILE = os.path.join(_DATA_DIR, 'api_keys.json')
 _PLAINTEXT_KEYS_FILE = os.path.join(_DATA_DIR, 'api_keys_plaintext.json')
 
-# 기본 데모 키 (초기 시드 데이터)
-_DEFAULT_STORE = {
-    # demo-key-12345 의 해시
-    "367fe8933ad8bba8f7ff02c047bcb5c00a4fff3ad6e82fef2bf4ee0c850d7c36": {
-        "partner_name": "demo_partner",
-        "tier": "free",
-        "rate_limit": 1000,
-        "allowed_endpoints": ["text-to-cypher", "graph-query", "usage"],
-        "created_at": "2026-01-15T00:00:00Z",
-        "is_active": True
-    }
-}
+# 초기 시드 데이터 — 비워 둠(보안): 알려진 데모 키를 자동 생성하지 않는다.
+# 초기 키는 배포 시 /admin 대시보드 또는 generate_api_key.py 로 수동 발급할 것.
+_DEFAULT_STORE = {}
 
 
 def _ensure_data_dir():
@@ -84,10 +75,10 @@ def load_api_keys():
         API_KEYS_STORE.update(loaded)
         logger.info(f"API 키 {len(loaded)}개 로드 완료 ({_API_KEYS_FILE})")
     else:
-        # 첫 실행: 기본 데이터로 초기화 + 파일 생성
+        # 첫 실행: 빈 저장소로 초기화 + 파일 생성 (데모 키 자동 시드 없음)
         API_KEYS_STORE.update(_DEFAULT_STORE)
         save_api_keys()
-        logger.info("API 키 초기 데이터 생성 완료")
+        logger.info("API 키 저장소 초기화 완료 (등록된 키 없음 — 수동 발급 필요)")
 
 
 def save_api_keys():

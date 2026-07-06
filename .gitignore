@@ -84,6 +84,7 @@ results/*.json
 # Secrets (절대 커밋 금지)
 # ─────────────────────────────────────────
 data/api_keys.json
+data/api_keys_plaintext.json
 deploy/.env.cslee
 *.pem
 *.key

@@ -12,7 +12,7 @@ AgensGraph 기반 사기 사건 분석 및 시각화 플랫폼입니다. CSV 데
 
 ### 2. **AI 지원 쿼리**
 - 🤖 **자연어 쿼리**: "전화번호 010-1234-5678과 연결된 모든 계좌 찾아줘"
-- 📊 **RAG 기반 분석**: GraphRAG를 통한 심층 보고서 생성
+- 📊 **그래프 패턴 분석**: 사이버 범죄 패턴 매칭 및 보고서 생성
 - 💬 **대화형 인터페이스**: OpenAI GPT 기반 쿼리 이해 및 분석
 
 ### 3. **데이터 ETL**
@@ -35,20 +35,20 @@ coop_v1.0/
 │   ├── routes_admin.py          # 관리자 라우트
 │   ├── database.py              # DB 연결 관리
 │   ├── core/
-│   │   └── cypher_service.py    # Apache AGE Cypher 실행기
+│   │   └── cypher_service.py    # Cypher 실행 헬퍼 (AgensGraph; 현재 미사용)
 │   ├── middleware/
 │   │   └── api_auth.py          # API 키 인증 미들웨어
 │   ├── models/
 │   │   └── api_key.py           # API 키 관리 모델
 │   ├── services/
-│   │   ├── ai_service.py        # OpenAI GPT 통합
+│   │   ├── ai_service.py        # LLM 연동 (OpenAI + sLLM 폴백)
+│   │   ├── langgraph_agent.py   # LangGraph Text2Cypher 에이전트
 │   │   ├── graph_service.py     # 그래프 검색/확장/경로
 │   │   ├── etl_service.py       # CSV 데이터 ETL
 │   │   ├── ontology_service.py  # KICS 기반 4-Layer 온톨로지
 │   │   ├── pattern_library.py   # 5대 사이버 범죄 패턴
 │   │   ├── pattern_analyzer.py  # 범죄 패턴 분석 엔진
 │   │   ├── evidence_analyzer.py # 증거 완성도 분석
-│   │   ├── legal_rag_service.py # 법률 RAG (ChromaDB)
 │   │   ├── schema_mapper.py     # LLM 스키마 자동 매핑
 │   │   ├── relationship_inferencer.py # 관계 추론 서비스
 │   │   ├── graph_context_extractor.py # 그래프 맥락 추출

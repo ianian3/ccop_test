@@ -52,3 +52,20 @@ jobs:
           app = create_app()
           print('✅ Flask 앱 생성 성공')
           " || echo "⚠️ DB 없이 앱 시작 실패 (정상 — DB 연결 필요)"
+
+      - name: 오프라인 단위 테스트 (DB/LLM 불필요, 실패 시 CI 차단)
+        env:
+          FLASK_ENV: "testing"
+          DB_HOST: "localhost"
+          DB_PORT: "5432"
+          DB_NAME: "test"
+          DB_USER: "test"
+          DB_PASSWORD: "test"
+          OPENAI_API_KEY: "sk-test"
+        run: |
+          pytest -q \
+            tests/test_security.py \
+            tests/test_api_persistence.py \
+            tests/test_ontology_transform_viz.py \
+            tests/test_t2c_v37_helpers.py \
+            tests/test_etl_v40_meta.py

@@ -260,7 +260,8 @@ class RdbToGraphService:
                             props = f"{{flnm: '{flnm}', crime: '{cname}', crime_type: '{ctype}', date: '{cdate}', org: '{org}', type: '사건'}}"
                             cur.execute(f"MERGE (n:vt_case {{flnm: '{flnm}'}}) SET n = {props}")
                             stats["nodes"] += 1; stats["cases"] += 1
-                        except: pass
+                        except Exception as _e:
+                            logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
                     conn.commit()
                     logger.info(f"  ✓ vt_case (rdb_cases): {stats['cases']}건")
                 except Exception as e:
@@ -277,7 +278,8 @@ class RdbToGraphService:
                             props = f"{{flnm: '{flnm}', type: '사건'}}"
                             cur.execute(f"MERGE (n:vt_case {{flnm: '{flnm}'}}) ON CREATE SET n = {props}")
                             stats["nodes"] += 1; stats["cases"] += 1
-                        except: pass
+                        except Exception as _e:
+                            logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
                     conn.commit()
                     logger.info(f"  ✓ vt_case (tb_incdnt_prsn): {stats['cases']}건")
                 except Exception as e:
@@ -295,7 +297,8 @@ class RdbToGraphService:
                             props = f"{{id: '{pid}', user_id: '{uid}', name: '{name}', nickname: '{nick}', type: '피의자'}}"
                             cur.execute(f"MERGE (n:vt_psn {{id: '{pid}'}}) SET n = {props}")
                             stats["nodes"] += 1; stats["persons"] += 1
-                        except: pass
+                        except Exception as _e:
+                            logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
                     conn.commit()
                     logger.info(f"  ✓ vt_psn (rdb_suspects): {stats['persons']}건")
                 except Exception as e:
@@ -312,7 +315,8 @@ class RdbToGraphService:
                             props = f"{{id: '{pid}', name: '{pid}', type: '{role}'}}"
                             cur.execute(f"MERGE (n:vt_psn {{id: '{pid}'}}) ON CREATE SET n = {props}")
                             stats["nodes"] += 1; stats["persons"] += 1
-                        except: pass
+                        except Exception as _e:
+                            logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
                     conn.commit()
                     logger.info(f"  ✓ vt_psn (tb_incdnt_prsn): {stats['persons']}건")
                 except Exception as e:
@@ -330,7 +334,8 @@ class RdbToGraphService:
                             props = f"{{actno: '{actno}', bank: '{bname}', holder: '{holder}', type: '계좌'}}"
                             cur.execute(f"MERGE (n:vt_bacnt {{actno: '{actno}'}}) SET n = {props}")
                             stats["nodes"] += 1; stats["accounts"] += 1
-                        except: pass
+                        except Exception as _e:
+                            logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
                     conn.commit()
                     logger.info(f"  ✓ vt_bacnt (rdb_accounts): {stats['accounts']}건")
                 except Exception as e:
@@ -348,7 +353,8 @@ class RdbToGraphService:
                             props = f"{{telno: '{telno}', type: '전화번호'}}"
                             cur.execute(f"MERGE (n:vt_telno {{telno: '{telno}'}}) SET n = {props}")
                             stats["nodes"] += 1; stats["phones"] += 1
-                        except: pass
+                        except Exception as _e:
+                            logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
                     conn.commit()
                     logger.info(f"  ✓ vt_telno (rdb_calls): {stats['phones']}건")
                 except Exception as e:
@@ -365,7 +371,8 @@ class RdbToGraphService:
                             props = f"{{id: '{tid}', amount: '{amt}', date: '{dt}', sender: '{snd}', receiver: '{rcv}', type: '이체'}}"
                             cur.execute(f"MERGE (n:vt_transfer {{id: '{tid}'}}) SET n = {props}")
                             stats["nodes"] += 1; stats["transfers"] += 1
-                        except: pass
+                        except Exception as _e:
+                            logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
                     conn.commit()
                     logger.info(f"  ✓ vt_transfer (rdb_transfers): {stats['transfers']}건")
                 except Exception as e:
@@ -382,7 +389,8 @@ class RdbToGraphService:
                             props = f"{{id: '{cid}', duration: '{dur}', date: '{dt}', caller: '{caller}', callee: '{callee}', type: '통화'}}"
                             cur.execute(f"MERGE (n:vt_call {{id: '{cid}'}}) SET n = {props}")
                             stats["nodes"] += 1; stats["calls"] += 1
-                        except: pass
+                        except Exception as _e:
+                            logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
                     conn.commit()
                     logger.info(f"  ✓ vt_call (rdb_calls): {stats['calls']}건")
                 except Exception as e:
@@ -403,7 +411,8 @@ class RdbToGraphService:
                                 MERGE (p)-[:{edge_type} {{role: '{role}'}}]->(c)
                             """)
                             stats["edges"] += 1; stats["relations"] += 1
-                        except: pass
+                        except Exception as _e:
+                            logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
                     conn.commit()
                     logger.info(f"  ✓ 역할 엣지 (tb_incdnt_prsn): {stats['relations']}건")
                 except Exception as e:
@@ -426,7 +435,8 @@ class RdbToGraphService:
                                 MERGE (p)-[:has_account]->(a)
                             """)
                             stats["edges"] += 1
-                        except: pass
+                        except Exception as _e:
+                            logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
                     conn.commit()
                     logger.info(f"  ✓ has_account 엣지: {stats['edges']}건")
                 except Exception as e:
@@ -453,7 +463,8 @@ class RdbToGraphService:
                     props = f"{{flnm: '{flnm}', crime: '{crime}', date: '{dt}', type: '사건'}}"
                     cur.execute(f"MERGE (n:vt_case {{flnm: '{flnm}'}}) SET n = {props}")
                     stats["nodes"] += 1; stats["cases"] += 1
-                except: pass
+                except Exception as _e:
+                    logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
             conn.commit()
 
             # 3-2. Person (TB_PRSN)
@@ -465,7 +476,8 @@ class RdbToGraphService:
                     props = f"{{id: '{pid}', name: '{name}', nickname: '{nick}', type: '인물'}}"
                     cur.execute(f"MERGE (n:vt_psn {{id: '{pid}'}}) SET n = {props}")
                     stats["nodes"] += 1; stats["persons"] += 1
-                except: pass
+                except Exception as _e:
+                    logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
             conn.commit()
 
             # 3-3. Account (TB_FIN_BACNT) — ATM/현금인출은 vt_atm으로 분류
@@ -493,7 +505,8 @@ class RdbToGraphService:
                                  f"bank_name: '{bname}', type: '계좌'}}")
                         cur.execute(f"MERGE (n:vt_bacnt {{account_no: '{actno}'}}) SET n = {props}")
                     stats["nodes"] += 1; stats["accounts"] += 1
-                except: pass
+                except Exception as _e:
+                    logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
             conn.commit()
 
             # 3-4. Phone (TB_TELNO_MST) — 통신사 코드 정규화 포함
@@ -515,7 +528,8 @@ class RdbToGraphService:
                              f"carrier_name: '{carrier_nm}', type: '전화번호'}}")
                     cur.execute(f"MERGE (n:vt_telno {{telno: '{telno}'}}) SET n = {props}")
                     stats["nodes"] += 1; stats["phones"] += 1
-                except: pass
+                except Exception as _e:
+                    logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
             conn.commit()
 
             # 3-5. IP + 접속이벤트 (TB_SYS_LGN_EVT) — test_v40 미존재시 skip
@@ -546,7 +560,8 @@ class RdbToGraphService:
                     # accessed_from: vt_ip → vt_access
                     cur.execute(f"MATCH (i:vt_ip {{ip_addr: '{ip}'}}), (a:vt_access {{access_id: 'lgn-{lgn_sn}'}}) MERGE (i)-[:accessed_from]->(a)")
                     stats["edges"] += 1
-                except: pass
+                except Exception as _e:
+                    logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
             conn.commit()
 
             logger.info(f"\n🔗 Phase 2: V2 액션/이벤트 및 엣지 변환")
@@ -578,7 +593,8 @@ class RdbToGraphService:
                         else:
                             cur.execute(f"MATCH (n:vt_transfer {{event_id: '{eid}'}}), (a:vt_bacnt {{account_no: '{receiver}'}}) MERGE (n)-[r:to_account]->(a) SET r.evid_grade = 'A', r.src_tier = 1")
                         stats["edges"] += 1
-                except: pass
+                except Exception as _e:
+                    logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
             conn.commit()
 
             # 4-2. 통화 (TB_TELNO_CALL_DTL)
@@ -597,7 +613,8 @@ class RdbToGraphService:
                     if callee:
                         cur.execute(f"MATCH (n:vt_call {{event_id: '{eid}'}}), (p:vt_telno {{telno: '{callee}'}}) MERGE (n)-[r:callee]->(p) SET r.evid_grade = 'A', r.src_tier = 1")
                         stats["edges"] += 1
-                except: pass
+                except Exception as _e:
+                    logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
             conn.commit()
 
             # 4-3. 사기 신고 (TB_FRD_VCTM_RPT) — test_v40 미존재시 skip
@@ -621,7 +638,8 @@ class RdbToGraphService:
                     if telno:
                         cur.execute(f"MATCH (c:vt_case {{flnm: '{case_no}'}}), (t:vt_telno {{telno: '{telno}'}}) MERGE (c)-[:eg_used_phone]->(t)")
                         stats["edges"] += 1
-                except: pass
+                except Exception as _e:
+                    logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
             conn.commit()
 
             # 4-4. 인물과 계좌/전화 소유관계 추론 (Person <-> Evidence)
@@ -648,7 +666,8 @@ class RdbToGraphService:
                     if telno:
                         cur.execute(f"MATCH (p:vt_psn {{id: '{pid}'}}), (t:vt_telno {{telno: '{telno}'}}) MERGE (p)-[r:owns_phone]->(t) SET r.evid_grade = 'B', r.src_tier = 1")
                         stats["edges"] += 1
-                except: pass
+                except Exception as _e:
+                    logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
             conn.commit()
 
             # ─── P1 확장: Phase 3 ───────────────────────────────
@@ -668,7 +687,8 @@ class RdbToGraphService:
                     props = f"{{org_id: '{oid}', org_name: '{oname}', org_type: '{otype}', type: '조직'}}"
                     cur.execute(f"MERGE (n:vt_org {{org_id: '{oid}'}}) SET n = {props}")
                     stats["nodes"] += 1
-                except: pass
+                except Exception as _e:
+                    logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
             conn.commit()
 
             # 5-2. SMS 메시지 (TB_TELNO_SMS_MSG) — test_v40 미존재시 skip
@@ -693,7 +713,8 @@ class RdbToGraphService:
                     if receiver:
                         cur.execute(f"MATCH (n:vt_msg {{event_id: '{eid}'}}), (p:vt_telno {{telno: '{receiver}'}}) MERGE (n)-[r:received_msg]->(p)")
                         stats["edges"] += 1
-                except: pass
+                except Exception as _e:
+                    logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
             conn.commit()
 
             # 5-3. involves 엣지 (vt_case → vt_psn) — 사건·인물 직접 연결
@@ -714,7 +735,8 @@ class RdbToGraphService:
                             role_edge = 'suspect_in' if role == 'SUSPECT' else 'victim_in' if role == 'VICTIM' else 'witness_in' if role == 'WITNESS' else 'involves'
                             cur.execute(f"MATCH (c:vt_case {{flnm: '{case_no}'}}), (p:vt_psn {{id: '{pid}'}}) MERGE (p)-[r:{role_edge}]->(c) SET r.evid_grade = 'A', r.src_tier = 1")
                             stats["edges"] += 1
-                    except: pass
+                    except Exception as _e:
+                        logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
                 conn.commit()
             except:
                 conn.rollback()  # TB_INCDNT_PRSN 없으면 무시
@@ -732,7 +754,8 @@ class RdbToGraphService:
                     if telno and pid:
                         cur.execute(f"MATCH (p:vt_psn {{id: '{pid}'}}), (t:vt_telno {{telno: '{telno}'}}) MERGE (p)-[r:owns_phone]->(t) SET r.evid_grade = 'A', r.src_tier = 1")
                         stats["edges"] += 1; stats["relations"] += 1
-                except: pass
+                except Exception as _e:
+                    logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
             conn.commit()
 
             # 5-5. has_account 강화 (TB_FIN_BACNT.DPSTR_NM ↔ TB_PRSN.KORN_FLNM 조인)
@@ -749,7 +772,8 @@ class RdbToGraphService:
                     if actno and pid:
                         cur.execute(f"MATCH (p:vt_psn {{id: '{pid}'}}), (a:vt_bacnt {{account_no: '{actno}'}}) MERGE (p)-[r:has_account]->(a) SET r.evid_grade = 'B', r.src_tier = 1")
                         stats["edges"] += 1; stats["relations"] += 1
-                except: pass
+                except Exception as _e:
+                    logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
             conn.commit()
 
             # 5-6. used_ip + performed_by (TB_SYS_LGN_EVT.USER_ID ↔ TB_PRSN 조인)
@@ -775,7 +799,8 @@ class RdbToGraphService:
                     if lgn_sn and pid:
                         cur.execute(f"MATCH (p:vt_psn {{id: '{pid}'}}), (a:vt_access {{access_id: 'lgn-{lgn_sn}'}}) MERGE (p)-[:performed_by]->(a)")
                         stats["edges"] += 1
-                except: pass
+                except Exception as _e:
+                    logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
             conn.commit()
 
             # ─── P2 확장: Phase 4 ───────────────────────────────
@@ -799,7 +824,8 @@ class RdbToGraphService:
                     if owner:
                         cur.execute(f"MATCH (p:vt_psn {{name: '{owner}'}}), (v:vt_vhcl {{vhclno: '{vno}'}}) MERGE (p)-[:owns_vehicle]->(v)")
                         stats["edges"] += 1
-                except: pass
+                except Exception as _e:
+                    logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
             conn.commit()
 
             # 6-2. 기지국 위치 (TB_GEO_MBL_LOC_EVT) — test_v40 미존재시 skip
@@ -821,7 +847,8 @@ class RdbToGraphService:
                     if telno:
                         cur.execute(f"MATCH (t:vt_telno {{telno: '{telno}'}}), (m:vt_movement {{mov_id: 'cell-{eid}'}}) MERGE (t)-[:recorded_in]->(m)")
                         stats["edges"] += 1
-                except: pass
+                except Exception as _e:
+                    logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
             conn.commit()
 
             # 6-3. LPR 인식 (TB_VHCL_LPR_EVT) — test_v40 미존재시 skip
@@ -843,7 +870,8 @@ class RdbToGraphService:
                     if vno:
                         cur.execute(f"MATCH (v:vt_vhcl {{vhclno: '{vno}'}}), (m:vt_movement {{mov_id: 'lpr-{eid}'}}) MERGE (v)-[:recorded_in]->(m)")
                         stats["edges"] += 1
-                except: pass
+                except Exception as _e:
+                    logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
             conn.commit()
 
             # 6-4. 웹 도메인 (TB_WEB_DMN) — test_v40 미존재시 skip
@@ -860,7 +888,8 @@ class RdbToGraphService:
                     props = f"{{url_addr: '{dmn}', dmn_addr: '{dmn}', ip_addr: '{ip}'}}"
                     cur.execute(f"MERGE (n:vt_site {{url_addr: '{dmn}'}}) SET n = {props}")
                     stats["nodes"] += 1
-                except: pass
+                except Exception as _e:
+                    logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
             conn.commit()
 
             # 6-5. 디지털 파일 (TB_DGTL_FILE_INVNT) — test_v40 미존재시 skip
@@ -877,7 +906,8 @@ class RdbToGraphService:
                     props = f"{{file_id: '{fid}', filename: '{fname}', extension: '{fext}', hash: '{fhash}', type: '파일'}}"
                     cur.execute(f"MERGE (n:vt_file {{file_id: '{fid}'}}) SET n = {props}")
                     stats["nodes"] += 1
-                except: pass
+                except Exception as _e:
+                    logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
             conn.commit()
 
             # ─── Enhancement: Phase 5 — 자동 추론 엣지 ───────────────
@@ -914,7 +944,8 @@ class RdbToGraphService:
                     if case1 and case2:
                         cur.execute(f"MATCH (c1:vt_case {{flnm: '{case1}'}}), (c2:vt_case {{flnm: '{case2}'}}) MERGE (c1)-[:related_case {{confidence: '0.75', reason: 'shared_evidence'}}]->(c2)")
                         stats["edges"] += 1
-                except: pass
+                except Exception as _e:
+                    logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
             conn.commit()
 
             # 7-2. belongs_to: 계좌 → 기관 (test_v40 미존재시 skip)
@@ -936,7 +967,8 @@ class RdbToGraphService:
                     if actno and inst_id:
                         cur.execute(f"MATCH (a:vt_bacnt {{account_no: '{actno}'}}), (o:vt_org {{org_id: '{inst_id}'}}) MERGE (a)-[:belongs_to]->(o)")
                         stats["edges"] += 1
-                except: pass
+                except Exception as _e:
+                    logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
             conn.commit()
 
             # 7-3. resolves_to: Site → IP (test_v40 미존재시 skip)
@@ -957,7 +989,8 @@ class RdbToGraphService:
                     if ip and dmn:
                         cur.execute(f"MATCH (s:vt_site {{url_addr: '{dmn}'}}), (i:vt_ip {{ip_addr: '{ip}'}}) MERGE (s)-[:resolves_to]->(i)")
                         stats["edges"] += 1
-                except: pass
+                except Exception as _e:
+                    logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
             conn.commit()
 
             # ─── Phase 6: v3.0 신규 도메인 ───────────────────────────
@@ -976,7 +1009,8 @@ class RdbToGraphService:
                         props = f"{{src_id: '{sid}', src_name: '{sname}', src_type: '{stype}', reliability_tier: '{tier}', inst_cd: '{inst}', type: '출처'}}"
                         cur.execute(f"MERGE (n:vt_src {{src_id: '{sid}'}}) SET n = {props}")
                         stats["nodes"] += 1
-                    except: pass
+                    except Exception as _e:
+                        logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
                 conn.commit()
             except: conn.rollback()
 
@@ -1009,7 +1043,8 @@ class RdbToGraphService:
                         if src_id:
                             cur.execute(f"MATCH (p:vt_petition {{petition_id: '{pid}'}}), (s:vt_src {{src_id: '{src_id}'}}) MERGE (p)-[:sourced_from]->(s)")
                             stats["edges"] += 1
-                    except: pass
+                    except Exception as _e:
+                        logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
                 conn.commit()
             except: conn.rollback()
 
@@ -1031,7 +1066,8 @@ class RdbToGraphService:
                         if sus_tel:
                             cur.execute(f"MATCH (p:vt_petition {{raw_id: '{dclr}'}}), (t:vt_telno {{telno: '{sus_tel}'}}) MERGE (p)-[:eg_used_phone]->(t)")
                             stats["edges"] += 1
-                    except: pass
+                    except Exception as _e:
+                        logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
                 conn.commit()
             except: conn.rollback()
 
@@ -1057,7 +1093,8 @@ class RdbToGraphService:
                                 n.blacklisted = '{bl}', n.country = '{country}',
                                 n.isp = '{isp}', n.osint_last_seen = '{seen}'
                         """)
-                    except: pass
+                    except Exception as _e:
+                        logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
                 conn.commit()
             except: conn.rollback()
 
@@ -1082,7 +1119,8 @@ class RdbToGraphService:
                                 n.blacklisted = '{bl}', n.registrar = '{reg}',
                                 n.domain_created = '{cr_dt}', n.domain_expires = '{exp_dt}'
                         """)
-                    except: pass
+                    except Exception as _e:
+                        logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
                 conn.commit()
             except: conn.rollback()
 
@@ -1107,7 +1145,8 @@ class RdbToGraphService:
                                 n.blacklisted = '{bl}', n.malware_family = '{family}',
                                 n.osint_first_seen = '{seen}'
                         """)
-                    except: pass
+                    except Exception as _e:
+                        logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
                 conn.commit()
             except: conn.rollback()
 
@@ -1130,7 +1169,8 @@ class RdbToGraphService:
                             SET n.spam_score = '{score}', n.spam_type = '{stype}',
                                 n.report_count = '{cnt}', n.blacklisted = '{bl}'
                         """)
-                    except: pass
+                    except Exception as _e:
+                        logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
                 conn.commit()
             except: conn.rollback()
 
@@ -1154,7 +1194,8 @@ class RdbToGraphService:
                             SET n.risk_score = '{score}', n.fraud_report_count = '{cnt}',
                                 n.blacklisted = '{bl}'
                         """)
-                    except: pass
+                    except Exception as _e:
+                        logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
                 conn.commit()
             except: conn.rollback()
 
@@ -1177,7 +1218,8 @@ class RdbToGraphService:
                             SET n.chain_type = '{chain}', n.risk_score = '{score}',
                                 n.sanctioned = '{sanction}', n.cluster_id = '{cluster}'
                         """)
-                    except: pass
+                    except Exception as _e:
+                        logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
                 conn.commit()
             except: conn.rollback()
 
@@ -1200,7 +1242,8 @@ class RdbToGraphService:
                             SET n.platform = '{plat}', n.risk_score = '{score}',
                                 n.fraud_report_count = '{cnt}', n.blacklisted = '{bl}'
                         """)
-                    except: pass
+                    except Exception as _e:
+                        logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
                 conn.commit()
             except: conn.rollback()
 
@@ -1231,7 +1274,8 @@ class RdbToGraphService:
                         if src_id:
                             cur.execute(f"MATCH (n:vt_id {{id_val: '{id_val}', platform: '{plat}'}}), (s:vt_src {{src_id: '{src_id}'}}) MERGE (n)-[:sourced_from]->(s)")
                             stats["edges"] += 1
-                    except: pass
+                    except Exception as _e:
+                        logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
                 conn.commit()
             except: conn.rollback()
 
@@ -1258,7 +1302,8 @@ class RdbToGraphService:
                         if src_id:
                             cur.execute(f"MATCH (n:vt_email {{email_addr: '{addr}'}}), (s:vt_src {{src_id: '{src_id}'}}) MERGE (n)-[:sourced_from]->(s)")
                             stats["edges"] += 1
-                    except: pass
+                    except Exception as _e:
+                        logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
                 conn.commit()
             except: conn.rollback()
 
@@ -1287,7 +1332,8 @@ class RdbToGraphService:
                         if src_id:
                             cur.execute(f"MATCH (n:vt_crypto {{wallet_addr: '{addr}', blockchain: '{chain}'}}), (s:vt_src {{src_id: '{src_id}'}}) MERGE (n)-[:sourced_from]->(s)")
                             stats["edges"] += 1
-                    except: pass
+                    except Exception as _e:
+                        logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
                 conn.commit()
             except: conn.rollback()
 
@@ -1316,7 +1362,8 @@ class RdbToGraphService:
                         # MAC → IP 연결: vt_dev → vt_access (접속 기기 추론)
                         if mac:
                             cur.execute(f"MATCH (d:vt_dev {{device_id: '{dev_id}'}}), (a:vt_access) WHERE a.mac_addr = '{mac}' MERGE (d)-[:performed_by]->(a)")
-                    except: pass
+                    except Exception as _e:
+                        logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
                 conn.commit()
             except: conn.rollback()
 
@@ -1346,7 +1393,8 @@ class RdbToGraphService:
                         if loc_id:
                             cur.execute(f"MATCH (a:vt_atm {{atm_id: '{atm_no}'}}), (l:vt_loc {{loc_id: '{loc_id}'}}) MERGE (a)-[:occurred_at]->(l)")
                             stats["edges"] += 1
-                    except: pass
+                    except Exception as _e:
+                        logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
                 conn.commit()
             except: conn.rollback()
 
@@ -1374,7 +1422,8 @@ class RdbToGraphService:
                                  f"cctv_id: '{cctv}', type: '위치'}}")
                         cur.execute(f"MERGE (n:vt_loc {{loc_id: '{loc_id}'}}) SET n = {props}")
                         stats["nodes"] += 1
-                    except: pass
+                    except Exception as _e:
+                        logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
                 conn.commit()
             except: conn.rollback()
 
@@ -1403,7 +1452,8 @@ class RdbToGraphService:
                             MERGE (s)-[e:sameAs {{confidence: '{conf}', method: '{method}'}}]->(t)
                         """)
                         stats["edges"] += 1
-                    except: pass
+                    except Exception as _e:
+                        logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
                 conn.commit()
             except: conn.rollback()
 
@@ -1425,7 +1475,8 @@ class RdbToGraphService:
                                    rec_created: toString(now())}}]->(b)
                         """)
                         stats["edges"] += 1
-                    except: pass
+                    except Exception as _e:
+                        logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
                 conn.commit()
                 logger.info(f"  contradicts 엣지: {len(rows)}건")
             except: conn.rollback()
@@ -1450,7 +1501,8 @@ class RdbToGraphService:
                                    rec_created: toString(now())}}]->(b)
                         """)
                         stats["edges"] += 1
-                    except: pass
+                    except Exception as _e:
+                        logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
                 conn.commit()
                 logger.info(f"  clusters_with 엣지: {len(rows)}건")
             except: conn.rollback()
@@ -1524,7 +1576,8 @@ class RdbToGraphService:
                                             rec_created: toString(now())}}]->(imp)
                             """)
                             stats["edges"] += 1; imprsn_cnt += 1
-                    except: pass
+                    except Exception as _e:
+                        logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
                 conn.commit()
                 logger.info(f"  V3.3 사칭 ETL: vt_impersonation {len(rows)}개 노드, used_for/targets 엣지 {imprsn_cnt}건")
             except: conn.rollback()
@@ -1550,7 +1603,8 @@ class RdbToGraphService:
                             MERGE (p)-[e:uses_id {{evid_grade: 'B', src_tier: 2}}]->(d)
                         """)
                         stats["edges"] += 1
-                    except: pass
+                    except Exception as _e:
+                        logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
                 conn.commit()
                 logger.info(f"  ✓ uses_id 엣지 (인물→디지털ID): {len(rows)}건")
             except: conn.rollback()
@@ -1573,7 +1627,8 @@ class RdbToGraphService:
                             MERGE (p)-[r:uses_email {{evid_grade: 'B', src_tier: 2}}]->(e)
                         """)
                         stats["edges"] += 1
-                    except: pass
+                    except Exception as _e:
+                        logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
                 conn.commit()
                 logger.info(f"  ✓ uses_email 엣지 (인물→이메일): {len(rows)}건")
             except: conn.rollback()
@@ -1596,7 +1651,8 @@ class RdbToGraphService:
                             MERGE (p)-[r:owns_wallet {{evid_grade: 'B', src_tier: 2}}]->(w)
                         """)
                         stats["edges"] += 1
-                    except: pass
+                    except Exception as _e:
+                        logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
                 conn.commit()
                 logger.info(f"  ✓ owns_wallet 엣지 (인물→가상자산): {len(rows)}건")
             except: conn.rollback()
@@ -1619,7 +1675,8 @@ class RdbToGraphService:
                             MERGE (p)-[r:uses_device {{evid_grade: 'B', src_tier: 2}}]->(d)
                         """)
                         stats["edges"] += 1
-                    except: pass
+                    except Exception as _e:
+                        logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
                 conn.commit()
                 logger.info(f"  ✓ uses_device 엣지 (인물→기기): {len(rows)}건")
             except: conn.rollback()
@@ -1650,7 +1707,8 @@ class RdbToGraphService:
                             MERGE (c)-[r:{edge_type} {{evid_grade: 'A', src_tier: 1}}]->(e)
                         """)
                         stats["edges"] += 1
-                    except: pass
+                    except Exception as _e:
+                        logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
                 conn.commit()
                 logger.info(f"  ✓ Case→Evidence 직접 엣지 (TB_INCDNT_EVID): {len(rows)}건")
             except: conn.rollback()
@@ -2015,7 +2073,8 @@ class RdbToGraphService:
                     cur.execute(f"MATCH (s:vt_src {{src_id: 'src-kics-official'}}), (p:vt_psn {{id: '{pid}'}}) MERGE (p)-[:sourced_from {{src_tier: 1, rec_created: toString(datetime())}}]->(s)")
                     stats["edges"] += 1
                     prsn_ids.append(pid)
-                except: pass
+                except Exception as _e:
+                    logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
             conn.commit()
 
             # ─── 3. 관련 계좌 + sourced_from ──────────────────────
@@ -2045,7 +2104,8 @@ class RdbToGraphService:
                         stats["edges"] += 1
                         cur.execute(f"MATCH (p:vt_psn {{id: '{pid_s}'}}), (a:vt_bacnt {{account_no: '{actno}'}}) MERGE (p)-[r:has_account]->(a) SET r.evid_grade = 'B', r.src_tier = 1")
                         stats["edges"] += 1
-                    except: pass
+                    except Exception as _e:
+                        logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
 
             # ─── 4. 관련 전화번호 + sourced_from ──────────────────
                 cur.execute(f"""
@@ -2071,7 +2131,8 @@ class RdbToGraphService:
                         stats["edges"] += 1
                         cur.execute(f"MATCH (p:vt_psn {{id: '{pid_s}'}}), (t:vt_telno {{telno: '{telno}'}}) MERGE (p)-[r:owns_phone]->(t) SET r.evid_grade = 'B', r.src_tier = 1")
                         stats["edges"] += 1
-                    except: pass
+                    except Exception as _e:
+                        logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
 
             conn.commit()
             logger.info(f"✅ transfer_case({case_no}) 완료: {stats}")

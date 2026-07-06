@@ -25,12 +25,12 @@ _LOCKOUT_SECONDS = 300     # 잠금 시간 (5분)
 def _get_admin_password_hash():
     """
     환경변수 ADMIN_PASSWORD에서 관리자 비밀번호 해시를 생성.
-    설정되지 않으면 기본값 사용 + 경고 로그 출력.
+    미설정 시 None 반환 → 관리자 로그인을 비활성화(fail-closed).
     """
     password = os.getenv("ADMIN_PASSWORD")
     if not password:
-        logger.warning("⚠️  ADMIN_PASSWORD 환경변수가 설정되지 않았습니다. 기본 비밀번호가 사용됩니다. 프로덕션 환경에서는 반드시 설정하세요!")
-        password = "admin123"  # fallback (개발 환경 전용)
+        logger.error("ADMIN_PASSWORD 환경변수가 설정되지 않았습니다. 관리자 로그인이 비활성화됩니다. 배포 시 반드시 설정하세요.")
+        return None
     return hashlib.sha256(password.encode()).hexdigest()
 
 
@@ -77,8 +77,13 @@ def login():
         password = request.form.get('password', '')
         password_hash = hashlib.sha256(password.encode()).hexdigest()
 
+        expected_hash = _get_admin_password_hash()
+        if expected_hash is None:
+            logger.error("ADMIN_PASSWORD 미설정 상태에서 로그인 시도 — 거부")
+            return render_template('admin/login.html', error="관리자 인증이 구성되지 않았습니다. 서버 관리자에게 문의하세요.")
+
         # 타이밍 공격 방어를 위해 hmac.compare_digest 사용
-        if hmac.compare_digest(password_hash, _get_admin_password_hash()):
+        if hmac.compare_digest(password_hash, expected_hash):
             session['admin_logged_in'] = True
             session['login_time'] = datetime.now(timezone.utc).timestamp()
             session.permanent = True

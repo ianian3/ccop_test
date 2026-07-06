@@ -18,7 +18,7 @@ python-dotenv==1.0.0
 
 # LLM / Agentic
 openai==2.15.0
-langgraph
+langgraph==0.6.11
 
 # WSGI
 gunicorn==21.2.0
@@ -28,3 +28,6 @@ flask-cors==4.0.0
 
 # HTTP (health check)
 requests==2.31.0
+
+# System Monitoring — disk/mem 통계 (폐쇄망 VM 디스크 감시에 유용)
+psutil==5.9.8

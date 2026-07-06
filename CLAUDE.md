@@ -29,10 +29,10 @@ pytest tests/ --cov=app --cov-report=html
 ## 핵심 아키텍처
 
 - **Flask Factory + Blueprint**: `app/__init__.py` → routes.py(UI), routes_api.py(API), routes_admin.py(Admin)
-- **Service Layer**: `app/services/` 아래 각 서비스 모듈 (static method 패턴) — routes 가 `from app.services.*` 로 임포트하는 **활성본**. ⚠️ `app/middleware/services/` 에 옛 중복본이 남아있으나 대부분 미사용(죽은 코드)이니 **코드 수정은 `app/services/` 에 할 것**. 단 예외 — 온톨로지 SoT는 아직 `app/middleware/services/ontology_service.py` 이고 `app/services/ontology_service.py` 는 그 alias (통합 예정).
-- **Cypher 실행**: CypherService가 Cypher → AGE SQL 래핑 (`SELECT * FROM cypher('graph', $$ ... $$)`)
+- **Service Layer**: `app/services/` 아래 각 서비스 모듈 (static method 패턴) — routes 가 `from app.services.*` 로 임포트하는 **활성본**. ✅ `app/middleware/services/` 의 죽은 중복본은 **제거됨** — 이제 온톨로지 SoT(`ontology_service.py`) 하나만 남음. **코드 수정은 `app/services/` 에 할 것**. 온톨로지 SoT는 `app/middleware/services/ontology_service.py` 이고 `app/services/ontology_service.py` 는 그 alias (통합 예정).
+- **Cypher 실행**: AgensGraph 네이티브 방식 — 각 서비스가 `SET graph_path` 후 Cypher 직접 실행. (`app/core/cypher_service.py` 의 CypherService 는 현재 미사용)
 - **LLM**: AIService → OpenAI GPT-4o (기본), sLLM fallback 지원
-- **Vector RAG**: ChromaDB + sentence-transformers (법률 문서 RAG)
+- **Vector RAG**: (제거됨) 과거 ChromaDB 법률 RAG — 현재 코드/의존성에서 미사용
 
 ## 주요 서비스 파일
 
@@ -42,8 +42,8 @@ pytest tests/ --cov=app --cov-report=html
 | `app/services/graph_service.py` | 노드 검색, 확장, 경로 탐색 |
 | `app/services/etl_service.py` | CSV → 그래프 ETL 파이프라인 |
 | `app/middleware/services/ontology_service.py` | KICS 4계층 온톨로지 (**SoT**; `app/services/ontology_service.py` 는 alias) |
-| `app/services/legal_rag_service.py` | ChromaDB 법률 RAG |
-| `app/core/cypher_service.py` | Cypher → AGE SQL 변환 엔진 |
+| `app/services/langgraph_agent.py` | LangGraph Text2Cypher 에이전트 (라우팅→생성→실행) |
+| `app/core/cypher_service.py` | Cypher 실행 헬퍼 (AgensGraph; **현재 미사용**) |
 
 ## 코드 스타일
 

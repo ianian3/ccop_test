@@ -158,14 +158,16 @@ class TestSafeSetGraphPath:
 class TestAdminAuth:
     """관리자 인증 환경변수 기반 테스트"""
 
-    def test_default_password_fallback(self):
-        """ADMIN_PASSWORD 미설정 시 admin123 fallback"""
+    def test_missing_password_disables_login(self):
+        """ADMIN_PASSWORD 미설정 시 None 반환 → 로그인 비활성화(fail-closed).
+
+        (구 admin123 fallback 취약점 제거를 검증)
+        """
         # 환경변수 제거
         os.environ.pop("ADMIN_PASSWORD", None)
 
         from app.routes_admin import _get_admin_password_hash
-        expected = hashlib.sha256(b"admin123").hexdigest()
-        assert _get_admin_password_hash() == expected
+        assert _get_admin_password_hash() is None
 
     def test_custom_password(self):
         """ADMIN_PASSWORD 설정 시 해당 비밀번호 사용"""

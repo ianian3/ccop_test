@@ -1,6 +1,7 @@
 from flask import Flask, request
 from flask_cors import CORS
 import logging
+from logging.handlers import RotatingFileHandler
 import os
 import gzip
 import io
@@ -74,13 +75,22 @@ def create_app():
         level=getattr(logging, Config.LOG_LEVEL),
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         handlers=[
-            logging.FileHandler(Config.LOG_FILE),
+            # 로그 파일 무한 증가 방지: 20MB × 10개 로테이션 (~200MB 상한)
+            RotatingFileHandler(Config.LOG_FILE, maxBytes=20 * 1024 * 1024,
+                                backupCount=10, encoding='utf-8'),
             logging.StreamHandler()
         ]
     )
     
     app.logger.setLevel(getattr(logging, Config.LOG_LEVEL))
     app.logger.info('CCOP application starting up...')
+
+    # 프로덕션인데 앱 레벨 인증(Basic Auth)이 꺼져 있으면 경고 (UI/데이터 API 무인증 노출)
+    if os.getenv('FLASK_ENV') == 'production' and not (_ba_user and _ba_pass):
+        app.logger.warning(
+            '프로덕션 모드이나 BASIC_AUTH_USER/PASS 미설정 — UI/데이터 API가 무인증 노출됩니다. '
+            '네트워크 경계로 접근을 통제하거나 Basic Auth 를 설정하세요.'
+        )
     
     # API 키 파일 로드 (영속화)
     from app.middleware.api_auth import load_api_keys, load_plaintext_keys
@@ -94,13 +104,15 @@ def create_app():
         response.headers['X-Frame-Options'] = 'SAMEORIGIN'
         response.headers['X-XSS-Protection'] = '1; mode=block'
         response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+        # 프론트 자산을 로컬 벤더링(app/static/vendor) 후 외부 CDN 호스트 제거.
+        # ('unsafe-inline' 은 템플릿의 대량 인라인 JS/CSS 때문에 유지 — 별도 하드닝 과제)
         response.headers['Content-Security-Policy'] = (
             "default-src 'self'; "
-            "script-src 'self' 'unsafe-inline' cdn.jsdelivr.net unpkg.com cdnjs.cloudflare.com; "
-            "style-src 'self' 'unsafe-inline' cdn.jsdelivr.net cdnjs.cloudflare.com; "
+            "script-src 'self' 'unsafe-inline'; "
+            "style-src 'self' 'unsafe-inline'; "
             "img-src 'self' data:; "
             "connect-src 'self'; "
-            "font-src 'self' cdn.jsdelivr.net cdnjs.cloudflare.com; "
+            "font-src 'self'; "
             "frame-ancestors 'none';"
         )
         if not Config.DEBUG:
