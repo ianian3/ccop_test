@@ -15,7 +15,7 @@ python-dotenv==1.0.0
 openai==2.15.0
 
 # Agentic workflow (LangGraph) — required by app/services/langgraph_agent.py (routes.py import)
-langgraph
+langgraph==0.6.11
 
 # Production WSGI Server
 gunicorn==21.2.0
@@ -26,10 +26,11 @@ flask-cors==4.0.0
 # HTTP Requests (for health checks)
 requests==2.31.0
 
-# Legal RAG System
-chromadb==0.4.22
-pypdf==3.17.4
-sentence-transformers==2.2.2
+# System Monitoring (선택) — monitoring_service.py 의 시스템 리소스 통계용
+psutil==5.9.8
+
+# (제거됨) Legal RAG(chromadb/pypdf/sentence-transformers): app 내 import 0건 — 죽은 의존성.
+#   torch 등 수백 MB 절감. 재도입 시 별도 requirements 로 분리 권장.
 
 # Testing
 pytest==7.4.4

@@ -35,6 +35,8 @@ services:
       DB_HOST: agensgraph
       DB_PORT: 5432
       OPENAI_API_KEY: ${OPENAI_API_KEY}
+      SECRET_KEY: ${SECRET_KEY}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
       FLASK_ENV: production
     ports:
       - "5001:5001"

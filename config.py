@@ -1,7 +1,27 @@
 import os
+import secrets
 from dotenv import load_dotenv
 
 load_dotenv()
+
+
+def _resolve_secret_key():
+    """SECRET_KEY 를 안전하게 결정.
+
+    - 환경변수에 있으면 그대로 사용.
+    - 프로덕션(FLASK_ENV=production)인데 미설정이면 기동 실패(fail-closed).
+    - 그 외(개발/테스트)에는 임시 랜덤 키 생성(재시작 시 세션 무효화).
+    """
+    secret = os.getenv("SECRET_KEY")
+    if secret:
+        return secret
+    if os.getenv("FLASK_ENV") == "production":
+        raise RuntimeError(
+            "SECRET_KEY 환경변수가 설정되지 않았습니다. 프로덕션에서는 필수입니다. "
+            "생성 예: python -c \"import secrets; print(secrets.token_hex(32))\""
+        )
+    return secrets.token_hex(32)
+
 
 class Config:
     # Database Configuration
@@ -23,8 +43,9 @@ class Config:
     RDB_SCHEMA = os.getenv("RDB_SCHEMA", "test_ccop")
     
     # Flask Configuration
-    SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-key-change-in-production")
-    DEBUG = os.getenv("FLASK_ENV", "development") != "production"
+    SECRET_KEY = _resolve_secret_key()
+    # DEBUG 는 기본 비활성(default-secure). 개발 시에만 FLASK_ENV=development 로 활성화.
+    DEBUG = os.getenv("FLASK_ENV") == "development"
 
     # Session Security
     SESSION_COOKIE_SECURE = os.getenv("FLASK_ENV") == "production"  # HTTPS 전용 (프로덕션)

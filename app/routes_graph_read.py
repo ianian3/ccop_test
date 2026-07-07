@@ -10,7 +10,7 @@ routes_graph_read.py — 외부 LLM/시스템용 read-only 그래프 접근 API.
   - 결과는 JSON 으로 반환 (외부 LLM 파싱 친화적)
   - 토큰: X-API-Key 헤더 (선택, 환경변수 LLM_API_KEY)
 """
-import os, re, json
+import os, re, json, hmac
 from flask import Blueprint, request, jsonify, current_app
 import psycopg2
 
@@ -35,12 +35,16 @@ def _is_read_only(cypher: str) -> bool:
 
 
 def _check_api_key(req):
-    """X-API-Key 검증 (환경변수 LLM_API_KEY 설정 시에만)."""
+    """X-API-Key 검증. LLM_API_KEY 미설정 시 외부 접근을 거부(fail-closed)."""
     expected = os.getenv('LLM_API_KEY')
     if not expected:
-        return True  # 키 미설정 시 인증 생략 (내부 네트워크 가정)
+        current_app.logger.error(
+            "LLM_API_KEY 미설정 — 외부 그래프 조회 API 접근을 거부합니다. "
+            "외부 조회가 필요하면 LLM_API_KEY 환경변수를 설정하세요."
+        )
+        return False
     provided = req.headers.get('X-API-Key', '')
-    return provided == expected
+    return hmac.compare_digest(provided.encode(), expected.encode())
 
 
 @graph_read_bp.route('/read', methods=['POST'])
@@ -95,8 +99,9 @@ def graph_read():
             "row_count": len(rows),
             "rows": [list(map(_serialize, row)) for row in rows],
         })
-    except Exception as e:
-        return jsonify({"error": str(e), "cypher": cypher}), 500
+    except Exception:
+        current_app.logger.exception("graph_read 실행 오류")
+        return jsonify({"error": "internal error"}), 500
 
 
 @graph_read_bp.route('/dump', methods=['GET'])
@@ -181,8 +186,9 @@ def graph_dump():
             "edges": edges
         })
 
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    except Exception:
+        current_app.logger.exception("graph 조회 API 오류")
+        return jsonify({"error": "internal error"}), 500
 
 
 @graph_read_bp.route('/schema', methods=['GET'])
@@ -215,8 +221,9 @@ def graph_schema():
             "total_nodes": sum(s["count"] for s in node_stats),
             "total_edges": sum(s["count"] for s in edge_stats),
         })
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    except Exception:
+        current_app.logger.exception("graph 조회 API 오류")
+        return jsonify({"error": "internal error"}), 500
 
 
 # ─── 헬퍼 ─────────────────────────────────────────────────────

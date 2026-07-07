@@ -1392,15 +1392,19 @@ def query_rdb_table(table_name):
         """)
         columns = [r[0] for r in cur.fetchall()]
         
-        # 데이터 조회
+        # 데이터 조회 (search 값은 파라미터 바인딩으로 SQL 인젝션 방지;
+        # table_name 은 상단 화이트리스트, search_col 은 DB 스키마에서 유래한 식별자)
+        params = []
         query = f"SELECT * FROM {table_name}"
         if search:
             # 첫 번째 텍스트 컬럼에서 검색
             search_col = columns[1] if len(columns) > 1 else columns[0]
-            query += f" WHERE {search_col}::text ILIKE '%{search}%'"
-        query += f" LIMIT {limit} OFFSET {offset}"
-        
-        cur.execute(query)
+            query += f" WHERE {search_col}::text ILIKE %s"
+            params.append(f"%{search}%")
+        query += " LIMIT %s OFFSET %s"
+        params.extend([limit, offset])
+
+        cur.execute(query, params)
         rows = cur.fetchall()
         
         # 전체 건수
