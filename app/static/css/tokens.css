@@ -1,0 +1,151 @@
+/* ══════════════════════════════════════════════════════════════════
+   CCOP 디자인 토큰 — 단일 진실 소스(SoT)  [초안 v0.1]
+   ------------------------------------------------------------------
+   정체성: 다크 "인베스티게이션 워크벤치" (그래프 캔버스가 곧 표면).
+   운영 index.html 의 색 체계를 승격·통합한 값. 기존 변수명은 하단
+   back-compat 별칭으로 매핑 → 각 템플릿은 인라인 :root 를 지우고
+   이 파일을 <link> 하면 무중단 이전 가능.
+   확정 액센트: 청록(#00cec9) primary + 블루(#4dabf7) 보조.
+   자세한 규칙은 /DESIGN.md 참고.
+   ══════════════════════════════════════════════════════════════════ */
+:root {
+  /* ── 1. Primary (청록-블루) ─────────────────────────────────
+     Meta 원칙 차용: primary 는 '상호작용' 신호로만 쓰고 데이터/노드
+     색과 겹치지 않게 희소하게 유지한다(그래서 노드 범례엔 청록 없음). */
+  --color-primary:        #00cec9;  /* 주요 액션 CTA (버튼/활성 탭) */
+  --color-primary-hover:  #12b5b0;
+  --color-primary-active: #0e9b96;  /* pressed */
+  --color-primary-soft:   rgba(0, 206, 201, 0.14);  /* 정보 콜아웃 배경 틴트 */
+  --color-on-primary:     #06201f;  /* 밝은 청록 위 텍스트(근흑) */
+  --color-accent-blue:    #4dabf7;  /* 링크 · 선택 · 정보 (청록의 블루 짝) */
+  --color-accent-blue-deep: #1c7ed6;
+
+  /* ── 2. Surface ladder (다크) ──────────────────────────────── */
+  --color-canvas:         #0f0f0f;  /* 페이지/그래프 캔버스 */
+  --color-surface:        #141414;  /* 카드/행 */
+  --color-surface-raised: #1a1a1a;  /* 패널/서브내비 */
+  --color-surface-header: #1e1e1e;  /* 헤더/모달 */
+  --color-surface-hover:  #2d2d2d;
+  --color-surface-input:  #2d3436;  /* 입력창 */
+
+  /* ── 3. Text ladder ────────────────────────────────────────── */
+  --color-text-strong:    #ffffff;  /* 헤더/강조 */
+  --color-text:           #e0e0e0;  /* 본문 */
+  --color-text-secondary: #b2bec3;  /* 보조 */
+  --color-text-muted:     #888888;  /* 비활성/캡션 */
+
+  /* ── 4. Border / divider ───────────────────────────────────── */
+  --color-border-soft:    #2d2d2d;
+  --color-border:         #333333;
+  --color-border-strong:  #444444;
+
+  /* ── 5. Semantic (상태) ─────────────────────────────────────
+     primary(청록)와 구분되도록 success 는 명확한 '녹색'으로 둔다. */
+  --color-success:        #51cf66;  /* 확보/정상/재고있음 */
+  --color-info:           #4dabf7;  /* 정보 (= accent-blue) */
+  --color-warning:        #fdcb6e;  /* 경고/시한성 */
+  --color-attention:      #ff922b;  /* 중우선 알림 */
+  --color-critical:       #ff6b6b;  /* 오류/파괴/누락 */
+  --color-on-semantic:    #0f0f0f;  /* 밝은 배지 위 텍스트 */
+
+  /* ── 6. KICS 노드 범례 (그래프가 곧 브랜드 표면) ───────────────
+     핵심 9종은 지각적으로 뚜렷한 색으로 확정. 현재 인라인 스킴의
+     충돌(vt_ip/vt_access 동색 등)을 해소한 '초안 범례' — 확정 후
+     cytoscape 스타일을 이 토큰으로 치환할 것. */
+  --node-flnm:   #ff6b6b;  /* 사건번호 (case) */
+  --node-psn:    #b197fc;  /* 인물 */
+  --node-bacnt:  #ffd43b;  /* 계좌 (money=gold) */
+  --node-telno:  #4dabf7;  /* 전화 */
+  --node-ip:     #f06595;  /* IP */
+  --node-site:   #20c997;  /* URL/사이트 */
+  --node-atm:    #ff922b;  /* ATM */
+  --node-file:   #5c7cfa;  /* 파일/증거 */
+  --node-id:     #ffa8a8;  /* 계정 ID */
+  /* 확장 노드(2차) — 핵심 9종과 채도/명도 낮춰 배경화 */
+  --node-org:       #9775fa;  /* 기관/조직 */
+  --node-crypto:    #f9ca24;  /* 가상자산 */
+  --node-email:     #339af0;  /* 이메일 */
+  --node-call:      #4dabf7;  /* 통화(액션) */
+  --node-msg:       #63e6be;  /* 메시지(액션) */
+  --node-transfer:  #ffa94d;  /* 이체(액션) */
+  --node-loc:       #38d9a9;  /* 위치 */
+  --node-vhcl:      #748ffc;  /* 차량 */
+  --node-dev:       #868e96;  /* 단말 */
+
+  /* ── 7. Typography ──────────────────────────────────────────
+     Pretendard(로컬 벤더링됨: /static/vendor/pretendard) 를 표시+본문
+     단일 페이스로. 밀도 높은 도구라 본문 기준 13px 유지. */
+  --font-sans: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Noto Sans KR', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'D2Coding', 'Cascadia Code', monospace;
+
+  --text-display: 32px;  /* 화면 타이틀/히어로 */
+  --text-h1:      24px;
+  --text-h2:      20px;
+  --text-h3:      16px;
+  --text-body:    13px;  /* 기본 본문(밀집) */
+  --text-body-lg: 14px;  /* 여유 본문 */
+  --text-sm:      12px;  /* 보조/헬퍼 */
+  --text-caption: 11px;  /* 캡션/범례 */
+
+  --fw-light: 300;  --fw-regular: 400;  --fw-medium: 500;
+  --fw-semibold: 600;  --fw-bold: 700;
+
+  --lh-tight: 1.25;  --lh-normal: 1.5;  --lh-relaxed: 1.6;
+
+  /* ── 8. Spacing (4px 베이스) ───────────────────────────────── */
+  --space-1: 4px;   --space-2: 8px;   --space-3: 12px;  --space-4: 16px;
+  --space-5: 20px;  --space-6: 24px;  --space-8: 32px;  --space-10: 40px;
+  --space-12: 48px; --space-16: 64px;
+
+  /* ── 9. Radius (데이터 툴: 중간값 기본, 칩/배지만 pill) ────────── */
+  --radius-xs:     3px;
+  --radius-sm:     6px;
+  --radius-md:     8px;   /* 입력창/버튼 기본 */
+  --radius-lg:     12px;  /* 카드 */
+  --radius-xl:     16px;  /* 패널/모달 */
+  --radius-2xl:    20px;
+  --radius-pill:   999px; /* 칩 · 배지 · 탭 · 스와치링 */
+  --radius-circle: 50%;   /* 노드 스와치/아이콘 버튼 */
+
+  /* ── 10. Elevation (다크: 경계선 + 절제된 그림자) ─────────────── */
+  --elev-0: none;                              /* 경계선만 */
+  --elev-1: 0 2px 6px rgba(0, 0, 0, 0.40);     /* 카드 */
+  --elev-2: 0 2px 8px rgba(0, 0, 0, 0.50);     /* 패널/스티키 */
+  --elev-3: 0 12px 40px rgba(0, 0, 0, 0.75);   /* 모달 */
+
+  /* ── 11. Motion (Meta 문서 Known Gaps 권장치 반영) ───────────── */
+  --motion-fast:   150ms;
+  --motion-normal: 220ms;
+  --motion-slow:   300ms;
+  --ease-out:      cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out:   cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* ══ back-compat 별칭 (기존 index.html/modeler 변수명 → 신 토큰) ══
+     템플릿에서 인라인 :root 를 삭제하고 이 파일을 link 해도 동작하도록. */
+  --bg-header:      var(--color-surface-header);
+  --bg-subnav:      var(--color-surface-raised);
+  --bg-main:        var(--color-canvas);
+  --bg-panel:       var(--color-surface-raised);
+  --bg-card:        var(--color-surface);
+  --bg-card-hover:  var(--color-surface-hover);
+  --bg-modal:       var(--color-surface-header);
+  --bg-input:       var(--color-surface-input);
+  --text-header:    var(--color-text-strong);
+  --text-primary:   var(--color-text);
+  --text-secondary: var(--color-text-secondary);
+  --text-muted:     var(--color-text-muted);
+  --accent-cyan:    var(--color-primary);
+  --accent-blue:    var(--color-accent-blue);
+  --accent-green:   var(--color-success);
+  --accent-red:     var(--color-critical);
+  --accent-orange:  var(--color-attention);
+  --accent-purple:  var(--node-psn);
+  --accent-yellow:  var(--color-warning);
+  --border-soft:    var(--color-border-soft);
+  --border-mid:     var(--color-border);
+  --border-strong:  var(--color-border-strong);
+  --shadow-panel:   var(--elev-2);
+  --shadow-card:    var(--elev-1);
+  --shadow-modal:   var(--elev-3);
+  --font-main:      var(--font-sans);
+}
