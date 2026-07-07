@@ -115,7 +115,7 @@ def create_app():
             "font-src 'self'; "
             "frame-ancestors 'none';"
         )
-        if not Config.DEBUG:
+        if os.getenv('FLASK_ENV') == 'production':
             response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
         return response
 

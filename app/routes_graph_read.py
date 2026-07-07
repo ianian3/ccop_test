@@ -44,7 +44,7 @@ def _check_api_key(req):
         )
         return False
     provided = req.headers.get('X-API-Key', '')
-    return hmac.compare_digest(provided, expected)
+    return hmac.compare_digest(provided.encode(), expected.encode())
 
 
 @graph_read_bp.route('/read', methods=['POST'])
