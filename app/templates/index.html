@@ -11,51 +11,17 @@
     <script src="/static/vendor/cytoscape-dagre/cytoscape-dagre.js"></script>
     <link rel="stylesheet" href="/static/vendor/fontawesome/css/all.min.css">
     <link rel="stylesheet" href="/static/vendor/pretendard/pretendard.min.css">
+    <!-- 디자인 토큰 SoT: 아래 인라인 :root 를 대체. 값·상세는 /DESIGN.md -->
+    <link rel="stylesheet" href="/static/css/tokens.css">
     <style>
         /* ═══════════════════════════════════════════════════════════════
            CCOP 디자인 토큰 — Graph Modeler 통합 다크 테마
            modeler.html 색상 체계 기반
         ═══════════════════════════════════════════════════════════════ */
-        :root {
-            /* ── 구조 배경 ── */
-            --bg-header:      #1e1e1e;   /* 헤더 — 모델러 동일 */
-            --bg-subnav:      #1a1a1a;   /* 탭 바 — 모델러 panel-left */
-            --bg-main:        #0f0f0f;   /* 메인 캔버스 — 모델러 #cy */
-            --bg-panel:       #1a1a1a;   /* 사이드바 / 패널 */
-            --bg-card:        #141414;   /* 카드 / 행 배경 — 모델러 prop-row */
-            --bg-card-hover:  #2d2d2d;   /* 카드 호버 */
-            --bg-modal:       #1e1e1e;   /* 모달 배경 */
-            --bg-input:       #2d3436;   /* 입력창 — 모델러 동일 */
-
-            /* ── 텍스트 ── */
-            --text-primary:   #e0e0e0;   /* 본문 — 모델러 동일 */
-            --text-secondary: #b2bec3;   /* 보조 */
-            --text-muted:     #888888;   /* 비활성 */
-            --text-header:    #ffffff;   /* 헤더 텍스트 */
-
-            /* ── 액센트 — 모델러 색상 체계 ── */
-            --accent-cyan:    #00cec9;   /* ★ PRIMARY — 모델러 메인 액센트 */
-            --accent-blue:    #74b9ff;   /* 정보 / 보조 — 모델러 btn-blue */
-            --accent-green:   #55efc4;   /* 성공 — 모델러 btn-green */
-            --accent-red:     #e17055;   /* 위험 — 모델러 btn-red */
-            --accent-orange:  #fdcb6e;   /* 경고 / 이벤트 — 모델러 key-star */
-            --accent-purple:  #a29bfe;   /* AI / 온톨로지 */
-            --accent-yellow:  #fdcb6e;   /* 이벤트 노드 */
-
-            /* ── 보더 — 모델러 동일 ── */
-            --border-soft:    #2d2d2d;
-            --border-mid:     #333333;
-            --border-strong:  #444444;
-
-            /* ── 그림자 ── */
-            --shadow-panel:   0 2px 8px rgba(0, 0, 0, 0.5);
-            --shadow-card:    0 2px 6px rgba(0, 0, 0, 0.4);
-            --shadow-modal:   0 12px 40px rgba(0, 0, 0, 0.75);
-
-            /* ── 폰트 ── */
-            --font-main: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Noto Sans KR', system-ui, sans-serif;
-            --font-mono: 'JetBrains Mono', 'D2Coding', 'Cascadia Code', monospace;
-        }
+        /* 디자인 토큰은 /static/css/tokens.css (SoT) 로 이관됨.
+           기존 변수명(--bg-*, --text-*, --accent-*, --border-*, --shadow-*, --font-*)은
+           tokens.css 의 back-compat 별칭으로 계속 공급되므로 이 인라인 :root 는 제거함.
+           액센트는 청록-블루 시스템으로 통일(예: --accent-blue #74b9ff→#4dabf7). */
 
         /* ── 전역 리셋 ── */
         * { box-sizing: border-box; }
