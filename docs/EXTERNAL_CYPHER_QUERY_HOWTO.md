@@ -38,7 +38,6 @@
 ### 1.2 인증 헤더 (엔드포인트별로 다름)
 ```
 Authorization: Bearer ccop_xxxxxxxx     # 일반 API: text-to-cypher / validate-cypher / graph-query / graph/list
-X-API-Key:     ccop_xxxxxxxx            # read-only 그래프 API: graph/read / graph/schema / graph/dump
 ```
 > 어떤 키·헤더를 쓸지는 발급 시 운영팀이 안내합니다. 예제에서는 `$KEY` 로 표기합니다.
 

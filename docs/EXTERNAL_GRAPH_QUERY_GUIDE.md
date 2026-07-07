@@ -20,7 +20,6 @@
 모든 요청에 API 키를 헤더로 전달합니다 (둘 중 안내받은 방식):
 ```
 Authorization: Bearer ccop_xxxxxxxxxxxxxxxx      # 일반 API(/api/v1/*)
-X-API-Key: ccop_xxxxxxxxxxxxxxxx                 # read-only 그래프 API(/api/v1/graph/*)
 ```
 
 ### 1.3 연결 확인 (헬스체크)
