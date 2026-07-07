@@ -17,11 +17,12 @@
 3. **권한 확인** — 기관별로 ① 사용 가능 엔드포인트(tier) ② 접근 가능 graph_path ③ 분당 요청 한도(rate limit)가 정해집니다.
 
 ### 1.2 인증 방식
-모든 요청에 API 키를 헤더로 전달합니다 (둘 중 안내받은 방식):
+요청 헤더로 인증합니다:
 ```
-Authorization: Bearer ccop_xxxxxxxxxxxxxxxx      # 일반 API(/api/v1/*)
-X-API-Key: ccop_xxxxxxxxxxxxxxxx                 # read-only 그래프 API(/api/v1/graph/*)
+Authorization: Bearer ccop_xxxxxxxxxxxxxxxx      # 일반 API(/api/v1/*) — 기관별 발급 키
+X-API-Key: <조회토큰>                             # read-only 그래프 API(/api/v1/graph/*) — 운영팀 제공 단일 조회 토큰
 ```
+> ⚠️ `X-API-Key` 값은 기관별 발급 키(`ccop_`)가 **아니라**, 운영팀이 별도 제공하는 **단일 조회 토큰**입니다. 예제에선 `$RTOKEN` 으로 표기.
 
 ### 1.3 연결 확인 (헬스체크)
 ```bash
@@ -53,7 +54,7 @@ CCOP은 4가지 조회 방식을 제공합니다. **대부분의 조건별 조�
 
 ## 3. 조건별 조회 예제
 
-> 아래 예제의 `$KEY`=API 키, `$HOST`=베이스 URL, `graph_path`=권한 내 그래프명.
+> 아래 예제의 `$KEY`=기관별 발급 키(Bearer), `$RTOKEN`=운영팀 제공 단일 조회 토큰(X-API-Key), `$HOST`=베이스 URL, `graph_path`=권한 내 그래프명.
 
 ### 3.1 자연어로 조회 (① text-to-cypher)
 ```bash
@@ -79,7 +80,7 @@ curl -s -X POST https://$HOST/api/v1/graph-query \
 ### 3.3 read-only 전용 API (④ graph/read — X-API-Key)
 ```bash
 curl -s -X POST https://$HOST/api/v1/graph/read \
-  -H "X-API-Key: $KEY" -H "Content-Type: application/json" \
+  -H "X-API-Key: $RTOKEN" -H "Content-Type: application/json" \
   -d '{"graph_path":"tccop_graph_v6","cypher":"MATCH (p:vt_psn) RETURN p","limit":500}'
 # LIMIT 미지정 시 자동 주입(기본 500, 최대 5000). 응답: columns/row_count/rows
 ```
@@ -104,9 +105,9 @@ curl -s -X POST https://$HOST/api/v1/network/bipartite \
 
 ### 3.6 스키마/전체 덤프
 ```bash
-curl -s -H "X-API-Key: $KEY" "https://$HOST/api/v1/graph/schema?graph_path=tccop_graph_v6"
+curl -s -H "X-API-Key: $RTOKEN" "https://$HOST/api/v1/graph/schema?graph_path=tccop_graph_v6"
 # node_labels[], edge_types[], total_nodes/total_edges
-curl -s -H "X-API-Key: $KEY" "https://$HOST/api/v1/graph/dump?graph_path=tccop_graph_v6&limit=500&format=triple"
+curl -s -H "X-API-Key: $RTOKEN" "https://$HOST/api/v1/graph/dump?graph_path=tccop_graph_v6&limit=500&format=triple"
 # format=json(노드/엣지) 또는 triple([주어,관계,목적어])
 ```
 

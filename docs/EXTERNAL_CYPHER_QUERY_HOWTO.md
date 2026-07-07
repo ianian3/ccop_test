@@ -37,15 +37,18 @@
 
 ### 1.2 인증 헤더 (엔드포인트별로 다름)
 ```
-Authorization: Bearer ccop_xxxxxxxx     # 일반 API: text-to-cypher / validate-cypher / graph-query / graph/list
-X-API-Key:     ccop_xxxxxxxx            # read-only 그래프 API: graph/read / graph/schema / graph/dump
+Authorization: Bearer ccop_xxxxxxxx     # 일반 API(기관별 발급 키): text-to-cypher / validate-cypher / graph-query / graph/list
+X-API-Key:     <조회토큰>                # read-only 그래프 API: graph/read / graph/schema / graph/dump
 ```
-> 어떤 키·헤더를 쓸지는 발급 시 운영팀이 안내합니다. 예제에서는 `$KEY` 로 표기합니다.
+> ⚠️ `Authorization: Bearer` 값은 **기관별로 발급되는 `ccop_` 키**입니다.
+> `X-API-Key` 값은 그와 **다른, 운영팀이 별도 안내하는 단일 조회 토큰**입니다(기관별 키가 아님).
+> 예제에서 Bearer 는 `$KEY`, X-API-Key 는 `$RTOKEN` 으로 표기합니다.
 
 ### 1.3 연결·환경 확인 (복붙)
 ```bash
 export HOST="https://<발급-호스트>"
-export KEY="ccop_xxxxxxxx"
+export KEY="ccop_xxxxxxxx"            # 기관별 발급 키 (Bearer)
+export RTOKEN="<운영팀-제공-조회토큰>"   # read-only 그래프 API용 단일 조회 토큰 (X-API-Key)
 
 # (1) 헬스체크 — 인증 불필요
 curl -s $HOST/api/v1/health
@@ -55,7 +58,7 @@ curl -s $HOST/api/v1/health
 curl -s -H "Authorization: Bearer $KEY" $HOST/api/v1/graph/list
 
 # (3) 그래프 스키마 — 어떤 라벨/엣지가 있는지 (X-API-Key)
-curl -s -H "X-API-Key: $KEY" "$HOST/api/v1/graph/schema?graph_path=tccop_graph_v6"
+curl -s -H "X-API-Key: $RTOKEN" "$HOST/api/v1/graph/schema?graph_path=tccop_graph_v6"
 # → node_labels[], edge_types[], total_nodes, total_edges
 ```
 
@@ -138,7 +141,7 @@ curl -s -X POST $HOST/api/v1/validate-cypher \
 외부 read-only 조회의 **표준 엔드포인트**입니다. 쓰기 명령은 차단되고, `LIMIT` 미지정 시 자동으로 붙습니다.
 ```bash
 curl -s -X POST $HOST/api/v1/graph/read \
-  -H "X-API-Key: $KEY" -H "Content-Type: application/json" \
+  -H "X-API-Key: $RTOKEN" -H "Content-Type: application/json" \
   -d '{
         "graph_path": "tccop_graph_v6",
         "cypher": "MATCH (p:vt_psn)-[:has_account]->(b:vt_bacnt) RETURN p, b",
@@ -256,10 +259,11 @@ MATCH (ip:vt_ip) WHERE ip.threat_score >= 80 RETURN ip ORDER BY ip.threat_score 
 ```python
 import os, requests
 
-HOST = os.environ["CCOP_HOST"]          # 예: https://<발급-호스트>
-KEY  = os.environ["CCOP_API_KEY"]
+HOST   = os.environ["CCOP_HOST"]          # 예: https://<발급-호스트>
+KEY    = os.environ["CCOP_API_KEY"]       # 기관별 발급 키 (Bearer)
+RTOKEN = os.environ["CCOP_READ_TOKEN"]    # read-only 그래프 API용 단일 조회 토큰 (X-API-Key)
 BEARER = {"Authorization": f"Bearer {KEY}", "Content-Type": "application/json"}
-XKEY   = {"X-API-Key": KEY,               "Content-Type": "application/json"}
+XKEY   = {"X-API-Key": RTOKEN,            "Content-Type": "application/json"}
 
 # ── ① 쿼리 가져오기: 자연어 → Cypher (방법 B) ─────────────────
 r = requests.post(f"{HOST}/api/v1/text-to-cypher",
