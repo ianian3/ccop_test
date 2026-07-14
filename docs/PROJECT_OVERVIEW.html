@@ -1,0 +1,830 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8">
+<title>CCOP v1.0 — 프로젝트 종합 설명서</title><style>
+@page { size: A4; margin: 16mm 15mm 18mm 15mm; }
+* { box-sizing: border-box; }
+html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+body {
+  font-family: "Apple SD Gothic Neo", Pretendard, "Noto Sans KR", "Malgun Gothic", sans-serif;
+  font-size: 10pt; line-height: 1.68; color: #16262a; margin: 0;
+  word-break: keep-all; overflow-wrap: break-word;
+}
+/* ── 표지 헤더 ─────────────────────────────── */
+h1 {
+  font-size: 23pt; font-weight: 800; letter-spacing: -0.02em; line-height: 1.25;
+  color: #0b181c; margin: 4mm 0 3mm;
+  padding-bottom: 3mm; border-bottom: 2.5pt solid #0a9d98;
+}
+h1 + p { color: #5a6e74; font-size: 9pt; line-height: 1.7; margin-top: 2mm; }
+h1 + p strong { color: #16262a; }
+/* ── 섹션 ─────────────────────────────────── */
+h2 {
+  break-before: page;
+  font-size: 15pt; font-weight: 800; letter-spacing: -0.01em; color: #0b181c;
+  margin: 0 0 4mm; padding: 2mm 0 2mm 3.5mm;
+  border-left: 3.5pt solid #0a9d98; background: #f2f7f7;
+  break-after: avoid;
+}
+h2.toc-title, h2:first-of-type { break-before: auto; margin-top: 6mm; }
+h3 {
+  font-size: 11.5pt; font-weight: 700; color: #0a7f7b;
+  margin: 6mm 0 2mm; break-after: avoid;
+}
+p { margin: 0 0 2.6mm; }
+strong { color: #0b181c; }
+em { color: #445c62; }
+hr { display: none; }
+a { color: inherit; text-decoration: none; }
+/* ── 목차 ─────────────────────────────────── */
+ol.toc {
+  columns: 2; column-gap: 10mm; font-size: 9.5pt;
+  background: #f6f9f9; border: 0.5pt solid #dbe4e5; border-radius: 2mm;
+  padding: 4mm 6mm 4mm 12mm; margin: 0 0 4mm;
+}
+ol.toc li { margin-bottom: 1.2mm; break-inside: avoid; }
+ol.toc a { color: #16262a; }
+/* ── 목록 ─────────────────────────────────── */
+ul, ol { margin: 0 0 2.6mm; padding-left: 6mm; }
+li { margin-bottom: 1.1mm; }
+li::marker { color: #0a9d98; }
+/* ── 코드/다이어그램 ───────────────────────── */
+code {
+  font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 8.2pt;
+  background: #eef3f3; border: 0.5pt solid #dde6e6; border-radius: 1mm;
+  padding: 0.2mm 1.2mm; color: #114b49;
+}
+pre {
+  background: #f6f8f8; border: 0.5pt solid #d9e2e3; border-left: 2.5pt solid #0a9d98;
+  border-radius: 1.5mm; padding: 3mm 3.5mm; margin: 0 0 3mm;
+  break-inside: avoid; overflow: hidden;
+}
+pre code {
+  background: none; border: none; padding: 0;
+  font-size: 7.6pt; line-height: 1.42; color: #22383d; white-space: pre;
+}
+/* ── 표 ───────────────────────────────────── */
+table {
+  border-collapse: collapse; width: 100%; margin: 0 0 3.5mm; font-size: 8.6pt;
+}
+th {
+  background: #e7f1f1; color: #114b49; font-weight: 700; text-align: left;
+  padding: 1.8mm 2.4mm; border: 0.5pt solid #c9d8d9; font-size: 8.2pt;
+}
+td {
+  padding: 1.6mm 2.4mm; border: 0.5pt solid #d9e2e3; vertical-align: top;
+}
+tr:nth-child(even) td { background: #f7fafa; }
+tr { break-inside: avoid; }
+thead { display: table-header-group; }   /* 페이지 넘어가면 헤더 반복 */
+/* ── 인용/각주성 문단 ─────────────────────── */
+blockquote {
+  margin: 0 0 3mm; padding: 2mm 4mm; color: #5a6e74;
+  border-left: 2.5pt solid #c9d8d9; background: #f8fafa; font-size: 9pt;
+}
+</style></head>
+<body><h1>CCOP v1.0 — 프로젝트 종합 설명서</h1>
+<p><strong>작성일</strong>: 2026-07-14 · <strong>대상 독자</strong>: 이 프로젝트를 처음 접하는 개발자·평가자·인수인계 대상자
+<strong>목적</strong>: 이 문서 하나로 ① 어떤 프로젝트인지 ② 어떤 기능이 있는지 ③ 어떻게 만들어졌는지 파악할 수 있게 한다.
+<strong>수치 기준</strong>: 2026-07 실측 (코드·문서·벤치마크 결과 파일 기준)</p>
+<hr />
+<h2 class="toc-title">목차</h2>
+<ol class="toc">
+<li><a href="#1-한눈에-보기">한눈에 보기</a></li>
+<li><a href="#2-무엇을-왜-만들었나-문제-정의">무엇을 왜 만들었나 (문제 정의)</a></li>
+<li><a href="#3-핵심-개념-4가지">핵심 개념 4가지</a></li>
+<li><a href="#4-기능-전체-사용자-관점">기능 전체 (사용자 관점)</a></li>
+<li><a href="#5-시스템-아키텍처">시스템 아키텍처</a></li>
+<li><a href="#6-코드-구조-디렉토리-맵">코드 구조 (디렉토리 맵)</a></li>
+<li><a href="#7-ai-파이프라인--어떻게-만들어졌나">AI 파이프라인 — 어떻게 만들어졌나</a></li>
+<li><a href="#8-온톨로지--도메인-데이터-모델">온톨로지 — 도메인 데이터 모델</a></li>
+<li><a href="#9-데이터-적재-파이프라인">데이터 적재 파이프라인</a></li>
+<li><a href="#10-보안-설계">보안 설계</a></li>
+<li><a href="#11-배포와-운영-3개-환경">배포와 운영 (3개 환경)</a></li>
+<li><a href="#12-품질-관리-테스트ci벤치마크">품질 관리 (테스트·CI·벤치마크)</a></li>
+<li><a href="#13-개발-타임라인">개발 타임라인</a></li>
+<li><a href="#14-빠른-시작">빠른 시작</a></li>
+<li><a href="#15-더-읽을-문서-지도">더 읽을 문서 지도</a></li>
+<li><a href="#16-용어집">용어집</a></li>
+</ol>
+<hr />
+<h2>1. 한눈에 보기</h2>
+<p><strong>CCOP</strong>(Cybercrime Investigation Graph Platform)는 <strong>사이버범죄 수사관을 위한 그래프 분석 플랫폼</strong>이다. 사건·인물·계좌·전화·IP가 얽힌 관계 데이터를 그래프 DB에 적재하고, 수사관이 <strong>한국어로 질문하면 그래프 쿼리(Cypher)로 자동 변환</strong>해 시각화된 답을 보여준다. 핵심 차별점은 이 변환을 <strong>외부 API 없이 사내 GPU에서 도는 자체 파인튜닝 모델(sLLM)</strong>이 수행한다는 것 — 수사 데이터를 외부로 보낼 수 없는 망분리 환경을 전제로 설계됐다.</p>
+<table>
+<thead>
+<tr>
+<th>항목</th>
+<th>내용</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>기간</td>
+<td>2026.01 ~ 진행 중 (1인 개발: 기획·연구·개발·운영)</td>
+</tr>
+<tr>
+<td>스택 요약</td>
+<td>Python/Flask · AgensGraph(PostgreSQL 그래프 확장) · LangGraph · vLLM · Qwen2.5-7B(QLoRA 파인튜닝) · Cytoscape.js · Docker</td>
+</tr>
+<tr>
+<td>규모</td>
+<td>백엔드 32파일 ~17,500 LOC · REST 엔드포인트 86개 · 서비스 모듈 20개 · 프론트 템플릿 ~9,800 LOC</td>
+</tr>
+<tr>
+<td>AI 성과</td>
+<td>자연어→Cypher 정확도 <strong>86.6%</strong> (자체 232문항 벤치마크, 운영 임계 85% 초과) — 파인튜닝 모델 v42 + 규칙 Router</td>
+</tr>
+<tr>
+<td>데이터</td>
+<td>자체 구축 SFT 31,226샘플 · 운영 그래프 9개 (최대 689만 노드/1,094만 엣지 OSINT 그래프)</td>
+</tr>
+<tr>
+<td>품질</td>
+<td>테스트 함수 190여 개 (CI 오프라인 게이트 171개) · 기술 문서 84건</td>
+</tr>
+<tr>
+<td>운영</td>
+<td>클라우드 VM에서 e2e 1.4초로 가동 중 · 폐쇄망(air-gap) 설치 체계 구축</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2>2. 무엇을 왜 만들었나 (문제 정의)</h2>
+<p>사이버범죄(보이스피싱·몸캠피싱·투자사기 등) 수사의 본질은 <strong>관계 추적</strong>이다: 피해자 계좌에서 출발해 이체 체인, 대포통장, 공유된 전화번호·IP, 배후 조직으로 이어지는 연결을 찾는 일. 관계형 DB와 엑셀로는 이 "몇 다리 건너 연결"(multi-hop) 질문에 답하기 어렵고, 그래프 DB가 정확한 도구다. 그런데 세 가지 장벽이 있었다:</p>
+<ol>
+<li><strong>수사관은 그래프 쿼리 언어(Cypher)를 모른다.</strong> → 자연어로 질문하면 Cypher로 변환하는 <strong>Text2Cypher</strong> 계층이 필요.</li>
+<li><strong>수사 데이터는 외부 API로 보낼 수 없다</strong> (망분리·폐쇄망 규정). → OpenAI 의존이 아닌 <strong>온프레미스 sLLM</strong>이 필요. 범용 7B 모델은 이 도메인 스키마를 모르므로 <strong>직접 파인튜닝</strong>해야 한다.</li>
+<li><strong>기관마다 데이터 포맷이 제각각</strong>이고(KICS, 금융권, 통신사, OSINT), 도메인 개념(사건·진정서·접근매체·중계기)이 일반 스키마에 없다. → 형사사법 표준(KICS)에 정렬한 <strong>자체 온톨로지</strong>와 <strong>적재 파이프라인</strong>이 필요.</li>
+</ol>
+<p>CCOP는 이 세 가지를 모두 자체 구축한 결과물이다: <strong>온톨로지(스키마) + 파인튜닝 모델(변환기) + 플랫폼(적재·탐색·시각화·분석)</strong>.</p>
+<hr />
+<h2>3. 핵심 개념 4가지</h2>
+<p>처음 보는 사람이 이 네 개념만 잡으면 나머지가 읽힌다.</p>
+<p><strong>① Text2Cypher</strong> — "익명 피의자가 보유한 계좌 보여줘" 같은 한국어 질문을 <code>MATCH (p:vt_psn {is_anonymous: true})-[:has_account]-&gt;(a:vt_bacnt) RETURN ...</code> 같은 그래프 쿼리로 바꾸는 것. Text2SQL의 그래프 DB 버전이며, 이 프로젝트의 AI 핵심 과제다.</p>
+<p><strong>② 온톨로지 (POLE 6계층, 25노드/53엣지)</strong> — "이 도메인에 어떤 개체와 관계가 존재하는가"의 표준 정의. 수사 데이터 모델링의 국제 관행인 POLE(Person·Object·Location·Event)을 확장해 Source·Case를 더한 6계층으로 설계했다. 학습 데이터 생성, ETL, 시각화, 쿼리 검증이 전부 이 단일 정의(SSOT)를 바라본다. — §8</p>
+<p><strong>③ sLLM (small/specialized LLM)</strong> — GPT-4o 같은 외부 대형 모델 대신, 사내 GPU에서 도는 7B급 모델(Qwen2.5-7B)을 이 도메인 전용으로 파인튜닝한 것. 자체 벤치마크에서 GPT-4o(95.4%)에는 못 미치지만 운영 임계(85%)를 넘는 86.6%를 달성했고, 데이터가 외부로 나가지 않는다. — §7</p>
+<p><strong>④ AgensGraph</strong> — PostgreSQL 기반 상용 그래프 DB. 하나의 인스턴스에서 관계형 테이블(RDB)과 그래프(GDB)를 함께 다룰 수 있어(One-Instance Multi-Model), 원천 데이터(RDB) ↔ 분석 그래프(GDB) 이중 구조를 단일 DB로 운영한다.</p>
+<hr />
+<h2>4. 기능 전체 (사용자 관점)</h2>
+<h3>4.1 대표 사용 시나리오 (한 사건의 흐름)</h3>
+<pre><code>① 데이터 반입: 금융/통신 CSV 업로드 → AI가 컬럼→온톨로지 매핑 제안 → 그래프 적재
+② 자연어 질의: &quot;부산 보이스피싱 사건의 피의자 보여줘&quot; → sLLM이 Cypher 생성·실행 → 그래프 표시
+③ 탐색: 노드 우클릭 → 1-hop/N-depth 확장, 두 노드 간 경로 분석, 허브(연결 집중점) 탐지
+④ 분석: 사건 서브그래프를 8종 사기 패턴과 매칭 → &quot;자금세탁체인 87% 일치&quot; + 부족한 증거 목록
+⑤ 법률 참고: &quot;인출책 처벌 수위는?&quot; → 법률 RAG가 조문·판례 근거와 함께 답변
+⑥ 공유: 외부 협력기관이 read-only API로 조회 / 서브그래프 저장·내보내기
+</code></pre>
+<h3>4.2 기능 카탈로그</h3>
+<table>
+<thead>
+<tr>
+<th>영역</th>
+<th>기능</th>
+<th>구현 위치</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>자연어 질의</strong></td>
+<td>한국어→Cypher 변환(멀티턴 세션, 엔티티 컨텍스트 유지), 실패 시 자동 재시도(reflection), 잡담/위험질의 사전 차단</td>
+<td><code>langgraph_agent.py</code>, <code>ai_service.py</code>, <code>POST /api/query/ai</code></td>
+</tr>
+<tr>
+<td><strong>그래프 탐색</strong></td>
+<td>키워드 노드 검색, 1-hop/정밀 N-depth 확장(hairball 방지), 최단 경로, 서브그래프 저장</td>
+<td><code>graph_service.py</code>, <code>/api/search·expand·path</code></td>
+</tr>
+<tr>
+<td><strong>시각화</strong></td>
+<td>Cytoscape.js 다크 워크벤치, 노드 타입별 색·아이콘 인코딩(디자인 토큰 SoT), 우클릭 컨텍스트 메뉴, 자동 레이아웃(dagre), 타임라인·스칼라 패널</td>
+<td><code>templates/index.html</code> (~7,000 LOC), <code>static/css/tokens.css</code></td>
+</tr>
+<tr>
+<td><strong>ETL(적재)</strong></td>
+<td>CSV 업로드 → LLM 컬럼 매핑 제안 → 표준화(은행·통신사·해시 코드) → 배치 적재 + 메타(출처·신뢰등급) 자동 주입</td>
+<td><code>etl_service.py</code>, <code>schema_mapper.py</code></td>
+</tr>
+<tr>
+<td><strong>RDB→그래프 변환</strong></td>
+<td>관계형 원천 49개 테이블을 POLE 그래프로 일괄 변환(증거등급 주입, 역추적 키 유지)</td>
+<td><code>rdb_to_graph_service.py</code> (2,148 LOC)</td>
+</tr>
+<tr>
+<td><strong>모델러</strong></td>
+<td>비주얼 ETL/자유 그래프 설계 도구 — 사용자가 노드·엣지 구조를 직접 설계하고 Cypher 생성·실행</td>
+<td><code>templates/modeler.html</code>, <code>/api/modeler/*</code></td>
+</tr>
+<tr>
+<td><strong>패턴 분석</strong></td>
+<td>사기 패턴 8종(보이스피싱·몸캠피싱·자금세탁체인·대포통장 등) 룰 매칭 + 신뢰도 점수</td>
+<td><code>pattern_library.py</code>, <code>pattern_analyzer.py</code></td>
+</tr>
+<tr>
+<td><strong>증거 분석</strong></td>
+<td>패턴별 필수/선택 증거 체크리스트 → 완성도·기소 준비도 평가</td>
+<td><code>evidence_analyzer.py</code></td>
+</tr>
+<tr>
+<td><strong>네트워크 분석</strong></td>
+<td>연결도(degree) 허브 탐지, 공범망 추적(공유 계좌·전화·IP 순회), SNA 2-mode→1-mode 투영</td>
+<td><code>graph_service.py</code>, <code>/api/v1/network/*</code></td>
+</tr>
+<tr>
+<td><strong>법률 RAG (v2)</strong></td>
+<td>조문·판례 하이브리드 검색(BM25+벡터+RRF+rerank) → 근거 인용 답변, 폐쇄망은 BM25-only 강등</td>
+<td><code>legal_rag_service.py</code>, <code>/api/v1/legal/*</code></td>
+</tr>
+<tr>
+<td><strong>외부 파트너 API</strong></td>
+<td>키 인증 REST API 37종: text-to-cypher, 그래프 조회, 패턴 분석, ETL, 워크플로 등 (티어별 rate limit)</td>
+<td><code>routes_api.py</code> (<code>/api/v1/*</code>)</td>
+</tr>
+<tr>
+<td><strong>외부 read-only 조회</strong></td>
+<td>타 기관용 안전 조회 3종(read/dump/schema) — 쓰기 구문 차단, 별도 토큰</td>
+<td><code>routes_graph_read.py</code></td>
+</tr>
+<tr>
+<td><strong>관리자</strong></td>
+<td>파트너 API 키 발급·관리 대시보드, 시스템/DB 모니터링</td>
+<td><code>routes_admin.py</code>, <code>monitoring_service.py</code></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2>5. 시스템 아키텍처</h2>
+<h3>5.1 요청 흐름 (자연어 질의 한 건의 여정)</h3>
+<pre><code>사용자 질문 &quot;익명 피의자가 보유한 계좌 보여줘&quot;
+   │
+   ▼
+[① 규칙 기반 사전 Router + LRU 캐시]          ai_service.py
+   잡담(GENERAL)·위험질의(GUARD: 쓰기명령, 프롬프트 인젝션)를
+   LLM 호출 전에 정규식으로 차단 — 843ms 조기 응답
+   │ 수사 질의만 통과 (의도분류: gpt-4o-mini, JSON 강제)
+   ▼
+[② LangGraph 에이전트 — 8노드 상태그래프]     langgraph_agent.py
+   router → (PATH│QUERY 분기) → context_retrieval → schema_fetching
+        → synthesis(Cypher 생성) → execution(실행)
+        → 실패/0건 시 reflection → synthesis 재시도 (최대 2회)
+   ├─ 생성 LLM: 사내 vLLM sLLM(qwen25-t2c-v42) — 15s timeout
+   ├─ 폴백: GPT-4o 자동 전환 (총 16s 내)
+   ├─ 3층 검증: 스키마 화이트리스트 · 쓰기명령 차단 · 엣지 방향 자동교정(40+ 규칙)
+   ├─ few-shot 동적 주입(약점 카테고리별), Native Cypher→SQL wrapper 자동 변환
+   └─ 전 질의 감사 로그(TB_AUDIT_LOG), 멀티턴 세션(엔티티 50개 컨텍스트)
+   ▼
+[③ AgensGraph]  graph_path 화이트리스트 → SET graph_path → Cypher 실행
+   ▼
+[④ Cytoscape.js 시각화]  노드 색 인코딩 · 확장/경로 UX · RDB 역추적 키(bridge_key) 표시
+</code></pre>
+<h3>5.2 컴포넌트 배치 (운영 기준)</h3>
+<pre><code> [수사관 브라우저]
+       │ HTTPS
+       ▼
+ ┌─ 운영 VM (Docker Compose) ──────────────────────────┐
+ │  nginx (TLS, 엔드포인트별 rate limit)                │
+ │    └─ Flask app (gunicorn CPU×2+1 workers)          │
+ │         ├─ routes: UI 39 · API v1 37 · admin 7 · read-only 3
+ │         └─ services 20종 (§6)                        │
+ │  AgensGraph (internal 네트워크 — 외부 미노출)         │
+ └───────────┬──────────────────────────────────────────┘
+             │ SSH 터널 (systemd 유닛, 자동복구)
+             ▼
+ [GPU 서버]  vLLM OpenAI-호환 서버 — qwen25-t2c-v42 (FP16, 15GB)
+             watchdog 15s 헬스체크, 장애 시 ~60s 자동 재기동
+ (별도) [학습 GPU]  RTX 5090 32GB — LLaMA-Factory 학습/병합 후 모델 전송
+</code></pre>
+<h3>5.3 기술 스택</h3>
+<table>
+<thead>
+<tr>
+<th>계층</th>
+<th>기술</th>
+<th>비고</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>프론트</td>
+<td>Cytoscape.js + dagre, Vanilla JS, Pretendard/FontAwesome</td>
+<td>전부 로컬 벤더링(CDN 미사용 — CSP·폐쇄망 대응)</td>
+</tr>
+<tr>
+<td>백엔드</td>
+<td>Flask 3.0 (Factory + Blueprint 4개), 서비스 레이어(classmethod 패턴)</td>
+<td>Python 3.10</td>
+</tr>
+<tr>
+<td>에이전트</td>
+<td>LangGraph 0.6 (상태그래프), openai SDK 2.x</td>
+<td>sLLM↔GPT-4o 폴백</td>
+</tr>
+<tr>
+<td>그래프 DB</td>
+<td>AgensGraph 2.13 (PostgreSQL 기반), psycopg2 커넥션 풀</td>
+<td>RDB+GDB 단일 인스턴스</td>
+</tr>
+<tr>
+<td>LLM 학습</td>
+<td>LLaMA-Factory, QLoRA 4bit(nf4), LoRA r=64/α=128</td>
+<td>RTX 5090 단일 GPU</td>
+</tr>
+<tr>
+<td>LLM 서빙</td>
+<td>vLLM (OpenAI-호환), systemd/watchdog 자가치유</td>
+<td>A100 MIG·RTX 6000 Ada 검증</td>
+</tr>
+<tr>
+<td>검색(RAG)</td>
+<td>자체 BM25(한글 bigram) + 임베딩 + RRF + LLM rerank</td>
+<td>신규 런타임 의존성 0</td>
+</tr>
+<tr>
+<td>인프라</td>
+<td>Docker Compose 3종, gunicorn+nginx, GitHub Actions CI</td>
+<td>폐쇄망 USB 번들 체계</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2>6. 코드 구조 (디렉토리 맵)</h2>
+<pre><code>coop_v1.0/
+├── app/                       # Flask 애플리케이션 (~17,500 LOC)
+│   ├── __init__.py            #   앱 팩토리: blueprint 등록, 보안헤더(CSP/HSTS), gzip
+│   ├── routes.py              #   UI·CRUD 39 엔드포인트 (질의/탐색/ETL/모델러/DB관리)
+│   ├── routes_api.py          #   파트너 API v1 37 엔드포인트 (전부 API 키 인증)
+│   ├── routes_admin.py        #   관리자 7 (로그인/대시보드/키 관리)
+│   ├── routes_graph_read.py   #   외부 read-only 조회 3 (쓰기 구문 차단)
+│   ├── database.py            #   커넥션 풀 + graph_path 화이트리스트 검증
+│   ├── middleware/
+│   │   ├── api_auth.py        #   API 키 인증(SHA-256, timing-safe, rate limit)
+│   │   └── services/ontology_service.py   # ★ 온톨로지 SSOT (2,226 LOC)
+│   ├── services/              #   서비스 레이어 20모듈 — 주요:
+│   │   ├── langgraph_agent.py #     Text2Cypher 에이전트 (8노드, 1,282 LOC)
+│   │   ├── ai_service.py      #     의도 라우터 + 엣지 방향 교정
+│   │   ├── graph_service.py   #     검색/확장/경로/허브/공범망 (1,510 LOC)
+│   │   ├── etl_service.py     #     CSV→그래프 적재
+│   │   ├── rdb_to_graph_service.py  # RDB 49테이블→POLE 변환 (2,148 LOC)
+│   │   ├── pattern_*.py, evidence_analyzer.py  # 사기패턴 8종·증거 분석
+│   │   ├── legal_rag_service.py     # 법률 RAG v2 (hybrid+RRF+rerank)
+│   │   ├── few_shot_router.py, schema_mapper.py, osint_v37_postprocess.py 등
+│   │   └── ontology_service.py      # (SSOT re-export shim)
+│   ├── templates/             #   index.html(워크벤치 7,000 LOC)·modeler·admin
+│   └── static/                #   tokens.css(디자인 토큰 SoT), vendor(로컬 벤더링)
+├── train/                     # 학습 설정 yaml 9종·실행/병합/업로드 스크립트·v3.7 학습셋
+├── data/                      # SFT 데이터셋 50+파일·시드 생성/증강 스크립트 26종·legal/ 코퍼스
+├── scripts/                   # 배포·적재·평가 유틸 (~50) — eval_legal_rag.py, deploy.sh, 백업 등
+├── benchmark_t2c_v2.py        # ★ 자체 벤치마크 하니스 (232문항 23카테고리)
+├── results/                   # 벤치마크 결과 JSON 아카이브 (버전별 18+)
+├── tests/                     # 테스트 25파일 (CI 오프라인 게이트 7파일 171개)
+├── docs/                      # 기술 문서 84건 (§15 지도 참조)
+├── deploy/                    # nginx/gunicorn 설정, 폐쇄망 템플릿, 배포 문서
+├── docker-compose{,.cslee,.airgap}.yml   # 로컬/운영/폐쇄망 3종
+└── age/                       # (벤더링) Apache AGE 소스 — 참조용 제3자 코드
+</code></pre>
+<p><strong>아키텍처 관례</strong>: routes는 얇게(검증·로깅), 로직은 <code>app/services/</code>의 classmethod 서비스에. 코드 수정은 항상 <code>app/services/</code>(활성본)에 한다. 온톨로지만 예외적으로 <code>app/middleware/services/ontology_service.py</code>가 SSOT이고 <code>app/services/ontology_service.py</code>는 호환용 re-export다.</p>
+<hr />
+<h2>7. AI 파이프라인 — 어떻게 만들어졌나</h2>
+<p>이 프로젝트의 심장. <strong>"공개 벤치마크도, 학습 데이터도 없는 도메인에서 특화 모델을 만드는 전 과정"</strong>을 자체 구축했다.</p>
+<h3>7.1 전체 루프</h3>
+<pre><code>온톨로지 정의(SSOT) ─▶ 학습 데이터 생성 ─▶ QLoRA 파인튜닝 ─▶ 벤치마크 평가
+      ▲                                                        │
+      └──── 온톨로지 개선 ◀── 약점 카테고리 진단 ◀───────────────┘
+                                    │
+                          타깃 시드 증강 → 재학습 (반복)
+</code></pre>
+<h3>7.2 학습 데이터 — 31,226샘플을 증강 비용 $0.11에</h3>
+<ul>
+<li><strong>하이브리드 생성</strong>: 온톨로지 템플릿 × 실 DB 값으로 규칙 시드 634개 생성 → GPT-4o-mini로 시드당 자연어 변형 8개(문체·동의어·어순, Cypher는 보존) → 5,700개 증강(비용 ~$0.11) → 기존 데이터 25,526개를 SQL-wrapped→Native Cypher로 일괄 정제</li>
+<li><strong>분포 설계</strong>: hop 수(0~4+, var-hop, shortestPath)별 비중을 의도적으로 배분, 13-stratum 층화 분할로 train 28,109 / eval 3,117 — <strong>eval 셋은 버전 간 고정</strong>(공정 비교)</li>
+<li><strong>포맷 교훈</strong>: ShareGPT 포맷 + qwen 템플릿 조합에서 assistant 응답이 label 마스킹되어 "eval_loss 0.0002인데 아무것도 학습 안 됨" 버그 발견 → OpenAI messages 포맷 전환으로 해결</li>
+<li><strong>학습·서빙 프롬프트 완전 일치</strong> 원칙: 온톨로지 스키마·금지 규칙을 시스템 프롬프트에 주입하며, 학습 때와 서빙 때 동일 프롬프트 사용</li>
+</ul>
+<h3>7.3 파인튜닝 — 단일 GPU 12회+ 사이클</h3>
+<p>RTX 5090(32GB) 한 장에서 QLoRA 4bit(nf4)로 7B 모델을 사이클당 4~7시간에 학습. 설정: LoRA r=64/α=128/dropout 0.05, target 7모듈(all-linear), lr 1e-4 cosine, 3 epochs, cutoff 1536.</p>
+<table>
+<thead>
+<tr>
+<th>버전</th>
+<th>전략</th>
+<th>결과(문항 수 기준)</th>
+<th>판정</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>DeepSeek-Coder-7B</td>
+<td>초기 검증</td>
+<td>—</td>
+<td>한국어 특화로 전환</td>
+</tr>
+<tr>
+<td>EXAONE-3.5-7.8B ×4</td>
+<td>10K~26K 샘플</td>
+<td>깨진 토큰</td>
+<td>❌ Blackwell GPU/transformers/custom code 호환성 → <strong>표준 아키텍처로 교체 결정</strong></td>
+</tr>
+<tr>
+<td>Qwen v37_v1</td>
+<td>ShareGPT 포맷</td>
+<td>eval_loss 0.0002(가짜)</td>
+<td>❌ label masking 버그</td>
+</tr>
+<tr>
+<td>Qwen v37_v2</td>
+<td>messages 전환</td>
+<td>42.8% (152문항)</td>
+<td>✅ 정상 학습 시작점</td>
+</tr>
+<tr>
+<td>v38</td>
+<td>약점 진단 시드 1,923</td>
+<td><strong>63.2% (+20.4p)</strong></td>
+<td>진단 기반 증강의 효율 입증</td>
+</tr>
+<tr>
+<td>v39 → v40</td>
+<td>보강 지속</td>
+<td>74.3%(202) → 81.5%(232)</td>
+<td>V4.0 대응</td>
+</tr>
+<tr>
+<td>v41</td>
+<td>회귀 특화 830</td>
+<td>79.3%</td>
+<td>트레이드오프 확인, 폐기</td>
+</tr>
+<tr>
+<td><strong>v42 + Router</strong></td>
+<td>v40 어댑터 위 균형 970 + 규칙 라우터</td>
+<td><strong>86.6% (201/232)</strong></td>
+<td>🏆 <strong>운영 표준</strong></td>
+</tr>
+<tr>
+<td>v43</td>
+<td>780 시드 단독 신규 학습</td>
+<td>60.8% (−60문항)</td>
+<td>❌ catastrophic forgetting — 부검 후 continue-learning 표준 수립</td>
+</tr>
+<tr>
+<td>v44 (계획)</td>
+<td>v42 어댑터 continue (lr 1/5, 1 epoch)</td>
+<td>목표 89~91%</td>
+<td>H2 로드맵</td>
+</tr>
+</tbody>
+</table>
+<p>참고 기준선: GPT-4o zero-shot(스키마 인컨텍스트) 95.4%. 7B 로컬 모델로 이 격차를 추적·축소하는 구조다.</p>
+<h3>7.4 평가 — 벤치마크를 직접 만들다 (<code>benchmark_t2c_v2.py</code>)</h3>
+<ul>
+<li>142→152→202→<strong>232문항, 23카테고리</strong>로 진화 (단일노드/1-hop 5종/체인/메타조건/v3.7 신규패턴/가드레일 등)</li>
+<li><strong>8종 자동 채점</strong>(규칙 기반): 쿼리 구조 → 컬럼 정합 → 노드/엣지 화이트리스트 → 기대 엣지 적중률 → 신규 엣지 정확도 → 쓰기 금지 → 거절 응답 매칭</li>
+<li><strong>카테고리별 회귀 게이트(−5p 차단)</strong>: "평균은 오르는데 특정 카테고리가 죽는" 문제를 시스템으로 방지. 전 결과는 <code>results/</code>에 JSON 아카이브</li>
+<li>핵심 교훈(문서화됨): <em>eval_loss가 낮다고 좋은 게 아니다 — 다양성 있는 holdout 벤치마크만이 진실</em></li>
+</ul>
+<h3>7.5 시스템 보정 — 학습 없이 올린 정확도</h3>
+<ul>
+<li><strong>규칙 기반 사전 Router</strong>: 모델이 약한 잡담/위험질의 분기를 정규식+캐시로 처리 → <strong>+5.6p (81.0→86.6%)</strong>, 부수 효과로 DDL·프롬프트 인젝션 차단. 보고서에는 "Router 개선분 ≠ 모델 실력"을 분리 명시</li>
+<li><strong>엣지 방향 자동 교정</strong>(POLE 규칙 40+), <strong>few-shot 동적 주입</strong>(약점 카테고리별 예시 top-k), 응답속도 스프린트(reflection 사전 차단 −3s, gzip −80.8%, 라벨 인덱스 18종으로 점 조회 10~100×)</li>
+</ul>
+<h3>7.6 서빙 — 제약 조건 엔지니어링</h3>
+<ul>
+<li><strong>CUDA 12.2 고정 드라이버의 A100 MIG</strong>에서 최신 vLLM이 동작 불가(torch 불일치) → <code>vllm 0.6.3.post1 + torch cu121 + transformers 4.46.3</code> <strong>버전 핀 레시피</strong> 확립 (<code>docs/VLLM_SETUP_GUIDE.md</code>)</li>
+<li><strong>자가치유</strong>: vLLM watchdog(15s 헬스체크, 장애 ~60s 자동복구) + SSH 터널 systemd 유닛(부팅 자동기동). 운영 함정 3종 문서화(pkill self-match, orphan worker의 GPU 점유, 포트 미해제)</li>
+<li>이기종 3환경(학습→서빙→운영 VM) 간 15GB 모델 전송·무결성 검증 파이프라인. 운영 체감: <strong>자연어→그래프 e2e 1.4초</strong>, sLLM 장애 시 GPT-4o 16초 내 자동 폴백</li>
+</ul>
+<hr />
+<h2>8. 온톨로지 — 도메인 데이터 모델</h2>
+<p><strong>SSOT</strong>: <code>app/middleware/services/ontology_service.py</code> (<code>KICSCrimeDomainOntology</code>) + 명세 문서 <code>docs/CCOP_ONTOLOGY_V4.0.md</code></p>
+<h3>8.1 구조: POLE 정렬 6계층, 25노드 / 53엣지 / 추론규칙 10종</h3>
+<table>
+<thead>
+<tr>
+<th>계층</th>
+<th>노드 예시</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Source</td>
+<td><code>vt_src</code> (데이터 출처)</td>
+</tr>
+<tr>
+<td>Case</td>
+<td><code>vt_case</code>(사건), <code>vt_petition</code>(진정서), <code>pt_cluster</code>(진정서 군집 허브)</td>
+</tr>
+<tr>
+<td>Person</td>
+<td><code>vt_psn</code>(인물, <code>is_anonymous</code> 성명불상 플래그), <code>vt_org</code>(조직)</td>
+</tr>
+<tr>
+<td>Object</td>
+<td><code>vt_bacnt</code>(계좌), <code>vt_telno</code>(전화), <code>vt_ip</code>, <code>vt_site</code>, <code>site_cluster</code>(피싱 캠페인 허브), <code>vt_file</code>, <code>vt_id</code>, <code>vt_email</code>, <code>vt_crypto</code>, <code>vt_dev</code>(단말, <code>relay_station</code> 중계기), <code>vt_atm</code>, <code>vt_vhcl</code>, <code>vt_impersonation</code>(사칭)</td>
+</tr>
+<tr>
+<td>Location</td>
+<td><code>vt_loc</code></td>
+</tr>
+<tr>
+<td>Event</td>
+<td><code>vt_transfer</code>(이체), <code>vt_call</code>(통화), <code>vt_msg</code>, <code>vt_access</code>, <code>vt_movement</code></td>
+</tr>
+</tbody>
+</table>
+<h3>8.2 버전 진화 (설계가 어떻게 발전했나)</h3>
+<ul>
+<li><strong>V2 (2월)</strong>: Case→Actor→Action→Evidence 4-Layer 인지 모델, KICS 표준 정렬 (이 4계층 모델은 현재 CSV 자동매핑용으로 존속)</li>
+<li><strong>V3.3~3.6</strong>: POLE 6계층 재편, 사칭을 엣지에서 노드로 승격(법 조문 반영), 23노드/52엣지</li>
+<li><strong>V3.7 (핵심 리모델링)</strong>: 진정서 군집·피싱 캠페인을 표현하던 <code>clusters_with</code> <strong>O(n²) 엣지를 폐기</strong>하고 허브 노드(<code>pt_cluster</code>/<code>site_cluster</code>)로 재설계 — 캠페인은 HTML <strong>SimHash 지문 + UnionFind</strong>로 군집화. 불법중계기 추론 규칙(IMEI 공유 전화 3대+) 등 수사 실무 패턴을 스키마화 → 25/53</li>
+<li><strong>V4.0 (통합 SSOT)</strong>: 도메인 사용 매트릭스·노드 식별자 표준·시각화 표준(L5)·추론 규칙을 메타로 격상. 학습 데이터·ETL·시각화·문서가 전부 이 단일 정의를 참조</li>
+<li>설계 근거 연구: RDF/OWL 대비 property graph 채택 분석, 상용 수사 도구(IBM i2) 비교 분석</li>
+</ul>
+<hr />
+<h2>9. 데이터 적재 파이프라인</h2>
+<pre><code>[원천]                [변환]                              [그래프]
+금융/통신/수사 CSV ──▶ LLM 컬럼→온톨로지 매핑 제안        ──▶ 배치 MERGE 적재
+KICS RDB 49테이블 ──▶ rdb_to_graph_service (POLE 매핑,      + V4.0 메타 자동 주입
+OSINT 크롤 데이터 ──▶  증거등급 evid_grade·출처 tier 주입)    (노드 6컬럼/엣지 4컬럼)
+                          │                                   │
+                    StandardCodeMapper                   추론 규칙 적용
+                    (금결원 은행코드·통신사·해시 표준화)   (허브 노드 생성 등 10종)
+</code></pre>
+<ul>
+<li>대용량: GIN 인덱스 + 청크 배치 적재. 실적: <code>osint_ontology</code> 그래프 <strong>689만 노드/1,094만 엣지</strong> 적재·운영 (상시 적재 파이프라인은 H2 계획)</li>
+<li><strong>RDB 역추적성</strong>: 그래프 노드마다 <code>bridge_key</code>(원천 테이블/PK)를 유지 — 시각화에서 원천 데이터로 되돌아갈 수 있다 (증거 무결성 관점)</li>
+</ul>
+<hr />
+<h2>10. 보안 설계</h2>
+<p>수사 데이터라는 특성상 <strong>fail-closed</strong>(설정 누락 시 잠김)가 원칙이다.</p>
+<table>
+<thead>
+<tr>
+<th>층</th>
+<th>구현</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>입력 검증</td>
+<td><code>graph_path</code> 화이트리스트 정규식(<code>^[a-zA-Z_][a-zA-Z0-9_]*$</code>) 전 경로 강제 — SQL injection 차단</td>
+</tr>
+<tr>
+<td>쿼리 가드</td>
+<td>생성 Cypher의 쓰기명령(DELETE/SET/MERGE/DROP…) 다층 차단: 라우터 GUARD → LangGraph 검증 → 외부 read-only API 자체 필터</td>
+</tr>
+<tr>
+<td>프롬프트 인젝션</td>
+<td>"이전 지시 잊어" 류 패턴 사전 차단 (Router)</td>
+</tr>
+<tr>
+<td>인증</td>
+<td>파트너 API 키 SHA-256 저장 + <code>hmac.compare_digest</code>(timing-safe) + fcntl 파일락, Bearer(기관별)와 X-API-Key(조회 토큰) 이원화</td>
+</tr>
+<tr>
+<td>시크릿</td>
+<td><code>SECRET_KEY</code>/<code>ADMIN_PASSWORD</code> 미설정 시 <strong>기동 차단/기능 비활성</strong> — 기본값 백도어 없음</td>
+</tr>
+<tr>
+<td>전송·헤더</td>
+<td>nginx TLS 강제(HTTP→301), HSTS/CSP/X-Frame-Options, 엔드포인트별 차등 rate limit (LLM 경로 10r/m 등)</td>
+</tr>
+<tr>
+<td>네트워크</td>
+<td>운영 compose는 DB를 <code>internal</code> 네트워크에 격리(외부 미노출), 클라우드 방화벽 소스 IP 화이트리스트</td>
+</tr>
+<tr>
+<td>감사</td>
+<td>전 자연어 질의 감사 로그(TB_AUDIT_LOG), 쿼리 로깅 커서</td>
+</tr>
+<tr>
+<td>검증</td>
+<td>위 항목들이 보안 테스트 27개로 회귀 고정 (CI 게이트)</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2>11. 배포와 운영 (3개 환경)</h2>
+<table>
+<thead>
+<tr>
+<th>환경</th>
+<th>Compose</th>
+<th>특징</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>로컬 개발</td>
+<td><code>docker-compose.yml</code></td>
+<td>소스 volume mount, <code>python run.py</code>(:5002) 또는 docker(:5001)</td>
+</tr>
+<tr>
+<td>인터넷 운영 VM</td>
+<td><code>docker-compose.cslee.yml</code></td>
+<td>app+DB+nginx 3컨테이너, DB internal 격리, 헬스체크, 수동 배포(<code>scripts/deploy.sh</code>, 자동 롤백)</td>
+</tr>
+<tr>
+<td><strong>폐쇄망(air-gap)</strong></td>
+<td><code>docker-compose.airgap.yml</code></td>
+<td>사전 빌드 이미지 반입(app은 build 대신 image), sLLM은 <code>--profile gpu</code>로 분리</td>
+</tr>
+</tbody>
+</table>
+<p><strong>폐쇄망 설치 체계</strong> (<code>docs/AIRGAP_VISIT_INSTALL_RUNBOOK.md</code>, 374줄 현장 런북):
+- <strong>1차/2차 위상 분리</strong>: 리스크 낮은 인프라(Docker+DB+앱+nginx, ~4-5GB 번들)를 먼저, 리스크 높은 GPU 스택(드라이버+vLLM+모델, ~30GB)을 나중에 — LLM 없이도 앱이 정상 기동하는 구조(lazy client) 덕분에 가능
+- USB(exFAT) 반입 + <code>sha256sum -c</code> 무결성 검증, 대상 하드웨어 RTX 6000 Ada ×8(NVLink 부재 → tensor-parallel 미사용 판단), 1차↔2차 전환은 <code>.env</code> 세 줄
+- Docker 이미지 다이어트: 죽은 의존성 제거 근거를 문서화하며 <strong>7.8GB→~1GB</strong></p>
+<p>운영 현황: 클라우드 VM에서 3컨테이너 healthy 가동, 그래프 9개(운영 기본 <code>tccop_graph_v6</code>), 사내 vLLM 서빙으로 외부 API 의존 없이 e2e 동작.</p>
+<hr />
+<h2>12. 품질 관리 (테스트·CI·벤치마크)</h2>
+<ul>
+<li><strong>테스트</strong>: 25파일, 테스트 함수 190여 개. 이 중 <strong>CI 오프라인 게이트 171개</strong>(DB/LLM/네트워크 불필요 — 순수 함수와 mock으로 설계): 보안 27 · 패턴/네트워크 27 · API 영속화 25 · 온톨로지 무결성 24 · T2C 헬퍼 20 · ETL 메타 14 · 법률 RAG 34</li>
+<li><strong>알려진 버그의 회귀 고정</strong>: 실제 발견된 버그(같은 라벨 필수노드 붕괴)를 <code>xfail(strict)</code>로 기록 — 고치면 테스트가 알려주는 구조</li>
+<li><strong>CI</strong> (<code>.github/workflows/deploy.yml</code>): dev push/PR마다 ① 온톨로지 SSOT import 무결성 ② 앱 팩토리 기동 ③ 게이트 pytest. 배포(CD)는 의도적으로 수동(런북 기반)</li>
+<li><strong>모델 품질</strong>: §7.4의 232문항 벤치마크 + 카테고리 회귀 게이트가 모델 릴리스의 게이트 역할. 결과 JSON은 <code>results/</code>에 버전별 아카이브되어 보고서와 1:1 대응</li>
+<li><strong>문서 문화</strong>: 설계 결정마다 근거 문서(84건) — 온톨로지 버전별 설계서, 모델 세대별 평가 보고서, 실패 부검(FINAL_REPORT §4), 운영 함정 기록</li>
+</ul>
+<hr />
+<h2>13. 개발 타임라인</h2>
+<table>
+<thead>
+<tr>
+<th>시기</th>
+<th>마일스톤</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>2026.01</td>
+<td>플랫폼 v1: Flask+AgensGraph+Cytoscape.js, ETL, API 키 인증, 법률 RAG v1(ChromaDB — 이후 제거)</td>
+</tr>
+<tr>
+<td>02</td>
+<td>온톨로지 V2(4-Layer)·KICS 표준화·RDB 표준화, 멀티홉 정밀 확장, 초기 파인튜닝 실험(DeepSeek)</td>
+</tr>
+<tr>
+<td>03–04</td>
+<td>성능/부하 테스트, vLLM 서빙 벤치마크, EXAONE 학습 시리즈, 벤치마크 v3.2 자동화</td>
+</tr>
+<tr>
+<td>05</td>
+<td><strong>집중 연구기</strong>: V3.7 온톨로지 리모델링 → 31,226샘플 구축 → EXAONE 실패 부검·Qwen 전환 → label masking 버그 발견 → v38/v39 → V4.0 SSOT → v40~v43 사이클 → catastrophic forgetting 부검</td>
+</tr>
+<tr>
+<td>06</td>
+<td><strong>v42+Router 86.6% 운영 표준 확정</strong>, 사내 vLLM 자체 서빙 전환+자가치유, 운영 VM e2e(1.4s), 폐쇄망 1차 자산+런북, H2 연구계획</td>
+</tr>
+<tr>
+<td>07</td>
+<td>보안 하드닝(Phase 0-3)·디자인 토큰 SoT·분석 테스트+CI 게이트 (PR 워크플로 전환), <strong>법률 RAG v2 재구축</strong>(hybrid+RRF+rerank+평가 체계)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>진행 중(H2 2026 계획)</strong>: v44 continue-learning(목표 92%+), 온톨로지 SoT 단일화, OSINT 상시 적재(100만 건/h), agentic 분석 고도화, 폐쇄망 production 배포 — <code>docs/H2_2026_RESEARCH_PLAN.md</code></p>
+<hr />
+<h2>14. 빠른 시작</h2>
+<pre><code class="language-bash"># 1) 로컬 실행
+pip install -r requirements.txt
+cp .env.example .env        # DB_*, OPENAI_API_KEY (또는 SLLM_ENDPOINT) 설정
+python run.py               # http://localhost:5002
+
+# 2) Docker
+docker-compose up -d        # app:5001, agensgraph:5432
+
+# 3) 테스트 (오프라인 게이트)
+pytest -q tests/test_security.py tests/test_pattern_network_analysis.py tests/test_legal_rag.py  # 등 7파일
+
+# 4) 모델 벤치마크 (vLLM 서빙 중일 때)
+python benchmark_t2c_v2.py --endpoint http://&lt;vllm&gt;:8000/v1 --mode t2c_v37
+
+# 5) 법률 RAG 코퍼스 적재/평가
+python scripts/ingest_legal_corpus.py --dry-run
+python scripts/eval_legal_rag.py --mock-embeddings
+</code></pre>
+<p>환경변수: 필수 <code>DB_NAME/DB_USER/DB_PASSWORD/DB_HOST/DB_PORT</code>, LLM은 <code>OPENAI_API_KEY</code> 또는 <code>SLLM_ENDPOINT/SLLM_MODEL_NAME</code>(온프레미스), 선택 <code>EMBEDDING_ENDPOINT/EMBEDDING_MODEL_NAME/RAG_RERANK</code>(법률 RAG). 보안 필수값(<code>SECRET_KEY</code>/<code>ADMIN_PASSWORD</code>)은 미설정 시 fail-closed.</p>
+<hr />
+<h2>15. 더 읽을 문서 지도</h2>
+<table>
+<thead>
+<tr>
+<th>주제</th>
+<th>시작점</th>
+<th>심화</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>온톨로지</td>
+<td><code>CCOP_ONTOLOGY_V4.0.md</code> (현행 명세)</td>
+<td><code>ONTOLOGY_FINAL_ARCHITECTURE_v3.7.md</code>(설계서), <code>NODE_EDGE_REFERENCE.md</code>, <code>SEMANTIC_INFERENCE_RULES.md</code>, <code>RDF_OWL_ANALYSIS.md</code></td>
+</tr>
+<tr>
+<td>Text2Cypher 모델</td>
+<td><code>T2C_V40_V41_V42_FINAL_REPORT_20260529.md</code> (최종 비교+실패 부검)</td>
+<td><code>TEXT2CYPHER_V37_EVAL_REPORT.md</code>, <code>T2C_SFT_DEVELOPMENT_PLAN.md</code>, <code>MODEL_TRAINING_GUIDE.md</code></td>
+</tr>
+<tr>
+<td>서빙/GPU</td>
+<td><code>VLLM_SETUP_GUIDE.md</code></td>
+<td><code>CHECKPOINT_20260616.md</code> (운영 전환 기록, 자가치유 검증)</td>
+</tr>
+<tr>
+<td>배포·운영</td>
+<td><code>VM_DEPLOY_OPERATIONS_GUIDE.md</code></td>
+<td><code>AIRGAP_VISIT_INSTALL_RUNBOOK.md</code>, <code>AIRGAP_DEPLOY_GUIDE.md</code>, <code>DEV_WORKFLOW.md</code></td>
+</tr>
+<tr>
+<td>외부 연동 API</td>
+<td><code>API_GUIDE.md</code>, <code>EXTERNAL_CYPHER_QUERY_HOWTO.md</code></td>
+<td><code>EXTERNAL_GRAPH_QUERY_GUIDE.md</code>, <code>PARTNER_ONBOARDING.md</code>, <code>PARTNER_DATA_STANDARD.md</code></td>
+</tr>
+<tr>
+<td>데이터/RDB</td>
+<td><code>DATABASE_ARCHITECTURE.md</code>, <code>V40_RDB_TO_GRAPH_MAPPING.md</code></td>
+<td><code>RDB_STANDARDIZATION_v3.6.md</code>, <code>OSINT_INGESTION_PIPELINE_DESIGN.md</code></td>
+</tr>
+<tr>
+<td>법률 RAG</td>
+<td><code>LEGAL_RAG_V2_DESIGN.md</code></td>
+<td>—</td>
+</tr>
+<tr>
+<td>로드맵</td>
+<td><code>H2_2026_RESEARCH_PLAN.md</code></td>
+<td><code>IMPROVEMENT_PLAN.md</code>, <code>05_OPEN_ISSUES.md</code></td>
+</tr>
+<tr>
+<td>경쟁/포지셔닝</td>
+<td><code>I2_COMPARISON_ANALYSIS.md</code> (IBM i2 대비)</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2>16. 용어집</h2>
+<table>
+<thead>
+<tr>
+<th>용어</th>
+<th>뜻</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>KICS</strong></td>
+<td>형사사법정보시스템 — 한국 형사사법 표준 데이터 체계. 온톨로지가 이 표준의 용어·코드에 정렬됨</td>
+</tr>
+<tr>
+<td><strong>POLE</strong></td>
+<td>Person·Object·Location·Event — 수사 데이터 모델링의 국제 관행. 본 프로젝트는 +Source·Case 6계층</td>
+</tr>
+<tr>
+<td><strong>Cypher</strong></td>
+<td>그래프 DB 질의 언어 (<code>MATCH (a)-[r]-&gt;(b) RETURN ...</code>). AgensGraph는 이를 SQL로 감싸 실행</td>
+</tr>
+<tr>
+<td><strong>vt_</strong><em> / pt_</em></td>
+<td>그래프 노드 라벨 접두어 (예: <code>vt_bacnt</code> 계좌, <code>vt_psn</code> 인물, <code>pt_cluster</code> 진정서 군집 허브)</td>
+</tr>
+<tr>
+<td><strong>Text2Cypher (T2C)</strong></td>
+<td>자연어→Cypher 자동 변환 과제. 이 프로젝트의 AI 핵심</td>
+</tr>
+<tr>
+<td><strong>sLLM</strong></td>
+<td>온프레미스에서 도는 소형 특화 LLM. 본 프로젝트는 Qwen2.5-7B 파인튜닝 (<code>qwen25-t2c-v42</code>)</td>
+</tr>
+<tr>
+<td><strong>SFT / LoRA / QLoRA</strong></td>
+<td>지도 파인튜닝 / 저랭크 어댑터 학습(원본 동결) / 4bit 양자화+LoRA — 32GB GPU에서 7B 학습을 가능케 한 조합</td>
+</tr>
+<tr>
+<td><strong>Router</strong></td>
+<td>LLM 호출 전 규칙(정규식)으로 잡담·위험질의를 차단하는 사전 분기기 — 정확도 +5.6p, 가드레일</td>
+</tr>
+<tr>
+<td><strong>Reflection</strong></td>
+<td>쿼리 실행 실패 시 오류를 피드백으로 재생성하는 자가수정 루프 (LangGraph)</td>
+</tr>
+<tr>
+<td><strong>RRF</strong></td>
+<td>Reciprocal Rank Fusion — BM25와 벡터 검색의 순위를 무튜닝으로 융합하는 방법 (법률 RAG)</td>
+</tr>
+<tr>
+<td><strong>SSOT</strong></td>
+<td>Single Source of Truth — 온톨로지 정의가 코드 한 곳에 있고 전 시스템이 참조하는 원칙</td>
+</tr>
+<tr>
+<td><strong>Air-gap (폐쇄망)</strong></td>
+<td>인터넷과 물리적으로 분리된 망. USB 반입 설치·외부 API 0 동작이 요구사항</td>
+</tr>
+<tr>
+<td><strong>bridge_key</strong></td>
+<td>그래프 노드에 새겨 둔 원천 RDB 테이블/PK — 시각화에서 원본 데이터로 역추적하는 키</td>
+</tr>
+<tr>
+<td><strong>catastrophic forgetting</strong></td>
+<td>파인튜닝 시 새 지식이 기존 능력을 덮어쓰는 현상. v43 실패의 원인이자 continue-learning 표준의 배경</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<p><em>이 문서는 리포 실측 조사(2026-07) 기준이며, 수치가 코드와 어긋나면 코드가 우선한다. 갱신 시 §1 표와 §13 타임라인을 함께 갱신할 것.</em></p></body></html>
