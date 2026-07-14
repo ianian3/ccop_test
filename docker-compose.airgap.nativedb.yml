@@ -1,0 +1,110 @@
+# ============================================================
+# CCOP v1.0 — 폐쇄망 배포 (네이티브 DB 시나리오)
+#
+#   현장에 AgensGraph 16.9 가 베어메탈로 선설치된 경우 사용한다
+#   (2026-07-14 경찰청 폐쇄망 작업일지 확인 — deploy/AIRGAP_SITE_DB_LOG_20260714.md).
+#   → DB 컨테이너 없음. app 이 host-gateway 로 호스트의 5333 포트에 접속.
+#
+#   1차(인프라):  docker compose -f docker-compose.airgap.nativedb.yml up -d
+#                 → app + nginx  (DB는 네이티브, sllm 제외)
+#   2차(GPU+T2C): .env 의 SLLM_ENDPOINT / SLLM_MODEL_NAME / VLLM_TAG 설정 후
+#                 docker compose -f docker-compose.airgap.nativedb.yml --profile gpu up -d
+#                 docker compose -f docker-compose.airgap.nativedb.yml up -d app
+#
+#   사전 조건(DBA 협의):
+#     - 네이티브 DB 가동: pg_isready -p 5333
+#     - pg_hba.conf 에 docker 브리지 대역 허용 (예: 172.17.0.0/16 → md5)
+#     - 앱 전용 DB/계정 준비 (권장: CREATE DATABASE tccopdb OWNER ccop)
+#
+#   ⚠️ DB까지 컨테이너로 세우는 폴백 시나리오는 docker-compose.airgap.yml 사용.
+# ============================================================
+
+services:
+
+  # ── 1. Flask 앱 (사전 반입 이미지, 네이티브 DB 접속) ──────
+  app:
+    image: ccop_app:1.0            # 폐쇄망: docker load 한 이미지 사용 (build 없음)
+    container_name: ccop_app
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # 컨테이너 → 호스트(네이티브 DB) 접속 경로
+    environment:
+      DB_NAME:     ${DB_NAME:-tccopdb}
+      DB_USER:     ${DB_USER:-ccop}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_HOST:     ${DB_HOST:-host.docker.internal}   # 네이티브 DB
+      DB_PORT:     ${DB_PORT:-5333}                   # 현장 작업일지 기준 포트
+
+      # LLM — 1차: 비움(자연어 질의만 유예) / 2차: .env 에서 SLLM_* 설정
+      SLLM_ENDPOINT:   ${SLLM_ENDPOINT:-}
+      SLLM_MODEL_NAME: ${SLLM_MODEL_NAME:-}
+      # OPENAI_API_KEY 는 폐쇄망 미사용 (설정 시 자연어 질의 401 유발하므로 주입하지 않음)
+
+      SECRET_KEY:     ${SECRET_KEY}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      FLASK_ENV:      production
+      CORS_ORIGINS:   ${CORS_ORIGINS:-http://localhost}
+      DEFAULT_GRAPH_PATH: ${DEFAULT_GRAPH_PATH:-tccop_graph_v6}
+    ports:
+      - "5001:5001"          # nginx 우회 직접 접근용 (불필요 시 주석)
+    volumes:
+      - ./logs:/app/logs
+      - ./data:/app/data
+    networks:
+      - ccop_net
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5001/api/v1/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    restart: unless-stopped
+
+  # ── 2. Nginx 리버스 프록시 ────────────────────────────────
+  nginx:
+    image: nginx:alpine
+    container_name: ccop_nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/nginx.cslee.conf:/etc/nginx/nginx.conf:ro
+      - ./deploy/ssl:/etc/nginx/ssl:ro          # cert.pem / key.pem
+      - ./app/static:/usr/share/nginx/html/static:ro
+    depends_on:
+      - app
+    networks:
+      - ccop_net
+    restart: unless-stopped
+
+  # ── 3. sLLM (vLLM) — 2차에서만 기동 (profile: gpu) ────────
+  #   ⚠️ RTX 6000 Ada 는 NVLink 미지원 → tensor-parallel-size 1
+  #   ⚠️ VLLM_TAG 권장 고정값: v0.6.3.post1 (운영 검증 레시피 동일 버전)
+  sllm:
+    image: vllm/vllm-openai:${VLLM_TAG:-latest}
+    container_name: ccop_sllm
+    profiles: ["gpu"]
+    runtime: nvidia
+    environment:
+      - CUDA_VISIBLE_DEVICES=0
+    command: >
+      --model /models/qwen25-t2c-v42
+      --served-model-name qwen25-t2c-v42
+      --tensor-parallel-size 1
+      --host 0.0.0.0 --port 8000
+      --max-model-len 16384 --gpu-memory-utilization 0.9
+      --chat-template /models/qwen25-t2c-v42/chat_template.jinja
+    volumes:
+      - ./model/qwen25-t2c-v42:/models/qwen25-t2c-v42:ro
+    networks:
+      - ccop_net
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped
+
+networks:
+  ccop_net:                  # app ↔ nginx ↔ sllm (DB는 호스트 네이티브라 네트워크 불요)
+    driver: bridge

@@ -90,4 +90,22 @@ NVIDIA local-repo rpm(rhel10) + nvidia-container-toolkit rpm 수집 → SHA256SU
 
 ---
 
+## 5. 🔔 현장 DB 선설치 반영 (2026-07-14 작업일지 접수)
+
+현장 폐쇄망 VM에 **AgensGraph 16.9 네이티브 선설치 확인** (포트 5333, Rocky 10.1, shared_buffers 32GB 튜닝 완료) — 상세: [`AIRGAP_SITE_DB_LOG_20260714.md`](AIRGAP_SITE_DB_LOG_20260714.md)
+
+**계획 변경**: 1차 설치는 **시나리오 A(네이티브 DB)** 가 기본 — `docker-compose.airgap.nativedb.yml` 사용, DB 컨테이너 미기동. agensgraph 이미지는 **폴백(시나리오 B) 보험으로 번들에 유지**(~수백MB). `.env` 템플릿은 `DB_HOST=host.docker.internal / DB_PORT=5333` 기본값으로 갱신됨.
+
+**신규 검증 항목 (V1~V5, 현장 전 staging 리허설 권장)**:
+
+- [ ] **V1 문법 호환**: 앱 Cypher 계층(`SET graph_path`·`cypher()` 래핑) ↔ AgensGraph 16.9 — 1차 검증의 '직접 Cypher 입력'으로 최우선 확인
+- [ ] **V2 Extensions**: 작업일지 Extensions **공란** — 그래프 카탈로그·`uuid-ossp` 가용 여부 `\dx` 확인, 부족 시 DBA에 설치 요청
+- [ ] **V3 덤프 호환**: 운영 덤프(2.13/PG13) → 16.9 복원 리허설. **실패 시 플랜 B**: 원천 CSV 반입 → 앱 ETL 재적재 (번들 db/ 에 CSV 세트 동봉 권장)
+- [ ] **V4 DB·계정 정책**: `tccopdb` 신설 + 앱 전용 `ccop` 계정 (슈퍼유저 `hlucyber` 앱 사용 금지) — DBA 협의
+- [ ] **V5 접근 경로**: `listen_addresses`·`pg_hba.conf`에 docker 브리지 대역 허용 — DBA 협의
+
+**보안 지적 (고객사 전달)**: 기본 비밀번호 사용 중(일반/슈퍼유저) → 즉시 변경 권고. Archive Mode=No → 백업 정책 별도 수립.
+
+---
+
 *이 문서는 준비 진행에 따라 체크박스를 갱신한다. 기술 상세는 전부 런북을 따르고, 여기는 상태 추적만 담당.*
