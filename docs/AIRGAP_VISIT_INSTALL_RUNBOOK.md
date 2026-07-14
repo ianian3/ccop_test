@@ -5,7 +5,14 @@
 >
 > 폐쇄망 일반 원리는 [`AIRGAP_DEPLOY_GUIDE.md`](AIRGAP_DEPLOY_GUIDE.md), 인터넷 운영 VM 런북은 [`VM_DEPLOY_OPERATIONS_GUIDE.md`](VM_DEPLOY_OPERATIONS_GUIDE.md) 참고.
 >
-> **최종 갱신: 2026-07-01**
+> **최종 갱신: 2026-07-14** (번들 자동화·vLLM 태그 확정 + **현장 DB 선설치 반영**)
+>
+> 🔔 **2026-07-14 현장 작업일지 접수**: 대상 폐쇄망 VM에 **AgensGraph 16.9가 네이티브(베어메탈)로 선설치됨** (포트 5333, Rocky 10.1, DBA 튜닝 완료 — [`deploy/AIRGAP_SITE_DB_LOG_20260714.md`](../deploy/AIRGAP_SITE_DB_LOG_20260714.md)). 이에 따라 두 시나리오로 분기한다:
+>
+> | 시나리오 | DB | compose 파일 | 비고 |
+> |---|---|---|---|
+> | **A (현장 기본)** | 네이티브 AgensGraph 16.9 (호스트 :5333) | `docker-compose.airgap.nativedb.yml` | DB 컨테이너·이미지 불필요. **호환 검증 V1~V5 필수** (preflight §5) |
+> | B (폴백) | 컨테이너 (bitnine/agensgraph:v2.13.2) | `docker-compose.airgap.yml` | A 의 호환 검증 실패 시 즉시 전환 — agensgraph 이미지는 보험으로 번들에 유지 |
 
 ---
 
@@ -31,6 +38,10 @@
 | `docker-compose.airgap.yml` | 폐쇄망 전용 컴포즈. app은 `image: ccop_app:1.0`(빌드 안 함), sllm은 `profile: gpu`(2차만) |
 | `deploy/.env.airgap.phase1.template` | 1차 환경변수 템플릿 (LLM 미설정) |
 | `scripts/gen_selfsigned_cert.sh` | nginx용 자체서명 인증서(`cert.pem`/`key.pem`) 생성 |
+| `scripts/build_airgap_bundle.sh` | **1차 번들 자동 생성기** — §2 전 과정(이미지 빌드/save·rpm 수집·DB 덤프·인증서·소스 tar·체크섬) 자동화 |
+| `Dockerfile.airgap` + `requirements.airgap.txt` | 폐쇄망 슬림 앱 이미지(RAG/torch 미포함, ~1GB) — 번들 스크립트가 존재 시 자동 사용 |
+| `docker-compose.airgap.nativedb.yml` | **시나리오 A(네이티브 DB) 전용 컴포즈** — app+nginx(+sllm profile)만, host-gateway 로 호스트 :5333 접속 |
+| `deploy/AIRGAP_SITE_DB_LOG_20260714.md` | 현장 DB 선설치 작업일지 정리 + 신규 검증 항목 V1~V5 |
 
 > ⚠️ 기존 `docker-compose.cslee.yml`은 **인터넷 운영(skai2_vm)용**이므로 폐쇄망에서 쓰지 않는다.
 
@@ -74,6 +85,14 @@
 ## 2. staging에서 1차 번들 준비 (인터넷 O · linux/amd64)
 
 작업 루트: `~/ccop_bundle_p1/`
+
+> **자동화**: §2.1~2.6 전 과정은 스크립트 하나로 대체된다 (아래 수동 절차는 이해·복구용 레퍼런스).
+>
+> ```bash
+> PGPASSWORD='<db비번>' bash scripts/build_airgap_bundle.sh    # --skip-db --skip-rpm --out DIR (--help 참고)
+> ```
+>
+> 앱 이미지는 `Dockerfile.airgap`(슬림 ~1GB)이 있으면 **자동 선택**된다.
 
 ### 2.1 앱 이미지 빌드 → save
 
@@ -201,11 +220,25 @@ ls deploy/ssl/cert.pem deploy/ssl/key.pem || bash scripts/gen_selfsigned_cert.sh
 
 > `docker-compose.airgap.yml`은 app이 이미 `image: ccop_app:1.0`이고 sllm이 `profile: gpu`라 **1차엔 편집 없이 그대로 사용**한다.
 
-### 4.5 DB 기동 + 복원
+### 4.5 DB 준비 + 복원
+
+**시나리오 A — 네이티브 AgensGraph 16.9 (현장 기본)**
+
+```bash
+# DBA 협의/확인 (필수): ① pg_isready -p 5333  ② pg_hba.conf 에 docker 브리지 대역 허용
+#   ③ 앱 전용 DB/계정:  createdb -p 5333 tccopdb  +  CREATE USER ccop ... OWNER 지정
+gunzip -k /opt/ccop_bundle/db/tccopdb.dump.gz
+pg_restore -h localhost -p 5333 -U hlucyber -d tccopdb --clean --if-exists \
+    /opt/ccop_bundle/db/tccopdb.dump          # ⚠️ V3 검증: 구버전(2.13) 덤프 → 16.9 복원
+psql -p 5333 -U ccop -d tccopdb -c "SELECT 1"  # 앱 계정 접속 확인
+# 복원 실패(카탈로그 비호환) 시 → 플랜 B: 원천 CSV 반입분을 앱 ETL 로 재적재 (preflight §5 V3)
+```
+
+**시나리오 B — 컨테이너 DB (폴백)**
 
 ```bash
 docker compose -f docker-compose.airgap.yml up -d agensgraph
-docker compose -f docker-compose.airgap.yml logs -f agensgraph   # "initialization complete" (init_db.sh 가 AGE extension 생성)
+docker compose -f docker-compose.airgap.yml logs -f agensgraph   # "initialization complete" (init_db.sh 가 확장 생성)
 
 gunzip -k /opt/ccop_bundle/db/tccopdb.dump.gz
 docker cp /opt/ccop_bundle/db/tccopdb.dump ccop_agensgraph:/tmp/dump.dump
@@ -218,8 +251,12 @@ docker exec -it ccop_agensgraph psql -U ccop -d tccopdb \
 ### 4.6 app + nginx 기동
 
 ```bash
-docker compose -f docker-compose.airgap.yml up -d       # agensgraph + app + nginx (sllm 제외)
-docker compose -f docker-compose.airgap.yml ps          # 전부 healthy
+# 시나리오 A (네이티브 DB):
+docker compose -f docker-compose.airgap.nativedb.yml up -d   # app + nginx
+docker compose -f docker-compose.airgap.nativedb.yml ps      # 전부 healthy
+
+# 시나리오 B (폴백):
+docker compose -f docker-compose.airgap.yml up -d            # agensgraph + app + nginx
 ```
 
 ### 4.7 ✅ 1차 검증 체크리스트
@@ -230,6 +267,7 @@ docker compose -f docker-compose.airgap.yml ps          # 전부 healthy
 - [ ] 그래프 **검색 / 노드 확장 / 경로탐색** 동작
 - [ ] **직접 Cypher 입력** 실행 → 결과 반환
 - [ ] 모델러에서 수동 노드/엣지 생성·편집
+- [ ] (선택 — 법률 RAG 포함 소스일 때) `docker exec ccop_app python scripts/ingest_legal_corpus.py --no-embed` → `/api/v1/legal/status`에서 BM25-only 적재 확인
 - [ ] 자연어 질의창은 **의도적으로 미동작** (2차 예정 — 운영자 안내)
 - [ ] 전 과정 **외부 호출 0건** (폐쇄망 내부 완결)
 
@@ -244,9 +282,12 @@ docker compose -f docker-compose.airgap.yml ps          # 전부 healthy
 ```bash
 mkdir -p ~/ccop_bundle_p2/{images,model,nvidia}
 
-# vLLM 이미지 — 폐쇄망 GPU 드라이버 CUDA 와 호환되는 태그 고정 (latest 금지)
-docker pull vllm/vllm-openai:<cuda호환태그>
-docker save vllm/vllm-openai:<cuda호환태그> -o ~/ccop_bundle_p2/images/vllm_openai.tar
+# vLLM 이미지 — 태그 고정 (latest 금지). 권장: v0.6.3.post1
+#   근거: 운영 검증 서빙 레시피(vllm 0.6.3.post1 + transformers 4.46.x + --chat-template 명시)와
+#   동일 버전. cu121 빌드라 R530+ 드라이버(폐쇄망 신규 드라이버 포함)에서 동작.
+#   다른 태그를 쓰려면 staging GPU에서 모델 로드+추론 1회 검증 후 반입할 것.
+docker pull vllm/vllm-openai:v0.6.3.post1
+docker save vllm/vllm-openai:v0.6.3.post1 -o ~/ccop_bundle_p2/images/vllm_openai.tar
 
 # T2C 모델 풀웨이트 (~15GB)
 rsync -av ai-kyw-dev@192.168.1.133:.../qwen25_t2c_v42_v1_merged/ \
