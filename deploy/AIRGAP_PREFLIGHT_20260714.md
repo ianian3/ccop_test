@@ -1,0 +1,93 @@
+# 폐쇄망 방문설치 — 사전 준비 상태 점검 (2026-07-14)
+
+**목적**: 방문설치 D-day 전에 "무엇이 준비됐고, 무엇이 남았는가"를 한 장으로 관리.
+**기준 런북**: [`docs/AIRGAP_VISIT_INSTALL_RUNBOOK.md`](../docs/AIRGAP_VISIT_INSTALL_RUNBOOK.md) (2026-07-14 갱신본)
+**대상**: Rocky Linux 10 · RTX 6000 Ada ×8 · USB 반입 · 1차(인프라)/2차(GPU+T2C) 분리
+
+---
+
+## 1. 자산 감사 결과 (2026-07-14 실시)
+
+### ✅ 검증 통과
+
+| 항목 | 결과 |
+|---|---|
+| `docker-compose.airgap.yml` 문법 | `docker compose config -q` 통과 (경고 0) |
+| `scripts/build_airgap_bundle.sh` 문법 | `bash -n` 통과. 런북 §2 전 과정 자동화 확인 (슬림 Dockerfile 자동 선택, Ubuntu staging 대비 Rocky10 컨테이너 rpm 수집, pg_dump 컨테이너 폴백 포함) |
+| sllm 서비스 정합 | `--chat-template` 명시 ✓ (운영 검증 레시피 항목) · `--tensor-parallel-size 1` ✓ (NVLink 부재 대응) · `profiles: [gpu]` ✓ |
+| `.env.airgap.phase1.template` | fail-closed 필수값(SECRET_KEY/ADMIN_PASSWORD/LLM_API_KEY) 전부 포함, 1차 LLM 미설정 원칙 반영 |
+| 슬림 이미지 구성 | `Dockerfile.airgap` + `requirements.airgap.txt`(pandas 포함 → numpy 확보) + `.dockerignore`(data/train/results/docs/age 제외) |
+| 인증서 정합 | `gen_selfsigned_cert.sh` CN 기본값 = nginx `server_name`(ccop.cslee.internal) = 컴포즈 마운트 경로 일치 |
+| **법률 RAG v2 폐쇄망 호환** | 신규 런타임 의존성 0 — 슬림 이미지 그대로 동작. 임베딩 백엔드 없이 **BM25-only 자동 강등** 설계. 적재: `ingest_legal_corpus.py --no-embed` (런북 1차 검증에 선택 항목으로 추가됨) |
+
+### 🔧 금일 수정 (드리프트 해소)
+
+1. `docker-compose.airgap.yml`: 죽은 `chroma_data` 마운트 제거(v1 RAG 잔재), obsolete `version:` 키 제거
+2. `deploy/.env.airgap.phase1.template`: `VLLM_TAG` 권장값 **`v0.6.3.post1`** 로 확정 (근거 아래)
+3. 런북: §0.2/§9.3 자산 표에 번들 자동화 스크립트·슬림 Dockerfile 반영, §2에 자동화 안내 추가, §5 vLLM 태그 확정, 1차 검증에 법률 RAG 선택 항목 추가
+
+### 📌 vLLM 태그 결정 근거
+
+`vllm/vllm-openai:v0.6.3.post1` — 운영에서 검증된 서빙 레시피(vllm 0.6.3.post1 + transformers 4.46.x + `--chat-template` 명시, `docs/CHECKPOINT_20260616.md`)와 동일 버전. cu121 빌드이므로 R530+ 드라이버(신규 Rocky 10 드라이버 포함)에서 동작. **다른 태그로 바꾸려면 staging GPU에서 모델 로드+추론 1회 검증 후 반입** (과거 transformers 5.x 토크나이저 호환 사고의 재발 방지).
+
+---
+
+## 2. 남은 결정 사항 (사람이 정해야 함)
+
+| # | 결정 | 권고 | 상태 |
+|---|---|---|---|
+| D1 | **번들에 담을 소스 기준** — `feat/legal-rag-v2`(법률 RAG, CI 통과·커밋 완료)를 머지하고 번들할지, 현 dev 그대로일지 | **PR 머지 후 dev 기준 번들** 권장 — 번들 스크립트는 작업트리를 담으므로 기준 커밋을 하나로 고정하는 것이 재현성에 유리 | ⏳ |
+| D2 | **staging 머신 확정** — 런북 요건: linux/amd64 + 인터넷 + docker (Apple Silicon 금지) | 운영 VM(skai2_vm) 겸용 권장(x86_64·docker·리포 보유). 단 **디스크 여유 ≥ 40GB**(1차 5GB + 2차 35GB) 확인 필요 — 아래 §3 점검 커맨드 | ⏳ |
+| D3 | **2차 NVIDIA 드라이버 버전** — Rocky 10용 local-repo rpm 버전 선택 | 최신 프로덕션 브랜치(R570+ 계열) local repo. Secure Boot ON 대비 MOK 절차 숙지 | ⏳ |
+| D4 | **DB 덤프 범위** — 전체 tccopdb vs 경량 그래프만 | 경량(tccop_graph_v6 등 데모 3~4개)만 — `osint_ontology`(689만 노드) 포함 금지 | ⏳ |
+
+---
+
+## 3. 실행 대기 작업 (staging에서 — 승인/접속 후)
+
+> ⚠️ 2026-07-14 원격 점검은 권한 정책으로 미실시 — 아래를 staging(운영 VM)에서 직접 실행하거나 승인 후 위임.
+
+```bash
+# ── 3.1 staging 사전 점검 (읽기 전용) ──
+uname -m                      # x86_64 필수
+df -h /                      # 여유 ≥ 40GB
+docker --version && docker compose version
+git -C /root/ccop_test fetch && git -C /root/ccop_test status -sb   # 번들 기준 커밋 확인
+
+# ── 3.2 1차 번들 생성 (런북 §2 자동화) ──
+cd /root/ccop_test && git pull                  # D1 결정 반영된 기준 커밋으로
+PGPASSWORD='<db비번>' bash scripts/build_airgap_bundle.sh \
+  --db-host <DB호스트> --db-port <포트> --db-user ccop --db-name tccopdb
+# 산출: ~/ccop_bundle_p1/ (images/rpms/db/src + SHA256SUMS) → exFAT USB 복사
+
+# ── 3.3 2차 번들 생성 (런북 §5) ──
+docker pull vllm/vllm-openai:v0.6.3.post1 && docker save ... (런북 §5 그대로)
+rsync 으로 qwen25-t2c-v42_merged(15GB) 수집 → 4샤드+config+tokenizer+chat_template.jinja 확인
+NVIDIA local-repo rpm(rhel10) + nvidia-container-toolkit rpm 수집 → SHA256SUMS
+```
+
+## 4. 물리·행정 준비 (기술 외)
+
+- [ ] USB 2본: **exFAT** 포맷 — 1차 8GB↑ / 2차 64GB↑ (FAT32 금지)
+- [ ] 기관 매체 반입 신청서 제출 → 사전 승인 확보
+- [ ] 반입 게이트 백신 검사 대응, 매체 반출입 대장 양식 확인
+- [ ] 현장 질문지 회신 확보: ① GPU 8장이 대상 VM에 passthrough 되는가(아니면 별도 GPU 노드 → `SLLM_ENDPOINT` 를 노드 IP로) ② BIOS **Secure Boot** ON/OFF ③ 내부 접속 도메인/IP (인증서 CN·`CORS_ORIGINS` 반영용)
+- [ ] 런북 인쇄본 또는 오프라인 사본 (현장에서 인터넷 없음) — `scripts/build_doc_pdf.py docs/AIRGAP_VISIT_INSTALL_RUNBOOK.md` 로 PDF 생성 가능
+
+## 5. D-day 시퀀스 요약 (런북 매핑)
+
+```
+[방문 1] 1차 — 인프라 (런북 §3~4)
+  반입·무결성 검증(§4.1) → Docker 오프라인 설치(§4.2) → 이미지 load(§4.3)
+  → 소스 복원+.env(§4.4) → DB 복원(§4.5) → 기동(§4.6) → 검증 체크리스트(§4.7)
+  실패 시: sllm 없이 인프라만 유지 (자연어 질의만 유예)
+
+[방문 2] 2차 — GPU+T2C (런북 §6~7, 1차 안정화 후)
+  드라이버(+Secure Boot MOK) → container-toolkit → nvidia-smi 8장 확인
+  → vLLM 이미지·모델 적재 → .env 세 줄 + --profile gpu → e2e 검증(§7.3)
+  롤백: .env 세 줄 주석 → app 재기동 = 1차 상태 복귀
+```
+
+---
+
+*이 문서는 준비 진행에 따라 체크박스를 갱신한다. 기술 상세는 전부 런북을 따르고, 여기는 상태 추적만 담당.*

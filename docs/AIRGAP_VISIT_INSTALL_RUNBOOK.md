@@ -5,7 +5,7 @@
 >
 > 폐쇄망 일반 원리는 [`AIRGAP_DEPLOY_GUIDE.md`](AIRGAP_DEPLOY_GUIDE.md), 인터넷 운영 VM 런북은 [`VM_DEPLOY_OPERATIONS_GUIDE.md`](VM_DEPLOY_OPERATIONS_GUIDE.md) 참고.
 >
-> **최종 갱신: 2026-07-01**
+> **최종 갱신: 2026-07-14** (번들 자동화 스크립트·슬림 Dockerfile 반영, vLLM 태그 확정, chroma 잔재 제거)
 
 ---
 
@@ -31,6 +31,8 @@
 | `docker-compose.airgap.yml` | 폐쇄망 전용 컴포즈. app은 `image: ccop_app:1.0`(빌드 안 함), sllm은 `profile: gpu`(2차만) |
 | `deploy/.env.airgap.phase1.template` | 1차 환경변수 템플릿 (LLM 미설정) |
 | `scripts/gen_selfsigned_cert.sh` | nginx용 자체서명 인증서(`cert.pem`/`key.pem`) 생성 |
+| `scripts/build_airgap_bundle.sh` | **1차 번들 자동 생성기** — §2 전 과정(이미지 빌드/save·rpm 수집·DB 덤프·인증서·소스 tar·체크섬) 자동화 |
+| `Dockerfile.airgap` + `requirements.airgap.txt` | 폐쇄망 슬림 앱 이미지(RAG/torch 미포함, ~1GB) — 번들 스크립트가 존재 시 자동 사용 |
 
 > ⚠️ 기존 `docker-compose.cslee.yml`은 **인터넷 운영(skai2_vm)용**이므로 폐쇄망에서 쓰지 않는다.
 
@@ -74,6 +76,14 @@
 ## 2. staging에서 1차 번들 준비 (인터넷 O · linux/amd64)
 
 작업 루트: `~/ccop_bundle_p1/`
+
+> **자동화**: §2.1~2.6 전 과정은 스크립트 하나로 대체된다 (아래 수동 절차는 이해·복구용 레퍼런스).
+>
+> ```bash
+> PGPASSWORD='<db비번>' bash scripts/build_airgap_bundle.sh    # --skip-db --skip-rpm --out DIR (--help 참고)
+> ```
+>
+> 앱 이미지는 `Dockerfile.airgap`(슬림 ~1GB)이 있으면 **자동 선택**된다.
 
 ### 2.1 앱 이미지 빌드 → save
 
@@ -230,6 +240,7 @@ docker compose -f docker-compose.airgap.yml ps          # 전부 healthy
 - [ ] 그래프 **검색 / 노드 확장 / 경로탐색** 동작
 - [ ] **직접 Cypher 입력** 실행 → 결과 반환
 - [ ] 모델러에서 수동 노드/엣지 생성·편집
+- [ ] (선택 — 법률 RAG 포함 소스일 때) `docker exec ccop_app python scripts/ingest_legal_corpus.py --no-embed` → `/api/v1/legal/status`에서 BM25-only 적재 확인
 - [ ] 자연어 질의창은 **의도적으로 미동작** (2차 예정 — 운영자 안내)
 - [ ] 전 과정 **외부 호출 0건** (폐쇄망 내부 완결)
 
@@ -244,9 +255,12 @@ docker compose -f docker-compose.airgap.yml ps          # 전부 healthy
 ```bash
 mkdir -p ~/ccop_bundle_p2/{images,model,nvidia}
 
-# vLLM 이미지 — 폐쇄망 GPU 드라이버 CUDA 와 호환되는 태그 고정 (latest 금지)
-docker pull vllm/vllm-openai:<cuda호환태그>
-docker save vllm/vllm-openai:<cuda호환태그> -o ~/ccop_bundle_p2/images/vllm_openai.tar
+# vLLM 이미지 — 태그 고정 (latest 금지). 권장: v0.6.3.post1
+#   근거: 운영 검증 서빙 레시피(vllm 0.6.3.post1 + transformers 4.46.x + --chat-template 명시)와
+#   동일 버전. cu121 빌드라 R530+ 드라이버(폐쇄망 신규 드라이버 포함)에서 동작.
+#   다른 태그를 쓰려면 staging GPU에서 모델 로드+추론 1회 검증 후 반입할 것.
+docker pull vllm/vllm-openai:v0.6.3.post1
+docker save vllm/vllm-openai:v0.6.3.post1 -o ~/ccop_bundle_p2/images/vllm_openai.tar
 
 # T2C 모델 풀웨이트 (~15GB)
 rsync -av ai-kyw-dev@192.168.1.133:.../qwen25_t2c_v42_v1_merged/ \
