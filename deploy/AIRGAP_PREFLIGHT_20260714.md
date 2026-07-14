@@ -37,7 +37,7 @@
 | # | 결정 | 권고 | 상태 |
 |---|---|---|---|
 | D1 | **번들에 담을 소스 기준** — `feat/legal-rag-v2`(법률 RAG, CI 통과·커밋 완료)를 머지하고 번들할지, 현 dev 그대로일지 | **PR 머지 후 dev 기준 번들** 권장 — 번들 스크립트는 작업트리를 담으므로 기준 커밋을 하나로 고정하는 것이 재현성에 유리 | ⏳ |
-| D2 | **staging 머신 확정** — 런북 요건: linux/amd64 + 인터넷 + docker (Apple Silicon 금지) | 운영 VM(skai2_vm) 겸용 권장(x86_64·docker·리포 보유). 단 **디스크 여유 ≥ 40GB**(1차 5GB + 2차 35GB) 확인 필요 — 아래 §3 점검 커맨드 | ⏳ |
+| D2 | **staging 머신** — 런북 요건: linux/amd64 + 인터넷 + docker (Apple Silicon 금지) | **학습 GPU 머신(ai-kyw-dev@192.168.1.133, Ubuntu 24.04)로 확정** — 7/2에 1차 번들 생성 실적(982MB, 체크섬 145/145 OK). el10 rpm은 Rocky10 컨테이너로 수집(스크립트 자동) | ✅ |
 | D3 | **2차 NVIDIA 드라이버 버전** — Rocky 10용 local-repo rpm 버전 선택 | 최신 프로덕션 브랜치(R570+ 계열) local repo. Secure Boot ON 대비 MOK 절차 숙지 | ⏳ |
 | D4 | **DB 덤프 범위** — 전체 tccopdb vs 경량 그래프만 | 경량(tccop_graph_v6 등 데모 3~4개)만 — `osint_ontology`(689만 노드) 포함 금지 | ⏳ |
 
@@ -45,7 +45,8 @@
 
 ## 3. 실행 대기 작업 (staging에서 — 승인/접속 후)
 
-> ⚠️ 2026-07-14 원격 점검은 권한 정책으로 미실시 — 아래를 staging(운영 VM)에서 직접 실행하거나 승인 후 위임.
+> staging = 학습 GPU 머신(`ssh ai-kyw-dev@192.168.1.133`).
+> ⚠️ **기존 1차 번들(7/2 생성, `~/ccop_bundle_p1` 982MB)은 구버전 소스 기준** — 법률 RAG·시나리오 A(nativedb compose)·VLLM_TAG 확정 반영 전. **PR 머지 후 재생성 필수** (앱 이미지+소스 tar 갱신; agens/nginx 이미지·rpm은 재사용됨).
 
 ```bash
 # ── 3.1 staging 사전 점검 (읽기 전용) ──
