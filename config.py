@@ -63,6 +63,13 @@ class Config:
     SLLM_ENDPOINT = os.getenv("SLLM_ENDPOINT")
     SLLM_MODEL_NAME = os.getenv("SLLM_MODEL_NAME", "gpt-4o")
 
+    # Legal RAG v2 (하이브리드 검색) — legal_rag_service.py
+    # EMBEDDING_ENDPOINT: OpenAI 호환 임베딩 서버(온프레미스 vLLM/TEI 등). 미설정 시 OPENAI_API_KEY 사용.
+    # 둘 다 없으면 BM25-only 모드로 동작(폐쇄망 강등).
+    EMBEDDING_ENDPOINT = os.getenv("EMBEDDING_ENDPOINT")
+    EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL_NAME", "text-embedding-3-small")
+    RAG_RERANK = os.getenv("RAG_RERANK", "auto")  # auto(키 있으면 on) | on | off
+
     # Logging
     LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
     LOG_FILE = os.getenv("LOG_FILE", "logs/app.log")

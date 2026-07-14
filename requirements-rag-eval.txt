@@ -1,0 +1,8 @@
+# 법률 RAG v2 — 평가 전용 의존성 (서빙 이미지에 포함 금지)
+# 사용: pip install -r requirements-rag-eval.txt && python scripts/eval_legal_rag.py --ragas
+#
+# ragas 는 API 가 버전 간 자주 바뀜 — eval 스크립트가 방어적으로 처리하지만,
+# 검증된 버전 확인 후 == 로 핀 고정할 것 (requirements.txt 관례 준수).
+ragas>=0.2
+datasets>=2.19
+langchain-openai>=0.2

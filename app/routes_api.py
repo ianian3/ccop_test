@@ -1789,3 +1789,92 @@ def pipeline_csv_to_v40_graph():
         'elapsed_sec': round(elapsed, 2),
         'layers': layer_results,
     }), 200
+
+
+# ============================================
+# 12. Legal RAG API (법률 근거 검색·자문) — v2 재구축
+#     hybrid(BM25+Vector) + RRF + LLM rerank. 설계: docs/LEGAL_RAG_V2_DESIGN.md
+# ============================================
+
+@api_v1.route('/legal/search', methods=['POST'])
+@require_api_key
+def legal_search():
+    """
+    법률 근거 하이브리드 검색 (답변 생성 없음 — 검색 품질 디버깅/평가용 점수 분해 포함)
+
+    Request:  {"question": "대포통장 양도 처벌", "top_k": 5, "mode": "hybrid", "rerank": true}
+    Response: {"status": "success", "mode_used": ..., "rerank_used": ..., "results": [...]}
+    """
+    from app.services.legal_rag_service import LegalRAGService
+    try:
+        data = request.get_json(silent=True) or {}
+        question = (data.get('question') or '').strip()
+        if not question:
+            return jsonify({"error": "question field is required"}), 400
+        if len(question) > 2000:
+            return jsonify({"error": "question too long (max 2000 chars)"}), 400
+        try:
+            top_k = max(1, min(20, int(data.get('top_k', 5))))
+        except (TypeError, ValueError):
+            return jsonify({"error": "top_k must be an integer"}), 400
+        mode = data.get('mode', 'hybrid')
+        if mode not in ('hybrid', 'bm25', 'vector'):
+            return jsonify({"error": "mode must be one of: hybrid, bm25, vector"}), 400
+        rerank = data.get('rerank')
+        if rerank is not None and not isinstance(rerank, bool):
+            return jsonify({"error": "rerank must be a boolean"}), 400
+
+        t0 = time.time()
+        result = LegalRAGService.hybrid_search(question, top_k=top_k, mode=mode, rerank=rerank)
+        current_app.logger.info(
+            f"[API v1] legal/search | partner={request.partner} | mode={result['mode_used']} | "
+            f"hits={len(result['results'])} | {(time.time() - t0) * 1000:.0f}ms")
+        return jsonify({"status": "success", **result}), 200
+    except Exception as e:
+        current_app.logger.error(f"[API v1] legal/search error: {e}")
+        return jsonify({"error": "internal error", "detail": str(e)}), 500
+
+
+@api_v1.route('/legal/answer', methods=['POST'])
+@require_api_key
+def legal_answer():
+    """
+    법률 근거 기반 자문 답변 (근거 인용 [n] + 비자문 고지 포함)
+
+    Request:  {"question": "인출책 처벌 수위는?", "top_k": 4}
+    Response: {"status": "success", "success": bool, "answer": ..., "citations": [...]}
+    """
+    from app.services.legal_rag_service import LegalRAGService
+    try:
+        data = request.get_json(silent=True) or {}
+        question = (data.get('question') or '').strip()
+        if not question:
+            return jsonify({"error": "question field is required"}), 400
+        if len(question) > 2000:
+            return jsonify({"error": "question too long (max 2000 chars)"}), 400
+        try:
+            top_k = max(1, min(10, int(data.get('top_k', 4))))
+        except (TypeError, ValueError):
+            return jsonify({"error": "top_k must be an integer"}), 400
+
+        t0 = time.time()
+        result = LegalRAGService.answer(question, top_k=top_k)
+        current_app.logger.info(
+            f"[API v1] legal/answer | partner={request.partner} | success={result['success']} | "
+            f"{(time.time() - t0) * 1000:.0f}ms")
+        return jsonify({"status": "success", **result}), 200
+    except Exception as e:
+        current_app.logger.error(f"[API v1] legal/answer error: {e}")
+        return jsonify({"error": "internal error", "detail": str(e)}), 500
+
+
+@api_v1.route('/legal/status', methods=['GET'])
+@require_api_key
+def legal_status():
+    """법률 RAG 상태 (인덱스/임베딩 백엔드/DB 적재 현황) — 운영 점검용"""
+    from app.services.legal_rag_service import LegalRAGService
+    try:
+        return jsonify({"status": "success", **LegalRAGService.status()}), 200
+    except Exception as e:
+        current_app.logger.error(f"[API v1] legal/status error: {e}")
+        return jsonify({"error": "internal error", "detail": str(e)}), 500

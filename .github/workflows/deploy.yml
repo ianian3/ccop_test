@@ -72,4 +72,5 @@ jobs:
             tests/test_ontology_transform_viz.py \
             tests/test_t2c_v37_helpers.py \
             tests/test_etl_v40_meta.py \
-            tests/test_pattern_network_analysis.py
+            tests/test_pattern_network_analysis.py \
+            tests/test_legal_rag.py
