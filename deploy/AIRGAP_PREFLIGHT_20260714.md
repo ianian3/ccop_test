@@ -34,35 +34,42 @@
 
 ## 2. 남은 결정 사항 (사람이 정해야 함)
 
+> **범위 확정: 이번 방문은 1차(인프라)만.** 2차(GPU+T2C)는 인프라 안정화 후 별도 방문 — D3은 그때 다룬다.
+
 | # | 결정 | 권고 | 상태 |
 |---|---|---|---|
-| D1 | **번들에 담을 소스 기준** — `feat/legal-rag-v2`(법률 RAG, CI 통과·커밋 완료)를 머지하고 번들할지, 현 dev 그대로일지 | **PR 머지 후 dev 기준 번들** 권장 — 번들 스크립트는 작업트리를 담으므로 기준 커밋을 하나로 고정하는 것이 재현성에 유리 | ⏳ |
-| D2 | **staging 머신** — 런북 요건: linux/amd64 + 인터넷 + docker (Apple Silicon 금지) | **학습 GPU 머신(ai-kyw-dev@192.168.1.133, Ubuntu 24.04)로 확정** — 7/2에 1차 번들 생성 실적(982MB, 체크섬 145/145 OK). el10 rpm은 Rocky10 컨테이너로 수집(스크립트 자동) | ✅ |
-| D3 | **2차 NVIDIA 드라이버 버전** — Rocky 10용 local-repo rpm 버전 선택 | 최신 프로덕션 브랜치(R570+ 계열) local repo. Secure Boot ON 대비 MOK 절차 숙지 | ⏳ |
-| D4 | **DB 덤프 범위** — 전체 tccopdb vs 경량 그래프만 | 경량(tccop_graph_v6 등 데모 3~4개)만 — `osint_ontology`(689만 노드) 포함 금지 | ⏳ |
+| D1 | **번들에 담을 소스 기준** | PR #5/#7/#6 dev 머지 완료(58bf8b1) → 이 커밋 기준 번들 생성 완료 | ✅ |
+| D2 | **staging 머신** — linux/amd64 + 인터넷 + docker | **학습 GPU 머신(ai-kyw-dev@192.168.1.133, Ubuntu 24.04)** — Rocky10 컨테이너로 el10 rpm 수집 | ✅ |
+| D3 | **2차 NVIDIA 드라이버 버전** | (이번 범위 아님 — 2차 방문 시 결정) | ⏸ 보류 |
+| D4 | **DB 덤프 범위** — 전체 vs 경량 그래프만 | 경량(tccop_graph_v6 등 데모 3~4개)만, `osint_ontology`(689만) 금지. **단 시나리오 A(네이티브 16.9)에서는 V3 덤프호환 결과에 따라 CSV 재적재로 대체 가능** — DB팀 협의 | ⏳ |
+
+### 번들 생성 결과 (2026-07-14 완료)
+
+`ai-kyw-dev@192.168.1.133:~/ccop_bundle_p1` (**972MB**, dev `58bf8b1` 기준) — **sha256 145/145 OK**
+- 이미지 3종: `ccop_app:1.0`(627M, 슬림) · `agensgraph:v2.13.2`(110M, 시나리오 B 폴백) · `nginx:alpine`(61M)
+- Docker CE el10 rpm 141개 · DB덤프 없음(`--skip-db`) · 소스 tar 18M(신규 자산 전부 포함, 실 .env 미포함, 인증서 포함)
+- 구버전은 `~/ccop_bundle_p1.old_0702` · `~/ccop_test.stale_0702` 로 보관(가역)
 
 ---
 
-## 3. 실행 대기 작업 (staging에서 — 승인/접속 후)
+## 3. 남은 작업 (1차 방문까지)
 
-> staging = 학습 GPU 머신(`ssh ai-kyw-dev@192.168.1.133`).
-> ⚠️ **기존 1차 번들(7/2 생성, `~/ccop_bundle_p1` 982MB)은 구버전 소스 기준** — 법률 RAG·시나리오 A(nativedb compose)·VLLM_TAG 확정 반영 전. **PR 머지 후 재생성 필수** (앱 이미지+소스 tar 갱신; agens/nginx 이미지·rpm은 재사용됨).
+staging 번들 생성은 완료(§2). 아래만 남음:
 
-```bash
-# ── 3.1 staging 사전 점검 (읽기 전용) ──
-uname -m                      # x86_64 필수
-df -h /                      # 여유 ≥ 40GB
-docker --version && docker compose version
-git -C /root/ccop_test fetch && git -C /root/ccop_test status -sb   # 번들 기준 커밋 확인
+- [ ] **DB 반입물 결정** (D4) — DB팀 협의: ① 경량 덤프 `db/tccopdb.dump.gz` 를 번들 `db/` 에 추가, 또는 ② 시나리오 A 대비 원천 CSV 세트. 결정 후 staging에서 `~/ccop_bundle_p1/db/` 에 넣고 `sha256sum` 재생성:
+  ```bash
+  cd ~/ccop_bundle_p1 && rm -f SHA256SUMS && find . -type f ! -name SHA256SUMS -exec sha256sum {} \; > SHA256SUMS
+  ```
+- [ ] **exFAT USB 적재** (8GB 이상):
+  ```bash
+  cp -rv ~/ccop_bundle_p1 /run/media/$USER/USB/
+  ```
+- [ ] **매체 반입 신청/승인** + 백신 검사 + 반출입 대장 (§4)
+- [ ] **현장 질문지 회신** — 시나리오 A 관련: 앱 컨테이너→호스트 :5333 접근을 위해 DBA에게 pg_hba/listen_addresses 확인 요청 (V5), 앱 전용 DB/계정 신설 협의 (V4)
+- [ ] **현장 오프라인 문서 지참** — `deploy/field_kit/` PDF 인쇄 또는 USB 동봉
 
-# ── 3.2 1차 번들 생성 (런북 §2 자동화) ──
-cd /root/ccop_test && git pull                  # D1 결정 반영된 기준 커밋으로
-PGPASSWORD='<db비번>' bash scripts/build_airgap_bundle.sh \
-  --db-host <DB호스트> --db-port <포트> --db-user ccop --db-name tccopdb
-# 산출: ~/ccop_bundle_p1/ (images/rpms/db/src + SHA256SUMS) → exFAT USB 복사
-
-# ── 3.3 2차 번들 생성 (런북 §5) ──
-docker pull vllm/vllm-openai:v0.6.3.post1 && docker save ... (런북 §5 그대로)
+### (참고) 2차 방문 시 — 이번 범위 아님
+2차 번들(vLLM 이미지 v0.6.3.post1 + 모델 15GB + NVIDIA 드라이버 rpm, ~30GB/64GB USB)은 1차 안정화 후 별도 생성. 런북 §5 참조.
 rsync 으로 qwen25-t2c-v42_merged(15GB) 수집 → 4샤드+config+tokenizer+chat_template.jinja 확인
 NVIDIA local-repo rpm(rhel10) + nvidia-container-toolkit rpm 수집 → SHA256SUMS
 ```
