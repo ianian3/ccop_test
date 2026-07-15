@@ -3,7 +3,7 @@ CCOP 파트너 API v1 엔드포인트
 외부 파트너가 CCOP 기능에 접근할 수 있는 REST API
 """
 from flask import Blueprint, request, jsonify, current_app
-from app.middleware.api_auth import require_api_key, require_endpoint_permission
+from app.middleware.api_auth import require_api_key, require_endpoint_permission, require_api_or_ui
 from app.services.graph_service import GraphService
 from app.services.rdb_to_graph_service import RdbToGraphService
 from app.services.langgraph_agent import LangGraphAgent
@@ -544,6 +544,7 @@ def list_patterns():
 # ============================================
 
 @api_v1.route('/etl/analyze', methods=['POST'])
+@require_api_or_ui
 def analyze_csv_for_inference():
     """
     CSV 업로드 후 자동 관계 추론 (인증 불필요 - 내부 사용)
@@ -889,7 +890,7 @@ def get_schema_layers():
 # ============================================
 
 @api_v1.route('/network/project', methods=['POST'])
-@require_api_key
+@require_api_or_ui
 def network_project_1mode():
     """
     2-mode → 1-mode 투영 (공유 노드 기반 actor-actor 연결)
@@ -1015,7 +1016,7 @@ LIMIT 200
 
 
 @api_v1.route('/network/bipartite', methods=['POST'])
-@require_api_key
+@require_api_or_ui
 def network_bipartite_stats():
     """
     2-mode 이분 그래프 통계 — actor ↔ pivot 연결 분포
@@ -1310,6 +1311,7 @@ def rdb_gdb_stats():
 
 
 @api_v1.route('/gdb/detail-stats', methods=['GET'])
+@require_api_or_ui
 def gdb_detail_stats():
     """GDB 상세 통계: 노드 라벨별 수, 엣지 타입별 수"""
     import psycopg2
@@ -1452,6 +1454,7 @@ def query_rdb_table(table_name):
 # LAYOUT_PRESETS_V40 / INVESTIGATION_WORKFLOWS_V40 을 단일 출처(SSOT)로 참조하도록 노출
 
 @api_v1.route('/visual-style', methods=['GET'])
+@require_api_or_ui
 def visual_style():
     """V4.0 노드 시각화 표준 (색상/모양/크기/아이콘) 전체 반환."""
     from app.services.ontology_service import KICSCrimeDomainOntology as Ont
@@ -1465,6 +1468,7 @@ def visual_style():
 
 
 @api_v1.route('/edge-style', methods=['GET'])
+@require_api_or_ui
 def edge_style():
     """V4.0 엣지 시각화 표준 (색상/굵기/화살표/선종류) 전체 반환."""
     from app.services.ontology_service import KICSCrimeDomainOntology as Ont
@@ -1478,6 +1482,7 @@ def edge_style():
 
 
 @api_v1.route('/layout-presets', methods=['GET'])
+@require_api_or_ui
 def layout_presets():
     """V4.0 그래프 레이아웃 프리셋 5종 반환."""
     from app.services.ontology_service import KICSCrimeDomainOntology as Ont
@@ -1491,6 +1496,7 @@ def layout_presets():
 
 
 @api_v1.route('/workflows', methods=['GET'])
+@require_api_or_ui
 def investigation_workflows():
     """V4.0 수사 워크플로 6종 반환."""
     from app.services.ontology_service import KICSCrimeDomainOntology as Ont
@@ -1504,6 +1510,7 @@ def investigation_workflows():
 
 
 @api_v1.route('/workflows/<name>/execute', methods=['GET'])
+@require_api_or_ui
 def execute_workflow(name):
     """V4.0 수사 워크플로우 실행 (Phase 4.4 실제 동작 패치).
 
@@ -1627,6 +1634,7 @@ def ontology_meta():
 # V4.0 L1→L5 통합 파이프라인 API (학습 진행 중 신규)
 # ============================================================
 @api_v1.route('/pipeline/csv_to_v40_graph', methods=['POST'])
+@require_api_or_ui
 def pipeline_csv_to_v40_graph():
     """L1(CSV 업로드) → L2(test_v40 RDB 적재) → L3(매핑) → L4(그래프) → L5(시각화) 통합 실행.
 

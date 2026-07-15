@@ -2077,7 +2077,8 @@ async function runProjection() {
   try {
     const res  = await fetch('/api/v1/network/project', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-API-Key': 'demo_key_123' },
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
       body: JSON.stringify({ graph_path: graphPath, actor_label: actorLabel, pivot_label: pivotLabel, min_shared: minShared })
     });
     const data = await res.json();

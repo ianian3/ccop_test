@@ -1,5 +1,5 @@
 # app/routes.py
-from flask import Blueprint, render_template, request, jsonify, current_app
+from flask import Blueprint, render_template, request, jsonify, current_app, session
 from collections import defaultdict
 from datetime import datetime, timezone
 import json
@@ -86,6 +86,10 @@ def _save_session_db(session_id: str, sess: InvestigationSession, question: str)
 # ------------------------------
 @bp.route('/')
 def index():
+    # UI 세션 인증: same-origin UI 가 /api/v1 의 require_api_or_ui 엔드포인트를
+    # 하드코딩 키 없이 세션 쿠키로 호출할 수 있게 함.
+    session['ui_authorized'] = True
+    session.permanent = True
     return render_template('index.html')
 
 # ------------------------------
@@ -1293,6 +1297,8 @@ def modeler_rdb_columns():
 @bp.route('/modeler')
 def modeler():
     """그래프 스키마 모델러 페이지"""
+    session['ui_authorized'] = True
+    session.permanent = True
     return render_template('modeler.html')
 
 
