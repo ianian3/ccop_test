@@ -118,11 +118,14 @@ API_KEYS_PLAINTEXT = {}
 _rate_limit_counters: dict = defaultdict(int)
 
 
-def _check_rate_limit(partner_name: str, rate_limit: int) -> bool:
+def _check_rate_limit(partner_name: str, rate_limit) -> bool:
     """
     분당 요청 수 제한 확인.
+    rate_limit 이 None 이면 무제한(enterprise 티어) — 카운트 없이 항상 허용.
     Returns: True(허용) / False(초과)
     """
+    if rate_limit is None:
+        return True  # 무제한 (None <= int 비교 TypeError 방지)
     minute_bucket = datetime.now(timezone.utc).strftime("%Y%m%d%H%M")
     key = (partner_name, minute_bucket)
     _rate_limit_counters[key] += 1
