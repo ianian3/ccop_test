@@ -1098,7 +1098,7 @@ RETURN count(DISTINCT a) AS actors, count(DISTINCT p) AS pivots, count(*) AS edg
 # ============================================
 
 @api_v1.route('/graph/list', methods=['GET'])
-# @require_api_key
+@require_api_key
 def list_graphs():
     """그래프 목록 조회"""
     try:
@@ -1112,8 +1112,8 @@ def list_graphs():
 
 
 @api_v1.route('/graph/create', methods=['POST'])
-# @require_api_key
-# @require_endpoint_permission('admin')
+@require_api_key
+@require_endpoint_permission('admin')
 def create_graph():
     """그래프 생성"""
     try:
@@ -1132,8 +1132,8 @@ def create_graph():
 
 
 @api_v1.route('/graph/delete', methods=['POST'])
-# @require_api_key
-# @require_endpoint_permission('admin')
+@require_api_key
+@require_endpoint_permission('admin')
 def delete_graph():
     """그래프 삭제 (위험)"""
     try:
@@ -1151,6 +1151,8 @@ def delete_graph():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 @api_v1.route('/graph/node/create', methods=['POST'])
+@require_api_key
+@require_endpoint_permission('admin')
 def create_manual_node():
     """수동으로 그래프 노드 추가"""
     try:
@@ -1169,6 +1171,8 @@ def create_manual_node():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 @api_v1.route('/graph/edge/create', methods=['POST'])
+@require_api_key
+@require_endpoint_permission('admin')
 def create_manual_edge():
     """수동으로 그래프 엣지 추가"""
     try:
@@ -1189,6 +1193,8 @@ def create_manual_edge():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 @api_v1.route('/graph/element/delete', methods=['POST'])
+@require_api_key
+@require_endpoint_permission('admin')
 def delete_manual_element():
     """수동으로 노드/엣지 삭제"""
     try:

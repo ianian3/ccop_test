@@ -220,3 +220,80 @@ class TestAdminAuth:
         response = client.get('/admin/dashboard')
         assert response.status_code == 302
         assert '/admin/login' in response.headers.get('Location', '')
+
+
+# ══════════════════════════════════════════════════════════════════
+# 파괴적 그래프 관리 엔드포인트 인증 (2026-07 하드닝)
+#   이전: @require_api_key 주석 처리 → 무인증 graph/delete 등 노출.
+#   수정: mutating graph/* 에 require_api_key + require_endpoint_permission('admin').
+#   'admin' 권한은 allowed_endpoints 에 '*' 인 티어(enterprise)만 통과.
+# ══════════════════════════════════════════════════════════════════
+class TestGraphAdminAuth:
+
+    _MUTATING = [
+        ("post", "/api/v1/graph/create", {"graph_name": "x"}),
+        ("post", "/api/v1/graph/delete", {"graph_name": "x"}),
+        ("post", "/api/v1/graph/node/create", {"graph_name": "x", "label": "vt_psn"}),
+        ("post", "/api/v1/graph/edge/create",
+         {"graph_name": "x", "src_id": "1", "tgt_id": "2", "label": "e"}),
+        ("post", "/api/v1/graph/element/delete", {"graph_name": "x", "element_id": "1"}),
+    ]
+
+    def _inject_key(self, key, allowed):
+        from app.middleware import api_auth
+        h = api_auth.generate_api_key_hash(key)
+        api_auth.API_KEYS_STORE[h] = {
+            "partner_name": "pytest", "tier": "test",
+            "rate_limit": 100000, "allowed_endpoints": allowed, "is_active": True,
+        }
+        return h
+
+    def test_mutating_endpoints_require_auth(self, app, client):
+        """키 없이 호출 시 401 (무인증 노출 회귀 방지)."""
+        for method, path, body in self._MUTATING:
+            r = getattr(client, method)(path, json=body)
+            assert r.status_code == 401, f"{path} 는 무인증이면 안 됨 (got {r.status_code})"
+
+    def test_mutating_endpoints_reject_non_admin(self, app, client):
+        """유효 키라도 admin('*') 권한 없으면 403."""
+        h = self._inject_key("pytest-nonadmin", ["text-to-cypher"])
+        try:
+            hdr = {"Authorization": "Bearer pytest-nonadmin"}
+            for method, path, body in self._MUTATING:
+                r = getattr(client, method)(path, json=body, headers=hdr)
+                assert r.status_code == 403, f"{path} 는 비-admin 이면 403 (got {r.status_code})"
+        finally:
+            from app.middleware import api_auth
+            api_auth.API_KEYS_STORE.pop(h, None)
+
+    def test_mutating_endpoints_pass_auth_for_admin(self, app, client):
+        """admin('*') 키는 인증/권한 통과 (이후 400/500 은 무방 — 401/403 이 아니면 됨)."""
+        h = self._inject_key("pytest-admin", ["*"])
+        try:
+            hdr = {"Authorization": "Bearer pytest-admin"}
+            for method, path, body in self._MUTATING:
+                r = getattr(client, method)(path, json=body, headers=hdr)
+                assert r.status_code not in (401, 403), \
+                    f"{path} admin 인증 통과해야 함 (got {r.status_code})"
+        finally:
+            from app.middleware import api_auth
+            api_auth.API_KEYS_STORE.pop(h, None)
+
+    def test_graph_list_requires_auth(self, app, client):
+        """graph/list(읽기)도 유효 키 필요(401), admin 권한까지는 불요."""
+        assert client.get("/api/v1/graph/list").status_code == 401
+
+
+class TestRateLimitUnlimited:
+    """enterprise rate_limit=None 이 TypeError(500) 없이 무제한 허용되는지."""
+
+    def test_none_rate_limit_is_unlimited(self):
+        from app.middleware.api_auth import _check_rate_limit
+        for _ in range(5):
+            assert _check_rate_limit("pytest-enterprise", None) is True
+
+    def test_int_rate_limit_still_enforced(self):
+        from app.middleware.api_auth import _check_rate_limit
+        # 고유 파트너명으로 버킷 격리
+        allowed = sum(1 for _ in range(3) if _check_rate_limit("pytest-rl-cap-2026", 2))
+        assert allowed == 2  # 3번째부터 초과(False)
