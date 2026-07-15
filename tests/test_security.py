@@ -297,3 +297,52 @@ class TestRateLimitUnlimited:
         # 고유 파트너명으로 버킷 격리
         allowed = sum(1 for _ in range(3) if _check_rate_limit("pytest-rl-cap-2026", 2))
         assert allowed == 2  # 3번째부터 초과(False)
+
+
+# ══════════════════════════════════════════════════════════════════
+# UI-auth 재설계 (2026-07): require_api_or_ui — 세션 OR Bearer 이중 인증
+#   이전: UI 가 하드코딩 X-API-Key:demo_key_123 로 호출(헤더 불일치→network 깨짐)
+#         + styles/etl/gdb/pipeline/workflows 무인증 노출.
+#   수정: same-origin UI 세션 쿠키 OR 파트너 Bearer 키.
+# ══════════════════════════════════════════════════════════════════
+class TestUiOrApiAuth:
+
+    # 인증 없으면 401 이어야 하는 UI-소비 엔드포인트(대표)
+    _GET = ["/api/v1/visual-style", "/api/v1/edge-style",
+            "/api/v1/layout-presets", "/api/v1/workflows"]
+
+    def test_blocked_without_auth(self, app, client):
+        """세션·키 둘 다 없으면 401 (무인증 노출 회귀 방지)."""
+        for path in self._GET:
+            assert client.get(path).status_code == 401, f"{path} 무인증 통과하면 안 됨"
+        # POST 대표
+        r = client.post("/api/v1/network/project", json={"actor_label": "vt_psn"})
+        assert r.status_code == 401
+
+    def test_ui_session_passes(self, app, client):
+        """UI 세션 쿠키(ui_authorized)면 통과 (정적 GET 은 200)."""
+        with client.session_transaction() as sess:
+            sess['ui_authorized'] = True
+        for path in self._GET:
+            assert client.get(path).status_code == 200, f"{path} UI 세션 통과해야 함"
+
+    def test_loading_ui_page_grants_session(self, app, client):
+        """실제 흐름: '/' 렌더 → 세션 부여 → 이후 UI 호출 200 (하드코딩 키 불필요)."""
+        assert client.get('/').status_code == 200
+        assert client.get('/api/v1/visual-style').status_code == 200
+
+    def test_bearer_key_passes(self, app, client):
+        """파트너 Bearer 키(세션 없이)도 통과."""
+        from app.middleware import api_auth
+        key = "pytest-uiapi-key"
+        h = api_auth.generate_api_key_hash(key)
+        api_auth.API_KEYS_STORE[h] = {
+            "partner_name": "pytest", "tier": "test",
+            "rate_limit": 100000, "allowed_endpoints": ["*"], "is_active": True,
+        }
+        try:
+            r = client.get("/api/v1/visual-style",
+                           headers={"Authorization": f"Bearer {key}"})
+            assert r.status_code == 200
+        finally:
+            api_auth.API_KEYS_STORE.pop(h, None)

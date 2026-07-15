@@ -59,7 +59,7 @@
 ### 1.5 ⚠️ 보안 주의 (코드 실측 — 인수인계 필수 확인)
 
 - ✅ **[해결됨]** `graph/*` mutating 그룹(create·delete·node/create·edge/create·element/delete)의 무인증 노출은 **인증 복구 완료**(create/delete 등 admin 권한 필요, graph/list Bearer). `_check_rate_limit` 의 `rate_limit=None` TypeError 도 수정. → `fix/graph-admin-auth`, `test_security.py::TestGraphAdminAuth`
-- ⏳ **[남음]** UI가 하드코딩 `X-API-Key: demo_key_123` 로 호출하는 v1 엔드포인트(`network/*`, styles, `etl/analyze`, gdb, pipeline, workflows)는 여전히 `require_api_key`(Bearer) 미적용 — 헤더 체계가 달라 지금 인증 걸면 UI 파손. **UI-auth 정비 별도 과제**(§13).
+- ✅ **[해결됨]** UI-소비 v1 엔드포인트(`network/*`, styles, `etl/analyze`, gdb, pipeline, workflows)의 무인증/헤더 불일치(`demo_key_123`)는 **`require_api_or_ui` 이중 인증**으로 정비 — same-origin UI 세션 쿠키 OR 파트너 Bearer 키. 하드코딩 데모키 제거, 깨져 있던 network 기능 복구. → `fix/ui-auth-session`
 - 운영 배포 시 **nginx 레벨 접근통제 또는 앱 Basic Auth**(`BASIC_AUTH_USER/PASS` 설정 시 `/api/v1/health` 제외 전 경로 앞단 보호)로 감싸는 것을 전제로 설계됨.
 
 ---
@@ -101,8 +101,8 @@
 | `POST /analyze-pattern` | Bearer | `case_id`* , `graph_path`(선택) | `{success, case_id, matched_patterns[], primary_pattern, confidence, analysis_summary}` | 사건의 범죄 패턴 자동 인식(패턴無 시 success:false) |
 | `GET /evidence-completeness/<case_id>` | Bearer | path `case_id`, query `graph_path` | `{success, **completeness(score, missing_evidence…)}` | 증거 완성도 평가(사건無 404) |
 | `GET /patterns` | Bearer | — | `{patterns:[{pattern_id, name, description, required_nodes, required_edges, min_threshold}], total}` | 지원 범죄 패턴 목록 |
-| `POST /network/project` | Bearer | `graph_path`, `actor_label`(기본 vt_psn), `pivot_label`(기본 vt_bacnt), `min_shared`(기본 1), `projection_edge` | `{status, mode:"1mode", nodes[], edges[], stats}` | 2-mode→1-mode 투영(공유 pivot 기반 공범망, LIMIT 200) |
-| `POST /network/bipartite` | Bearer | `graph_path`, `actor_label`, `pivot_label` | `{status, mode:"2mode", actor_count, pivot_count, edge_count, top_actors[], top_pivots[]}` | 이분 그래프 degree 분포 통계 |
+| `POST /network/project` | 세션/Bearer | `graph_path`, `actor_label`(기본 vt_psn), `pivot_label`(기본 vt_bacnt), `min_shared`(기본 1), `projection_edge` | `{status, mode:"1mode", nodes[], edges[], stats}` | 2-mode→1-mode 투영(공유 pivot 기반 공범망, LIMIT 200) |
+| `POST /network/bipartite` | 세션/Bearer | `graph_path`, `actor_label`, `pivot_label` | `{status, mode:"2mode", actor_count, pivot_count, edge_count, top_actors[], top_pivots[]}` | 이분 그래프 degree 분포 통계 |
 
 network/* 는 actor/pivot 라벨 화이트리스트 검증(밖이면 400), 두 라벨 동일 시 400.
 
@@ -110,16 +110,16 @@ network/* 는 actor/pivot 라벨 화이트리스트 검증(밖이면 400), 두 �
 
 ## 5. ETL / 파이프라인
 
-> ⚠️ etl/*·pipeline/* 무인증(multipart 업로드). rdb/to-graph만 Bearer.
+> etl/analyze·pipeline 은 UI 소비 → **세션/Bearer**(require_api_or_ui). etl 확장/추론 import 변형은 여전히 무인증(§13 후속). rdb/to-graph 는 Bearer.
 
 | 엔드포인트 | 인증 | 요청 | 응답(200) | 설명 |
 |---|---|---|---|---|
-| `POST /etl/analyze` | 없음 | multipart `file`*(.csv) | `analyze_csv` 결과(columns/relationships/suggested_mappings) | CSV 자동 관계 추론 |
+| `POST /etl/analyze` | 세션/Bearer | multipart `file`*(.csv) | `analyze_csv` 결과(columns/relationships/suggested_mappings) | CSV 자동 관계 추론 |
 | `POST /etl/infer-import` | 없음 | multipart `file`*, `graph`(기본 tccop_graph_v6), `mapping`(JSON, 선택) | `{status, nodes_created, edges_created, graph, mapping_used}` | 추론/지정 매핑으로 적재 |
 | `POST /etl/analyze-extended` | 없음 | multipart `file`*(.csv) | `{status, columns, row_count, action_detection, **result}` | KICS 4-Layer 확장 스키마 분석 |
 | `POST /etl/import-extended` | 없음 | multipart `file`*, `graph`(기본 tccop_graph_v6) | `{status, graph, action_nodes, entity_nodes, relationships, mapping}` | 확장 스키마 그래프 적재(Action 노드 생성) |
 | `POST /rdb/to-graph` | Bearer | `graph_name`(기본 test_ai01) | `{status, message, stats}` | RDB→그래프 변환 |
-| `POST /pipeline/csv_to_v40_graph` | 없음 | multipart `file`/`files`*, `graph_name`(기본 v40_pipeline_demo), `source_domain`(기본 KICS), `source_id`(선택) | `{status, pipeline, graph_name, source_domain, target_schema, elapsed_sec, layers{L1..L5}}` | CSV→RDB→그래프→시각화 L1~L5 통합 |
+| `POST /pipeline/csv_to_v40_graph` | 세션/Bearer | multipart `file`/`files`*, `graph_name`(기본 v40_pipeline_demo), `source_domain`(기본 KICS), `source_id`(선택) | `{status, pipeline, graph_name, source_domain, target_schema, elapsed_sec, layers{L1..L5}}` | CSV→RDB→그래프→시각화 L1~L5 통합 |
 
 source_domain 허용: KICS/OSINT/DIGITAL/EXT/INVESTIGATION/PARTNER/INFERENCE (밖이면 400).
 
@@ -134,7 +134,7 @@ source_domain 허용: KICS/OSINT/DIGITAL/EXT/INVESTIGATION/PARTNER/INFERENCE (�
 | `GET /rdb/tables` | — | `{status, tables:[{name, label, icon}]}` | RDB 테이블 목록(12종) |
 | `GET /rdb/stats` | query `graph_name`(기본 test_ai01) | `{status, stats:{rdb{...}, gdb{graphs, graph_count, nodes, edges}}}` | RDB+GDB 통합 통계(대시보드) |
 | `GET /rdb/query/<table_name>` | path `table_name`(화이트리스트 18종), query `limit`(기본 50, 최대 500), `offset`(기본 0), `search` | `{status, table, columns, data[], total, limit, offset}` | 테이블 페이징·검색 조회 |
-| `GET /gdb/detail-stats` | query `graph_name`(기본 test_ai01) | `{status, data:{nodes:[{label,count}], edges:[{type,count}], total_nodes, total_edges}}` | GDB 라벨/타입별 상세 통계 |
+| `GET /gdb/detail-stats` (세션/Bearer) | query `graph_name`(기본 test_ai01) | `{status, data:{nodes:[{label,count}], edges:[{type,count}], total_nodes, total_edges}}` | GDB 라벨/타입별 상세 통계 |
 
 ---
 
@@ -150,7 +150,9 @@ source_domain 허용: KICS/OSINT/DIGITAL/EXT/INVESTIGATION/PARTNER/INFERENCE (�
 
 ---
 
-## 8. 메타 / 스타일 / 워크플로 (무인증, GET)
+## 8. 메타 / 스타일 / 워크플로 (GET)
+
+> visual-style·edge-style·layout-presets·workflows·workflows/execute 는 UI 소비 → **세션/Bearer**(require_api_or_ui). ontology/meta·schema/layers 는 아직 무인증(§13 후속).
 
 | 엔드포인트 | 요청 | 응답(200) | 설명 |
 |---|---|---|---|
@@ -236,7 +238,7 @@ curl -s -H "X-API-Key: $RTOKEN" "$HOST/api/v1/graph/dump?graph_path=tccop_graph_
 
 1. ✅ **[해결]** 무인증 파괴적 엔드포인트 — `graph/*` mutating 에 `@require_api_key`+admin 복구 (`fix/graph-admin-auth`)
 2. ✅ **[해결]** enterprise `rate_limit=None` 비교 오류 — 무제한 분기 추가 (`fix/graph-admin-auth`)
-3. ⏳ **UI-auth 정비** — UI가 하드코딩 `X-API-Key: demo_key_123` 로 부르는 v1 엔드포인트(network/*, styles, etl/analyze, gdb, pipeline, workflows)의 인증 체계 통일 (require_api_key 는 Bearer 를 읽으므로 헤더 불일치). UI 세션/토큰 방식 재설계 필요
+3. ✅ **[해결]** UI-auth 정비 — `require_api_or_ui`(세션 OR Bearer) 도입, 하드코딩 `demo_key_123` 제거, network 기능 복구 (`fix/ui-auth-session`)
 4. ⏳ **Rate limit 단위 불일치** — 코드 주석("시간당")·`API_GUIDE.md`("월") vs 실제 강제(분당) 정합
 5. ⏳ 표준 에러 응답 헬퍼 도입(현재 `{error}` / `{error,message}` 혼재)
 6. ⏳ 기존 `API_GUIDE.md`(5개)·외부 가이드와 본 레퍼런스의 단일화(중복 제거)

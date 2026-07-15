@@ -4,7 +4,7 @@ API 인증 미들웨어
 JSON 파일 기반 영속화를 지원합니다.
 """
 from functools import wraps
-from flask import request, jsonify, current_app
+from flask import request, jsonify, current_app, session
 import hashlib
 import json
 import os
@@ -209,7 +209,52 @@ def require_api_key(f):
         current_app.logger.info(f"API request from partner: {request.partner}")
 
         return f(*args, **kwargs)
-    
+
+    return decorated_function
+
+
+def require_api_or_ui(f):
+    """UI 세션(same-origin 브라우저) 또는 파트너 Bearer 키 중 하나면 통과.
+
+    - UI: Flask 서명 세션의 'ui_authorized' 플래그(UI 페이지 렌더 시 설정, routes.py)를
+      브라우저가 same-origin fetch 에 자동 첨부하는 세션 쿠키로 검증 → 헤더 불필요.
+      (SameSite=Lax 라 외부 사이트의 교차출처 요청엔 쿠키가 실리지 않아 방어됨)
+    - 파트너: 'Authorization: Bearer <key>' (require_api_key 와 동일 검증 경로)
+
+    UI 가 호출하지만 무인증이던(또는 헤더 불일치로 깨지던) v1 엔드포인트에 적용:
+    network/*, visual-style, edge-style, layout-presets, workflows(+execute),
+    etl/analyze, gdb/detail-stats, pipeline/csv_to_v40_graph.
+    """
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        # 1) UI 세션 (same-origin 브라우저) — 하드코딩 데모키 없이 쿠키로 인증
+        if session.get('ui_authorized'):
+            request.partner = 'ui-session'
+            request.partner_data = {'tier': 'ui', 'allowed_endpoints': ['*'], 'rate_limit': None}
+            return f(*args, **kwargs)
+
+        # 2) 파트너 Bearer 키
+        auth_header = request.headers.get('Authorization', '')
+        if auth_header.startswith('Bearer '):
+            api_key = auth_header.replace('Bearer ', '').strip()
+            partner_data = validate_api_key(api_key)
+            if partner_data:
+                request.partner = partner_data['partner_name']
+                request.partner_data = partner_data
+                rate_limit = partner_data.get('rate_limit', 60)
+                if not _check_rate_limit(request.partner, rate_limit):
+                    current_app.logger.warning(f"Rate limit exceeded: {request.partner}")
+                    return jsonify({
+                        "error": "Rate limit exceeded",
+                        "message": f"최대 {rate_limit}회/분 요청을 초과했습니다."
+                    }), 429
+                return f(*args, **kwargs)
+
+        return jsonify({
+            "error": "Authentication required",
+            "message": "UI 세션 또는 유효한 API 키(Authorization: Bearer)가 필요합니다."
+        }), 401
+
     return decorated_function
 
 def check_endpoint_permission(endpoint: str) -> bool:
