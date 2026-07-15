@@ -58,9 +58,9 @@
 
 ### 1.5 ⚠️ 보안 주의 (코드 실측 — 인수인계 필수 확인)
 
-- **무인증 공개 엔드포인트가 다수** 존재. 특히 `graph/create`·`graph/delete`·`graph/list`는 `@require_api_key`가 **주석 처리**되어 있어 **파괴적 작업(graph/delete)이 무인증**이다. ETL/RDB/워크플로/스타일/파이프라인 계열도 대부분 무인증.
+- ✅ **[해결됨]** `graph/*` mutating 그룹(create·delete·node/create·edge/create·element/delete)의 무인증 노출은 **인증 복구 완료**(create/delete 등 admin 권한 필요, graph/list Bearer). `_check_rate_limit` 의 `rate_limit=None` TypeError 도 수정. → `fix/graph-admin-auth`, `test_security.py::TestGraphAdminAuth`
+- ⏳ **[남음]** UI가 하드코딩 `X-API-Key: demo_key_123` 로 호출하는 v1 엔드포인트(`network/*`, styles, `etl/analyze`, gdb, pipeline, workflows)는 여전히 `require_api_key`(Bearer) 미적용 — 헤더 체계가 달라 지금 인증 걸면 UI 파손. **UI-auth 정비 별도 과제**(§13).
 - 운영 배포 시 **nginx 레벨 접근통제 또는 앱 Basic Auth**(`BASIC_AUTH_USER/PASS` 설정 시 `/api/v1/health` 제외 전 경로 앞단 보호)로 감싸는 것을 전제로 설계됨.
-- `enterprise` 티어 `rate_limit=None`이 rate 체크에 그대로 들어가면 비교 오류 가능성(무제한 분기 부재) — 개선 대상.
 
 ---
 
@@ -79,16 +79,18 @@
 
 ## 3. 그래프 CRUD / 조회
 
-> ⚠️ 이 그룹은 현재 **전부 무인증**(list/create/delete는 데코레이터 주석 처리, node/edge/element는 데코레이터 없음). 운영 시 반드시 앞단 보호.
+> ✅ **2026-07 하드닝 반영**: 이전엔 무인증 노출이었으나 인증 복구됨. mutating 작업은 admin 권한(enterprise `*`) 필요. UI는 이 v1 경로가 아닌 `routes.py` 의 `/api/graph/*` 를 사용하므로 영향 없음.
 
-| 엔드포인트 | 요청 | 응답(200) | 설명 |
-|---|---|---|---|
-| `GET /graph/list` | — | `{status, graphs}` | 그래프 목록 |
-| `POST /graph/create` | `graph_name`* | `{status, message}` | 그래프 생성 |
-| `POST /graph/delete` | `graph_name`* | `{status, message}` | 그래프 삭제 (**파괴적·무인증**) |
-| `POST /graph/node/create` | `graph_name`* , `label`* , `properties`(기본 {}) | `{status, node_id}` | 수동 노드 추가 |
-| `POST /graph/edge/create` | `graph_name`* , `src_id`* , `tgt_id`* , `label`* , `properties`(기본 {}) | `{status, edge_id}` | 수동 엣지 추가 |
-| `POST /graph/element/delete` | `graph_name`* , `element_id`* , `is_edge`(기본 false) | `{status, message}` | 노드/엣지 삭제 |
+| 엔드포인트 | 인증 | 요청 | 응답(200) | 설명 |
+|---|---|---|---|---|
+| `GET /graph/list` | Bearer | — | `{status, graphs}` | 그래프 목록 |
+| `POST /graph/create` | Bearer + admin | `graph_name`* | `{status, message}` | 그래프 생성 |
+| `POST /graph/delete` | Bearer + admin | `graph_name`* | `{status, message}` | 그래프 삭제 (**파괴적**) |
+| `POST /graph/node/create` | Bearer + admin | `graph_name`* , `label`* , `properties`(기본 {}) | `{status, node_id}` | 수동 노드 추가 |
+| `POST /graph/edge/create` | Bearer + admin | `graph_name`* , `src_id`* , `tgt_id`* , `label`* , `properties`(기본 {}) | `{status, edge_id}` | 수동 엣지 추가 |
+| `POST /graph/element/delete` | Bearer + admin | `graph_name`* , `element_id`* , `is_edge`(기본 false) | `{status, message}` | 노드/엣지 삭제 |
+
+> `admin` = `require_endpoint_permission('admin')`; `allowed_endpoints` 에 `*` 인 enterprise 티어만 통과(free/startup 403).
 
 ---
 
@@ -232,11 +234,12 @@ curl -s -H "X-API-Key: $RTOKEN" "$HOST/api/v1/graph/dump?graph_path=tccop_graph_
 
 ## 13. 개선 필요 (문서화 중 발견 — 후속 과제)
 
-1. **무인증 파괴적 엔드포인트** — `graph/delete` 등 주석 처리된 `@require_api_key` 복구 또는 admin 권한 적용 검토
-2. **Rate limit 단위 불일치** — 코드 주석("시간당")·`API_GUIDE.md`("월") vs 실제 강제(분당) 정합
-3. **enterprise `rate_limit=None`** 비교 오류 가능성 — 무제한 분기 추가
-4. 표준 에러 응답 헬퍼 도입(현재 `{error}` / `{error,message}` 혼재)
-5. 기존 `API_GUIDE.md`(5개)·외부 가이드와 본 레퍼런스의 단일화(중복 제거)
+1. ✅ **[해결]** 무인증 파괴적 엔드포인트 — `graph/*` mutating 에 `@require_api_key`+admin 복구 (`fix/graph-admin-auth`)
+2. ✅ **[해결]** enterprise `rate_limit=None` 비교 오류 — 무제한 분기 추가 (`fix/graph-admin-auth`)
+3. ⏳ **UI-auth 정비** — UI가 하드코딩 `X-API-Key: demo_key_123` 로 부르는 v1 엔드포인트(network/*, styles, etl/analyze, gdb, pipeline, workflows)의 인증 체계 통일 (require_api_key 는 Bearer 를 읽으므로 헤더 불일치). UI 세션/토큰 방식 재설계 필요
+4. ⏳ **Rate limit 단위 불일치** — 코드 주석("시간당")·`API_GUIDE.md`("월") vs 실제 강제(분당) 정합
+5. ⏳ 표준 에러 응답 헬퍼 도입(현재 `{error}` / `{error,message}` 혼재)
+6. ⏳ 기존 `API_GUIDE.md`(5개)·외부 가이드와 본 레퍼런스의 단일화(중복 제거)
 
 ---
 
