@@ -70,3 +70,44 @@ age/
 /*.pdf
 /*.png
 /*.html
+
+# 루트 개발/학습/벤치/패치/조사 스크립트 (런타임 불필요 — app/·config.py·run.py 만 있으면 됨)
+/benchmark_*.py
+/perf_test_*.py
+/analyze_*.py
+/patch_*.py
+/patch_exaon.py
+/fix_*.py
+/merge_lora.py
+/create_demo_graph.py
+/seed_*.py
+/generate_*.py
+/find_data_deep.py
+/get_v6_schema.py
+/inspect_db.py
+/clear_rdb.py
+/load_test_data.py
+/parse_graph_*.py
+/query_*.py
+/verify_*.py
+/run_etl.py
+/trigger_*.py
+/test_*.py
+/db_schema.txt
+/*.csv
+/*.json
+
+# 대체 배포 파일 (cslee 라이브 이미지엔 불필요)
+/Dockerfile.airgap
+/docker-compose.yml
+/docker-compose.airgap.yml
+/docker-compose.airgap.nativedb.yml
+/docker-compose.cslee.yml
+/requirements.airgap.txt
+/requirements-rag-eval.txt
+/*.bak.*
+
+# 비런타임 디렉토리
+/sdk/
+/exports/
+/rules/

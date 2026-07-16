@@ -65,8 +65,7 @@ services:
       - "5001:5001"          # Nginx가 없는 직접 접근 시
     volumes:
       - ./logs:/app/logs
-      - ./chroma_data:/app/chroma_data    # Legal RAG ChromaDB
-      - ./data:/app/data                  # API 키, 온톨로지 등
+      - ./data:/app/data                  # API 키, 온톨로지, 법률 RAG 코퍼스 등
     depends_on:
       agensgraph:
         condition: service_healthy
