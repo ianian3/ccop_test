@@ -1391,11 +1391,11 @@
                         <input type="checkbox" id="accumulateToggle" checked style="cursor:pointer; accent-color:#00b894;">
                         <i class="fas fa-layer-group" style="color:#00b894;"></i> 누적
                     </label>
-                    <label id="eventCollapseLabel" title="이벤트(이체·통화·메시지) 노드를 화면에서 직접 엣지로 접기 — DB 정본은 유지"
-                        style="display:inline-flex; align-items:center; gap:4px; color:#b2bec3; font-size:11px; cursor:pointer; user-select:none; padding:0 6px; white-space:nowrap;">
-                        <input type="checkbox" id="eventCollapseToggle" onchange="toggleEventCollapse()" style="cursor:pointer; accent-color:#f39c12;">
-                        <i class="fas fa-compress-arrows-alt" style="color:#f39c12;"></i> 이벤트접기
-                    </label>
+                    <button id="eventCollapseBtn" onclick="toggleEventCollapse()"
+                        title="현재 이벤트가 엣지로 접힌 상태 — 클릭 시 노드로 펼침 (DB 정본 유지)"
+                        style="background:#f39c12; border:1px solid #f39c12; color:#1a1a1a; padding:6px 10px; font-size:11px; font-weight:600; white-space:nowrap;">
+                        <i class="fas fa-expand-arrows-alt"></i> 이벤트 펼치기
+                    </button>
                     <button onclick="clearGraphView()"
                         style="background:#2d3436; border:1px solid #444; color:#dfe6e9; padding:6px 10px; font-size:11px;"
                         title="화면(캔버스)만 초기화 — DB 데이터는 삭제하지 않음">
@@ -3249,7 +3249,7 @@
         }
 
         // 페이지 로드 시 그래프 목록 갱신
-        window.addEventListener('load', loadGraphList);
+        window.addEventListener('load', () => { loadGraphList(); updateEventCollapseBtn(); });
 
         // ======================================================
         // 0.5 탭 네비게이션
@@ -3516,9 +3516,24 @@
             vt_msg:      { inRel: ['sent_msg'],     outRel: ['received_msg'],  relLabel: '✉️메시지', prop: ['dsptch_dt', 'msg_type'] },
         };
 
-        function isEventCollapseMode() {
-            const el = document.getElementById('eventCollapseToggle');
-            return el ? el.checked : false;
+        // 이벤트 접기 상태 — 디폴트: 접힘(true). 버튼으로 펼치기↔접기 토글.
+        let _eventCollapsed = true;
+        function isEventCollapseMode() { return _eventCollapsed; }
+
+        function updateEventCollapseBtn() {
+            const btn = document.getElementById('eventCollapseBtn');
+            if (!btn) return;
+            if (_eventCollapsed) {
+                // 접힌 상태 = 활성(주황 채움). 버튼은 '펼치기' 동작 안내.
+                btn.innerHTML = '<i class="fas fa-expand-arrows-alt"></i> 이벤트 펼치기';
+                btn.style.background = '#f39c12'; btn.style.color = '#1a1a1a';
+                btn.title = '현재 이벤트가 엣지로 접힌 상태 — 클릭 시 노드로 펼침 (DB 정본 유지)';
+            } else {
+                // 펼친 상태 = 비활성(테두리만). 버튼은 '접기' 동작 안내.
+                btn.innerHTML = '<i class="fas fa-compress-arrows-alt"></i> 이벤트 접기';
+                btn.style.background = '#2d3436'; btn.style.color = '#f39c12';
+                btn.title = '현재 이벤트 노드가 펼쳐진 상태 — 클릭 시 엣지로 접음';
+            }
         }
 
         function _firstProp(ev, keys) {
@@ -3581,13 +3596,15 @@
         }
 
         function toggleEventCollapse() {
-            if (isEventCollapseMode()) {
+            _eventCollapsed = !_eventCollapsed;
+            if (_eventCollapsed) {
                 const n = applyEventCollapse();
                 showToast(n > 0 ? `🔻 이벤트 ${n}건을 엣지로 접었습니다 (DB 정본 유지)` : '접을 수 있는 이벤트가 없습니다 (양끝 노드 필요)', n > 0 ? 'success' : 'info');
             } else {
                 undoEventCollapse();
-                showToast('🔺 이벤트 노드를 다시 펼쳤습니다', 'info');
+                showToast('🔺 이벤트 노드를 펼쳤습니다', 'info');
             }
+            updateEventCollapseBtn();
             cy.elements(':visible').layout({ name: 'dagre', rankDir: 'LR', nodeSep: 50, rankSep: 100, animate: true, fit: true }).run();
         }
 
