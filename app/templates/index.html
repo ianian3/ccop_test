@@ -1391,6 +1391,11 @@
                         <input type="checkbox" id="accumulateToggle" checked style="cursor:pointer; accent-color:#00b894;">
                         <i class="fas fa-layer-group" style="color:#00b894;"></i> 누적
                     </label>
+                    <label id="eventCollapseLabel" title="이벤트(이체·통화·메시지) 노드를 화면에서 직접 엣지로 접기 — DB 정본은 유지"
+                        style="display:inline-flex; align-items:center; gap:4px; color:#b2bec3; font-size:11px; cursor:pointer; user-select:none; padding:0 6px; white-space:nowrap;">
+                        <input type="checkbox" id="eventCollapseToggle" onchange="toggleEventCollapse()" style="cursor:pointer; accent-color:#f39c12;">
+                        <i class="fas fa-compress-arrows-alt" style="color:#f39c12;"></i> 이벤트접기
+                    </label>
                     <button onclick="clearGraphView()"
                         style="background:#2d3436; border:1px solid #444; color:#dfe6e9; padding:6px 10px; font-size:11px;"
                         title="화면(캔버스)만 초기화 — DB 데이터는 삭제하지 않음">
@@ -2416,6 +2421,8 @@
                 // ── 증거 등급 (evid_grade: A=실선 기본, B=대시 주황, C=점선 빨강) ──
                 { selector: 'edge[evid_grade = "B"]', style: { 'line-style': 'dashed', 'line-dash-pattern': [8, 4], 'line-color': '#e67e22', 'target-arrow-color': '#e67e22', 'width': 1.5, 'opacity': 0.85 } },
                 { selector: 'edge[evid_grade = "C"]', style: { 'line-style': 'dotted', 'line-color': '#e74c3c', 'target-arrow-color': '#e74c3c', 'width': 1.5, 'opacity': 0.6 } },
+                // ── 접힌 이벤트 엣지 (이벤트-노드 접기 토글) — 주황 대시 + 라벨 강조 ──
+                { selector: 'edge.collapsed-event', style: { 'width': 3, 'line-style': 'dashed', 'line-dash-pattern': [10, 4], 'line-color': '#f39c12', 'target-arrow-color': '#f39c12', 'target-arrow-shape': 'triangle', 'color': '#f9ca24', 'font-size': '10px', 'font-weight': 'bold', 'text-background-color': '#2d2410', 'text-background-opacity': 1, 'z-index': 60 } },
 
                 // ── 다단계 확장용 중간 투명 노드 ──
                 { selector: 'node[?hidden_intermediate]', style: { 'opacity': 0, 'text-opacity': 0, 'events': 'no' } },
@@ -3479,9 +3486,12 @@
                 cy.elements().remove();
                 added = cy.add(els);
             }
+            // 이벤트 접기 모드면 새로 들어온 이벤트도 즉시 접기 (멱등)
+            if (isEventCollapseMode()) applyEventCollapse();
             // 누적인데 새로 추가된 게 없으면(전부 중복) 재배치 생략 — 화면 흔들림 방지
             if (!additive || safe.length > 0) {
-                cy.layout({ name: 'dagre', rankDir: 'LR', nodeSep: 50, rankSep: 100, animate: true, fit: true }).run();
+                const layoutEles = isEventCollapseMode() ? cy.elements(':visible') : cy.elements();
+                layoutEles.layout({ name: 'dagre', rankDir: 'LR', nodeSep: 50, rankSep: 100, animate: true, fit: true }).run();
             }
             return (added && added.nodes) ? added.nodes().length : 0;
         }
@@ -3495,6 +3505,90 @@
             cy.elements().remove();
             try { renderV40Scalars([]); } catch (e) {}     // 스칼라 패널도 함께 정리
             showToast('🧹 화면을 초기화했습니다 (DB 데이터는 유지)', 'success');
+        }
+
+        // ── 이벤트-노드 접기(collapse) — L6 행위 노드를 화면에서만 직접 엣지로 축약 ──
+        //    DB 정본(reified 노드)은 유지. 방향은 온톨로지 domain/range 기준:
+        //    (출금계좌)-[from_account]->(이체)-[to_account]->(입금계좌) ⇒ 출금→입금 엣지
+        const EVENT_COLLAPSE_MAP = {
+            vt_transfer: { inRel: ['from_account'], outRel: ['to_account'],   relLabel: '💸이체',   prop: ['amount', 'dlng_amt', 'blnc_amt'] },
+            vt_call:     { inRel: ['caller'],       outRel: ['callee'],       relLabel: '📞통화',   prop: ['call_strt_dt', 'call_dt', 'call_dur_sec'] },
+            vt_msg:      { inRel: ['sent_msg'],     outRel: ['received_msg'],  relLabel: '✉️메시지', prop: ['dsptch_dt', 'msg_type'] },
+        };
+
+        function isEventCollapseMode() {
+            const el = document.getElementById('eventCollapseToggle');
+            return el ? el.checked : false;
+        }
+
+        function _firstProp(ev, keys) {
+            const p = ev.data('props') || {};
+            for (const k of keys) {
+                if (p[k] !== undefined && p[k] !== null && p[k] !== '') return p[k];
+                const d = ev.data(k);
+                if (d !== undefined && d !== null && d !== '') return d;
+            }
+            return null;
+        }
+
+        function _fmtEventVal(label, v) {
+            if (v === null || v === undefined) return '';
+            if (label === 'vt_transfer') {
+                const n = Number(String(v).replace(/[,\s]/g, ''));
+                if (!isNaN(n)) return n.toLocaleString() + '원';
+            }
+            return String(v).slice(0, 24);
+        }
+
+        // 현재 그래프의 접을 수 있는 이벤트 노드를 엣지로 축약. 반환: 접은 이벤트 수. (멱등)
+        function applyEventCollapse() {
+            let collapsed = 0;
+            Object.keys(EVENT_COLLAPSE_MAP).forEach(label => {
+                const cfg = EVENT_COLLAPSE_MAP[label];
+                cy.nodes(`[label="${label}"]`).forEach(ev => {
+                    if (ev.hasClass('evt-collapsed-src')) return;           // 이미 접힘
+                    const conn = ev.connectedEdges();
+                    const inEdges = conn.filter(e => e.target().id() === ev.id() && cfg.inRel.includes(e.data('label')));
+                    const outEdges = conn.filter(e => e.source().id() === ev.id() && cfg.outRel.includes(e.data('label')));
+                    if (inEdges.length === 0 || outEdges.length === 0) return;  // 양끝 다 있어야 접힘 (없으면 노드 유지)
+                    const labelText = (cfg.relLabel + ' ' + _fmtEventVal(label, _firstProp(ev, cfg.prop))).trim();
+                    inEdges.forEach(ie => outEdges.forEach(oe => {
+                        const a = ie.source(), b = oe.target();
+                        const sid = `collapsed_${ev.id()}__${a.id()}__${b.id()}`;
+                        if (cy.getElementById(sid).nonempty()) return;
+                        cy.add({
+                            group: 'edges', classes: 'collapsed-event',
+                            data: {
+                                id: sid, source: a.id(), target: b.id(), label: labelText,
+                                _collapsedFrom: ev.id(), _eventLabel: label, evid_grade: ev.data('evid_grade')
+                            }
+                        });
+                    }));
+                    inEdges.addClass('evt-hidden-edge').hide();
+                    outEdges.addClass('evt-hidden-edge').hide();
+                    ev.addClass('evt-collapsed-src').hide();
+                    collapsed++;
+                });
+            });
+            return collapsed;
+        }
+
+        // 접기 원복 — 합성 엣지 제거 + 숨긴 이벤트 노드/엣지 복원
+        function undoEventCollapse() {
+            cy.edges('.collapsed-event').remove();
+            cy.elements('.evt-hidden-edge').removeClass('evt-hidden-edge').show();
+            cy.nodes('.evt-collapsed-src').removeClass('evt-collapsed-src').show();
+        }
+
+        function toggleEventCollapse() {
+            if (isEventCollapseMode()) {
+                const n = applyEventCollapse();
+                showToast(n > 0 ? `🔻 이벤트 ${n}건을 엣지로 접었습니다 (DB 정본 유지)` : '접을 수 있는 이벤트가 없습니다 (양끝 노드 필요)', n > 0 ? 'success' : 'info');
+            } else {
+                undoEventCollapse();
+                showToast('🔺 이벤트 노드를 다시 펼쳤습니다', 'info');
+            }
+            cy.elements(':visible').layout({ name: 'dagre', rankDir: 'LR', nodeSep: 50, rankSep: 100, animate: true, fit: true }).run();
         }
 
         // ── 수사 세션 ID (탭 유지, 새로고침 시 초기화) ──────────────
