@@ -1385,6 +1385,17 @@
                         style="background:#2d3436; border:1px solid #444; color:#fdcb6e; padding:6px 10px; font-size:11px;" title="예시 질문">
                         <i class="fas fa-lightbulb"></i>
                     </button>
+                    <!-- 누적 모드 토글 + 화면 지우기 (조회 결과 캔버스 관리) -->
+                    <label id="accumulateLabel" title="켜짐: 조회 결과를 기존 그래프에 누적 · 꺼짐: 매번 교체"
+                        style="display:inline-flex; align-items:center; gap:4px; color:#b2bec3; font-size:11px; cursor:pointer; user-select:none; padding:0 6px; white-space:nowrap;">
+                        <input type="checkbox" id="accumulateToggle" checked style="cursor:pointer; accent-color:#00b894;">
+                        <i class="fas fa-layer-group" style="color:#00b894;"></i> 누적
+                    </label>
+                    <button onclick="clearGraphView()"
+                        style="background:#2d3436; border:1px solid #444; color:#dfe6e9; padding:6px 10px; font-size:11px;"
+                        title="화면(캔버스)만 초기화 — DB 데이터는 삭제하지 않음">
+                        <i class="fas fa-eraser"></i> 화면 지우기
+                    </button>
                     <!-- 예시 질문 드롭다운 -->
                     <div id="example-queries"
                         style="display:none; position:absolute; top:100%; left:0; margin-top:5px; background:#1e1e1e; border:1px solid #333; border-radius:8px; padding:10px; z-index:1000; min-width:400px; max-height:450px; overflow-y:auto; box-shadow:0 4px 15px rgba(0,0,0,0.7);">
@@ -3392,8 +3403,11 @@
 
             fetch(`${API_URL}/search?keyword=${encodeURIComponent(keyword)}&graph_path=${graphName}`)
                 .then(r => r.json()).then(d => {
-                    cy.elements().remove(); cy.add(d);
-                    cy.layout({ name: 'dagre', rankDir: 'LR', nodeSep: 50, rankSep: 100, animate: true }).run();
+                    const before = cy.nodes().length;
+                    const added = mergeIntoGraph(preprocessElements(_asElementArray(d)));
+                    if (isAccumulateMode() && before > 0) {
+                        showToast(`🔍 누적 +${added}개 노드 (총 ${cy.nodes().length}개)`, 'success');
+                    }
                 })
                 .catch(err => alert("검색 실패: 서버 연결 확인 필요"));
         };
@@ -3411,6 +3425,76 @@
                 // 노드: data.evid_grade 이미 있음 (서버 측 enrichment)
                 return Object.assign({}, el, { data });
             });
+        }
+
+        // ── 조회 결과 그래프 병합(누적) 헬퍼 ──────────────────────────
+        // 누적 토글이 켜져 있고 기존 노드가 있으면 캔버스를 지우지 않고
+        // 새 노드/엣지만 추가한다. 여러 번 조회하며 그래프를 쌓아갈 수 있음.
+        function isAccumulateMode() {
+            const el = document.getElementById('accumulateToggle');
+            return el ? el.checked : false;
+        }
+
+        function _asElementArray(x) {
+            if (Array.isArray(x)) return x;
+            if (x && (x.nodes || x.edges)) return [].concat(x.nodes || [], x.edges || []);
+            return [];
+        }
+
+        // rawEls(전처리 완료된 요소 배열)를 그래프에 병합. 반환: 새로 추가된 노드 수.
+        function mergeIntoGraph(rawEls) {
+            const els = _asElementArray(rawEls);
+            const additive = isAccumulateMode() && cy.elements().length > 0;
+            if (!additive) {
+                cy.elements().remove();               // 교체 모드(또는 빈 캔버스): 기존 방식
+            }
+            // 1) 이미 존재하는 요소 제외 — cy.add 는 동일 id 에서 예외를 던짐
+            const fresh = els.filter(el => {
+                if (!el || !el.data) return true;
+                const id = el.data.id;
+                if (id != null) return cy.getElementById(String(id)).empty();
+                // id 없는 엣지는 source|target|label 로 중복 판정 (중복 평행엣지 방지)
+                if (el.group === 'edges') {
+                    const key = `${el.data.source}|${el.data.target}|${el.data.label || ''}`;
+                    return cy.edges().filter(e =>
+                        `${e.data('source')}|${e.data('target')}|${e.data('label') || ''}` === key).empty();
+                }
+                return true;
+            });
+            // 2) 엣지는 양끝 노드가 (기존 + 이번 추가분) 안에 있어야 안전하게 add 됨
+            const nodeIds = new Set();
+            cy.nodes().forEach(n => nodeIds.add(n.id()));
+            fresh.forEach(el => {
+                if (el && el.group === 'nodes' && el.data && el.data.id != null) nodeIds.add(String(el.data.id));
+            });
+            const safe = fresh.filter(el => {
+                if (!el || el.group !== 'edges') return true;
+                return nodeIds.has(String(el.data.source)) && nodeIds.has(String(el.data.target));
+            });
+            let added;
+            try {
+                added = cy.add(safe);
+            } catch (e) {
+                console.error('그래프 병합 실패 → 교체로 폴백:', e);
+                cy.elements().remove();
+                added = cy.add(els);
+            }
+            // 누적인데 새로 추가된 게 없으면(전부 중복) 재배치 생략 — 화면 흔들림 방지
+            if (!additive || safe.length > 0) {
+                cy.layout({ name: 'dagre', rankDir: 'LR', nodeSep: 50, rankSep: 100, animate: true, fit: true }).run();
+            }
+            return (added && added.nodes) ? added.nodes().length : 0;
+        }
+
+        // 화면(캔버스)만 초기화 — DB 는 건드리지 않음 (파괴적 clearGraphDatabase 와 구분)
+        function clearGraphView() {
+            if (cy.elements().length === 0) {
+                showToast('이미 비어 있습니다', 'info');
+                return;
+            }
+            cy.elements().remove();
+            try { renderV40Scalars([]); } catch (e) {}     // 스칼라 패널도 함께 정리
+            showToast('🧹 화면을 초기화했습니다 (DB 데이터는 유지)', 'success');
         }
 
         // ── 수사 세션 ID (탭 유지, 새로고침 시 초기화) ──────────────
@@ -3445,12 +3529,15 @@
                     const visualEls = els.filter(e => e && (e.group === 'nodes' || e.group === 'edges'));
 
                     if (visualEls.length > 0) {
-                        cy.elements().remove();
-                        cy.add(visualEls);
-                        cy.layout({ name: 'dagre', rankDir: 'LR', nodeSep: 50, rankSep: 100, animate: true, fit: true }).run();
-                        const nodeCnt = visualEls.filter(e => e.group === 'nodes').length;
+                        const before = cy.nodes().length;
+                        const addedNodes = mergeIntoGraph(visualEls);
                         const scalarMsg = scalarCount > 0 ? ` (+ 스칼라 ${scalarCount}건)` : '';
-                        showToast(`✅ ${nodeCnt}개 노드 조회 완료${scalarMsg}`, "success");
+                        if (isAccumulateMode() && before > 0) {
+                            showToast(`✅ 누적 +${addedNodes}개 노드 (총 ${cy.nodes().length}개)${scalarMsg}`, "success");
+                        } else {
+                            const nodeCnt = visualEls.filter(e => e.group === 'nodes').length;
+                            showToast(`✅ ${nodeCnt}개 노드 조회 완료${scalarMsg}`, "success");
+                        }
                     } else if (scalarCount > 0) {
                         // 노드/엣지 없고 scalar 만 있는 경우 (집계 쿼리)
                         showToast(`✅ 집계 결과 ${scalarCount}건 — 좌하단 스칼라 패널 확인`, "success");
