@@ -2958,11 +2958,14 @@
                 .then(data => {
                     if (data && data.length > 0) {
                         cy.add(data);
+                        // 그래프 선택 로드 시에도 접기 모드(기본 ON)면 바로 접힌 상태로 표시
+                        const collapsedN = isEventCollapseMode() ? applyEventCollapse() : 0;
                         if (currentLayout === 'layer') applyPoleLayerLayout();
                         else applyAutoLayout();
                         const nodeCount = data.filter(e => e.group === 'nodes').length;
                         const edgeCount = data.filter(e => e.group === 'edges').length;
-                        showToast(`✅ '${graphName}' 로드 완료 — 노드 ${nodeCount}개 · 엣지 ${edgeCount}개`, "success");
+                        const collapseMsg = collapsedN > 0 ? ` · 이벤트 ${collapsedN}건 접힘` : '';
+                        showToast(`✅ '${graphName}' 로드 완료 — 노드 ${nodeCount}개 · 엣지 ${edgeCount}개${collapseMsg}`, "success");
                     } else {
                         showToast(`'${graphName}' 그래프에 데이터가 없습니다.`, "warning");
                     }
@@ -2997,9 +3000,9 @@
             const START_X = 120;
             const CENTER_Y = 0;
 
-            // 레이어별 노드 분류
+            // 레이어별 노드 분류 (:visible 만 — 접기로 숨긴 이벤트는 레이어 슬롯 미점유)
             const layers = {};
-            cy.nodes().forEach(node => {
+            cy.nodes(':visible').forEach(node => {
                 const lyr = POLE_LAYER[node.data('label')] ?? 6;
                 (layers[lyr] = layers[lyr] || []).push(node);
             });
@@ -3029,7 +3032,8 @@
 
         function applyAutoLayout() {
             document.getElementById('layer-header').style.display = 'none';
-            cy.layout({
+            // :visible 만 배치 — 이벤트 접기로 숨긴 노드가 빈 공간을 만들지 않도록
+            cy.elements(':visible').layout({
                 name: 'dagre', rankDir: 'LR',
                 nodeSep: 50, edgeSep: 10, rankSep: 120,
                 animate: true, fit: true, padding: 40
