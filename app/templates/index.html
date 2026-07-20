@@ -1385,22 +1385,6 @@
                         style="background:#2d3436; border:1px solid #444; color:#fdcb6e; padding:6px 10px; font-size:11px;" title="예시 질문">
                         <i class="fas fa-lightbulb"></i>
                     </button>
-                    <!-- 누적 모드 토글 + 화면 지우기 (조회 결과 캔버스 관리) -->
-                    <label id="accumulateLabel" title="켜짐: 조회 결과를 기존 그래프에 누적 · 꺼짐: 매번 교체"
-                        style="display:inline-flex; align-items:center; gap:4px; color:#b2bec3; font-size:11px; cursor:pointer; user-select:none; padding:0 6px; white-space:nowrap;">
-                        <input type="checkbox" id="accumulateToggle" checked style="cursor:pointer; accent-color:#00b894;">
-                        <i class="fas fa-layer-group" style="color:#00b894;"></i> 누적
-                    </label>
-                    <button id="eventCollapseBtn" onclick="toggleEventCollapse()"
-                        title="현재 이벤트가 엣지로 접힌 상태 — 클릭 시 노드로 펼침 (DB 정본 유지)"
-                        style="background:#f39c12; border:1px solid #f39c12; color:#1a1a1a; padding:6px 10px; font-size:11px; font-weight:600; white-space:nowrap;">
-                        <i class="fas fa-expand-arrows-alt"></i> 이벤트 펼치기
-                    </button>
-                    <button onclick="clearGraphView()"
-                        style="background:#2d3436; border:1px solid #444; color:#dfe6e9; padding:6px 10px; font-size:11px;"
-                        title="화면(캔버스)만 초기화 — DB 데이터는 삭제하지 않음">
-                        <i class="fas fa-eraser"></i> 화면 지우기
-                    </button>
                     <!-- 예시 질문 드롭다운 -->
                     <div id="example-queries"
                         style="display:none; position:absolute; top:100%; left:0; margin-top:5px; background:#1e1e1e; border:1px solid #333; border-radius:8px; padding:10px; z-index:1000; min-width:400px; max-height:450px; overflow-y:auto; box-shadow:0 4px 15px rgba(0,0,0,0.7);">
@@ -1419,6 +1403,25 @@
                         <div class="example-query" onclick="setExampleQuery('피싱 사이트를 호스팅한 서버 IP와 그 국가를 추적해줘')">🌐 피싱 서버 IP 역추적 (hosts)</div>
                         <div class="example-query" onclick="setExampleQuery('피해자가 돈을 출금한 ATM 위치와 CCTV 설치 여부 알려줘')">🏧 ATM 위치 및 CCTV 정보</div>
                     </div>
+                </div>
+
+                <!-- 뷰 컨트롤 영역 (질의 생성과 분리) -->
+                <div class="search-bar" style="gap:6px;">
+                    <label id="accumulateLabel" title="켜짐: 조회 결과를 기존 그래프에 누적 · 꺼짐: 매번 교체"
+                        style="display:inline-flex; align-items:center; gap:4px; color:#b2bec3; font-size:11px; cursor:pointer; user-select:none; padding:0 4px; white-space:nowrap;">
+                        <input type="checkbox" id="accumulateToggle" checked style="cursor:pointer; accent-color:#00b894;">
+                        <i class="fas fa-layer-group" style="color:#00b894;"></i> 누적
+                    </label>
+                    <button id="eventCollapseBtn" onclick="toggleEventCollapse()"
+                        title="현재 이벤트가 엣지로 접힌 상태 — 클릭 시 노드로 펼침 (DB 정본 유지)"
+                        style="background:#f39c12; border:1px solid #f39c12; color:#1a1a1a; padding:6px 10px; font-size:11px; font-weight:600; white-space:nowrap;">
+                        <i class="fas fa-expand-arrows-alt"></i> 이벤트 펼치기
+                    </button>
+                    <button onclick="clearGraphView()"
+                        style="background:#2d3436; border:1px solid #444; color:#dfe6e9; padding:6px 10px; font-size:11px;"
+                        title="화면(캔버스)만 초기화 — DB 데이터는 삭제하지 않음">
+                        <i class="fas fa-eraser"></i> 화면 지우기
+                    </button>
                 </div>
 
                 <div class="search-bar" style="gap:4px;">
