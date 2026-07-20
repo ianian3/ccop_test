@@ -1509,3 +1509,269 @@ class GraphService:
             return False, str(e)
         finally:
             conn.close()
+
+    # ══════════════════════════════════════════════════════════════════
+    # 수사 분석 지원 — 자금흐름 추적 / 타임라인 (2026-07)
+    # ══════════════════════════════════════════════════════════════════
+    @staticmethod
+    def _num(v):
+        """금액/숫자 문자열 → float (콤마·'원'·None 방어)"""
+        if v is None:
+            return 0.0
+        try:
+            return float(str(v).replace(',', '').replace('원', '').strip() or 0)
+        except Exception:
+            return 0.0
+
+    @staticmethod
+    def _disp(props):
+        """노드 표시명 추출 (계좌/전화 등 공통 폴백)"""
+        if not isinstance(props, dict):
+            return ''
+        for k in ('name', 'flnm', 'bacnt_no', 'acct_no', 'account', 'accno', 'acnt_no',
+                  'number', 'telno', 'phone', 'val', 'title', 'id_val', 'event_id'):
+            v = props.get(k)
+            if v not in (None, ''):
+                return str(v)
+        return ''
+
+    @staticmethod
+    def trace_fund_flow(start_id, graph_path, max_hops=5, direction='down', min_amount=0):
+        """
+        자금 흐름 다단계 추적 — 시작 계좌에서 이체 체인을 재귀 추적하고
+        자금세탁 typology(순환/분산·집중/종착) 자동 탐지.
+        direction: 'down'(자금 유출 방향) | 'up'(자금 유입 출처)
+        반환: {nodes, edges(Cytoscape), analysis, paths}
+        """
+        from collections import defaultdict
+        conn, cur = GraphService.get_db_connection()
+        if not conn:
+            return {"error": "DB 연결 실패"}
+        try:
+            safe_set_graph_path(cur, graph_path)
+            cur.execute("""
+                MATCH (a1:vt_bacnt)-[:from_account]->(t:vt_transfer)-[:to_account]->(a2:vt_bacnt)
+                RETURN id(a1), properties(a1), id(t), properties(t), id(a2), properties(a2)
+            """)
+            rows = cur.fetchall()
+            if not rows:
+                return {"nodes": [], "edges": [], "paths": [],
+                        "analysis": {"error": "이체 데이터 없음", "num_transfers": 0}}
+
+            acct_props = {}
+            adj = defaultdict(list)      # down: from -> [(to, edge)]
+            radj = defaultdict(list)     # up:   to   -> [(from, edge)]
+            for a1, p1, tid, tp, a2, p2 in rows:
+                a1, a2, tid = str(a1), str(a2), str(tid)
+                p1, tp, p2 = GraphService.safe_props(p1), GraphService.safe_props(tp), GraphService.safe_props(p2)
+                acct_props.setdefault(a1, p1); acct_props.setdefault(a2, p2)
+                amt = GraphService._num(tp.get('amount', tp.get('dlng_amt', 0)))
+                if amt < GraphService._num(min_amount):
+                    continue
+                edge = {"tid": tid, "from": a1, "to": a2, "amount": amt,
+                        "ts": tp.get('timestamp', tp.get('dlng_dt', ''))}
+                adj[a1].append((a2, edge))
+                radj[a2].append((a1, edge))
+
+            start_id = str(start_id)
+            use_adj = adj if direction == 'down' else radj
+
+            # BFS 트리 기준 조상 판정 헬퍼 (순환은 traversal 방향으로 판정 — 원시 엣지 방향 아님)
+            parent = {}
+            def is_ancestor(anc, node):
+                steps, curn = 0, node
+                while steps < 200:
+                    if curn == anc:
+                        return True
+                    if curn not in parent:
+                        return False
+                    curn = parent[curn][0]; steps += 1
+                return False
+
+            # BFS: 각 노드 1회 방문(hop 거리) + 사용 엣지 수집 + back-edge(순환) 탐지
+            hop = {start_id: 0}
+            used = []
+            cyclic_pairs = set()      # 순환을 이루는 raw (from,to)
+            frontier = [start_id]
+            cur_hop = 0
+            MAX_NODES = 400
+            while frontier and cur_hop < int(max_hops):
+                nf = []
+                for node in frontier:
+                    for nxt, edge in use_adj.get(node, []):
+                        used.append(edge)
+                        if nxt not in hop:
+                            if len(hop) < MAX_NODES:
+                                hop[nxt] = hop[node] + 1
+                                parent[nxt] = (node, edge)
+                                nf.append(nxt)
+                        elif is_ancestor(nxt, node):       # traversal 상 조상으로 회귀 = 순환
+                            cyclic_pairs.add((edge['from'], edge['to']))
+                frontier = nf
+                cur_hop += 1
+            reached = set(hop.keys())
+
+            # 도달 노드 사이 엣지만 (from,to) 집계
+            pair_agg = {}
+            for e in used:
+                if e['from'] in reached and e['to'] in reached:
+                    key = (e['from'], e['to'])
+                    a = pair_agg.setdefault(key, {"total": 0.0, "count": 0, "cyc": False})
+                    a['total'] += e['amount']; a['count'] += 1
+                    if key in cyclic_pairs:
+                        a['cyc'] = True
+
+            out_deg = defaultdict(int); in_deg = defaultdict(int)
+            for (f, t) in pair_agg:
+                out_deg[f] += 1; in_deg[t] += 1
+            fan_out = [n for n in reached if out_deg[n] >= 3]
+            fan_in = [n for n in reached if in_deg[n] >= 3]
+            terminals = [n for n in reached if n != start_id and out_deg[n] == 0]
+            circular_edges = [k for k, v in pair_agg.items() if v['cyc']]
+            total_amount = sum(v['total'] for v in pair_agg.values())
+
+            def trace_path(n):
+                seq, amts, steps = [n], [], 0
+                while n in parent and steps < 200:
+                    p, e = parent[n]
+                    amts.append(e['amount']); seq.append(p); n = p; steps += 1
+                seq.reverse(); amts.reverse()
+                return seq, amts
+            paths = []
+            for term in sorted(terminals, key=lambda n: hop[n], reverse=True)[:15]:
+                seq, amts = trace_path(term)
+                paths.append({
+                    "accounts": [{"id": nid, "name": GraphService._disp(acct_props.get(nid, {}))} for nid in seq],
+                    "amounts": amts, "hops": len(seq) - 1, "min_amount": min(amts) if amts else 0})
+
+            def node_classes(nid):
+                cls = []
+                if nid == start_id: cls.append('ff-start')
+                if nid in terminals: cls.append('ff-terminal')
+                if nid in fan_out: cls.append('ff-fanout')
+                if nid in fan_in: cls.append('ff-fanin')
+                return ' '.join(cls)
+            nodes = [{"group": "nodes", "classes": node_classes(nid),
+                      "data": {"id": nid, "label": "vt_bacnt", "hop": hop[nid],
+                               "props": acct_props.get(nid, {}),
+                               "name": GraphService._disp(acct_props.get(nid, {}))}} for nid in reached]
+            edges = []
+            for (f, t), v in pair_agg.items():
+                lbl = f"₩{int(v['total']):,}" + (f" ({v['count']}건)" if v['count'] > 1 else "")
+                edges.append({"group": "edges",
+                    "classes": "fund-flow-edge" + (" ff-circular" if v['cyc'] else ""),
+                    "data": {"id": f"ff_{f}_{t}", "source": f, "target": t, "label": lbl,
+                             "amount": v['total'], "count": v['count']}})
+
+            start_name = GraphService._disp(acct_props.get(start_id, {})) or start_id
+            analysis = {
+                "start": {"id": start_id, "name": start_name},
+                "direction": direction, "max_hops": int(max_hops),
+                "num_accounts": len(reached),
+                "num_transfers": sum(v['count'] for v in pair_agg.values()),
+                "num_flow_edges": len(pair_agg), "total_amount": total_amount,
+                "max_depth_reached": max(hop.values()) if hop else 0,
+                "terminals": [{"id": n, "name": GraphService._disp(acct_props.get(n, {}))} for n in terminals],
+                "fan_out": [{"id": n, "name": GraphService._disp(acct_props.get(n, {})), "deg": out_deg[n]} for n in fan_out],
+                "fan_in": [{"id": n, "name": GraphService._disp(acct_props.get(n, {})), "deg": in_deg[n]} for n in fan_in],
+                "circular_count": len(circular_edges), "has_circular": len(circular_edges) > 0,
+            }
+            return {"nodes": nodes, "edges": edges, "paths": paths, "analysis": analysis}
+        except Exception as e:
+            logger.error(f"[FundFlow] ERROR: {e}")
+            return {"error": str(e)}
+        finally:
+            conn.close()
+
+    @staticmethod
+    def get_timeline(graph_path, entity_id=None, event_types=None, limit=1000, corr_window_min=10):
+        """
+        이벤트(이체/통화/메시지) 시간순 집계 + 시간창 상관(통화→이체) 탐지.
+        entity_id 지정 시 해당 노드가 참여한 이벤트만.
+        반환: {events, correlations, stats}
+        """
+        from datetime import datetime
+        from collections import Counter
+        conn, cur = GraphService.get_db_connection()
+        if not conn:
+            return {"error": "DB 연결 실패"}
+        # (label, ko, cypher, role1, role2, participant_label)
+        specs = [
+            ("vt_transfer", "이체",
+             "MATCH (a1:vt_bacnt)-[:from_account]->(t:vt_transfer)-[:to_account]->(a2:vt_bacnt) "
+             "RETURN id(t), properties(t), id(a1), properties(a1), id(a2), properties(a2)",
+             "출금", "입금", "vt_bacnt"),
+            ("vt_call", "통화",
+             "MATCH (p1)-[:caller]->(t:vt_call)-[:callee]->(p2) "
+             "RETURN id(t), properties(t), id(p1), properties(p1), id(p2), properties(p2)",
+             "발신", "수신", "vt_telno"),
+            ("vt_msg", "메시지",
+             "MATCH (p1)-[:sent_msg]->(t:vt_msg)-[:received_msg]->(p2) "
+             "RETURN id(t), properties(t), id(p1), properties(p1), id(p2), properties(p2)",
+             "발신", "수신", "vt_telno"),
+        ]
+        events = []
+        try:
+            safe_set_graph_path(cur, graph_path)
+            for label, ko, cypher, r1, r2, plabel in specs:
+                if event_types and label not in event_types:
+                    continue
+                try:
+                    cur.execute(cypher)
+                    fetched = cur.fetchall()
+                except Exception as ex:      # 라벨 미존재 등 → 스킵 (autocommit이라 tx 오염 없음)
+                    logger.info(f"[Timeline] {label} 스킵: {ex}")
+                    continue
+                for tid, tp, i1, q1, i2, q2 in fetched:
+                    tp = GraphService.safe_props(tp); q1 = GraphService.safe_props(q1); q2 = GraphService.safe_props(q2)
+                    ts = tp.get('timestamp', tp.get('dlng_dt', tp.get('call_strt_dt', '')))
+                    parts = [
+                        {"id": str(i1), "name": GraphService._disp(q1), "role": r1, "label": plabel},
+                        {"id": str(i2), "name": GraphService._disp(q2), "role": r2, "label": plabel}]
+                    if label == "vt_transfer":
+                        detail = f"₩{int(GraphService._num(tp.get('amount', tp.get('dlng_amt', 0)))):,}"
+                    elif label == "vt_call":
+                        d = GraphService._num(tp.get('duration', tp.get('call_dur_sec', 0)))
+                        detail = f"{int(d)}초" if d else ""
+                    else:
+                        detail = ""
+                    events.append({"id": str(tid), "type": label, "type_ko": ko,
+                                   "timestamp": ts, "participants": parts, "detail": detail})
+            if entity_id:
+                eid = str(entity_id)
+                events = [e for e in events if any(p['id'] == eid for p in e['participants'])]
+
+            def epoch(s):
+                for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d"):
+                    try:
+                        return datetime.strptime(str(s).strip(), fmt).timestamp()
+                    except Exception:
+                        pass
+                return None
+            for e in events:
+                e['ts_epoch'] = epoch(e['timestamp'])
+            dated = sorted([e for e in events if e['ts_epoch'] is not None], key=lambda e: e['ts_epoch'])
+
+            correlations = []
+            win = int(corr_window_min) * 60
+            calls = [e for e in dated if e['type'] == 'vt_call']
+            transfers = [e for e in dated if e['type'] == 'vt_transfer']
+            for tr in transfers:
+                for c in calls:
+                    gap = tr['ts_epoch'] - c['ts_epoch']
+                    if 0 <= gap <= win:
+                        correlations.append({"call_id": c['id'], "transfer_id": tr['id'],
+                                             "gap_min": round(gap / 60, 1),
+                                             "call_time": c['timestamp'], "transfer_time": tr['timestamp']})
+            dated = dated[:int(limit)]
+            stats = {"total": len(events), "dated": len(dated),
+                     "by_type": dict(Counter(e['type_ko'] for e in events)),
+                     "span": {"start": dated[0]['timestamp'] if dated else None,
+                              "end": dated[-1]['timestamp'] if dated else None},
+                     "correlations": len(correlations)}
+            return {"events": dated, "correlations": correlations, "stats": stats}
+        except Exception as e:
+            logger.error(f"[Timeline] ERROR: {e}")
+            return {"error": str(e)}
+        finally:
+            conn.close()

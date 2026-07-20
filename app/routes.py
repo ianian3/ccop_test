@@ -378,6 +378,37 @@ def hub_nodes():
     hubs = GraphService.find_hub_nodes(graph_path, top_n)
     return jsonify({"hubs": hubs})
 
+@bp.route('/api/fund-flow', methods=['POST'])
+def fund_flow_trace():
+    """자금 흐름 다단계 추적 — 시작 계좌에서 이체 체인 재귀 추적 + typology 탐지"""
+    data = request.get_json(silent=True) or {}
+    start_id = data.get('start_id') or data.get('node_id') or data.get('id')
+    graph_path = data.get('graph_path') or current_app.config.get('DEFAULT_GRAPH_PATH', 'tccop_graph_v6')
+    if not start_id:
+        return jsonify({"error": "start_id(계좌 노드 id) 필요"}), 400
+    result = GraphService.trace_fund_flow(
+        start_id, graph_path,
+        max_hops=int(data.get('max_hops', 5)),
+        direction=data.get('direction', 'down'),
+        min_amount=data.get('min_amount', 0))
+    code = 400 if isinstance(result, dict) and result.get('error') else 200
+    return jsonify(result), code
+
+@bp.route('/api/timeline', methods=['GET'])
+def timeline_events():
+    """이벤트(이체/통화/메시지) 시간순 타임라인 + 통화→이체 시간창 상관"""
+    graph_path = request.args.get('graph_path', current_app.config.get('DEFAULT_GRAPH_PATH', 'tccop_graph_v6'))
+    entity_id = request.args.get('entity_id') or request.args.get('id')
+    types = request.args.get('types')
+    result = GraphService.get_timeline(
+        graph_path,
+        entity_id=entity_id,
+        event_types=(types.split(',') if types else None),
+        limit=request.args.get('limit', 1000, type=int),
+        corr_window_min=request.args.get('corr_window_min', 10, type=int))
+    code = 400 if isinstance(result, dict) and result.get('error') else 200
+    return jsonify(result), code
+
 # ------------------------------
 # 2.5 RDB → GDB 온톨로지 기반 변환
 # ------------------------------
