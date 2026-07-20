@@ -1461,6 +1461,16 @@
                         title="이벤트(이체·통화) 시간순 타임라인 + 통화→이체 상관 탐지">
                         <i class="fas fa-clock"></i> 타임라인
                     </button>
+                    <button onclick="runCentrality()"
+                        style="background:#6c5ce722; border:1px solid #6c5ce7; color:#a29bfe; padding:6px 10px; font-size:11px; font-weight:600;"
+                        title="중심성·조직구조 (핵심 연결책·영향력·조직 셀)">
+                        <i class="fas fa-sitemap"></i> 중심성
+                    </button>
+                    <button onclick="runEntityResolution()"
+                        style="background:#00b89422; border:1px solid #00b894; color:#00b894; padding:6px 10px; font-size:11px; font-weight:600;"
+                        title="동일인 의심 탐지 (공유 식별자원·인프라)">
+                        <i class="fas fa-user-secret"></i> 동일인
+                    </button>
                 </div>
             </div>
         </div>
@@ -1664,6 +1674,26 @@
                     <button id="ff-dir-up" onclick="runFundFlow('up')" style="flex:1; background:#2d3436; color:#e17055; border:1px solid #e17055; padding:6px; font-size:11px; font-weight:600; border-radius:4px; cursor:pointer;">⬆ 상류(유입)</button>
                 </div>
                 <div id="fundflow-body" style="padding:12px 14px; font-size:12px; line-height:1.7; color:#dfe6e9;"></div>
+            </div>
+
+            <!-- 중심성·조직구조 패널 -->
+            <div id="centrality-panel"
+                style="display:none; position:fixed; top:70px; left:16px; z-index:9998; width:362px; max-height:82vh; overflow:auto; background:rgba(20,18,30,0.98); border:2px solid #6c5ce7; border-radius:10px; box-shadow:0 8px 32px rgba(0,0,0,0.6); font-family:var(--font-main);">
+                <div style="display:flex; justify-content:space-between; align-items:center; padding:11px 14px; border-bottom:1px solid rgba(108,92,231,0.4); background:rgba(108,92,231,0.12); border-radius:8px 8px 0 0;">
+                    <span style="font-size:14px; color:#a29bfe; font-weight:bold;"><i class="fas fa-sitemap"></i> 중심성·조직구조</span>
+                    <span onclick="closeCentrality()" style="cursor:pointer; color:#fff; font-size:16px; padding:0 8px; background:rgba(255,255,255,0.1); border-radius:4px;">×</span>
+                </div>
+                <div id="centrality-body" style="padding:12px 14px; font-size:12px; line-height:1.55; color:#dfe6e9;"></div>
+            </div>
+
+            <!-- 동일인 의심 탐지 패널 -->
+            <div id="entity-panel"
+                style="display:none; position:fixed; top:70px; left:16px; z-index:9998; width:362px; max-height:82vh; overflow:auto; background:rgba(16,26,22,0.98); border:2px solid #00b894; border-radius:10px; box-shadow:0 8px 32px rgba(0,0,0,0.6); font-family:var(--font-main);">
+                <div style="display:flex; justify-content:space-between; align-items:center; padding:11px 14px; border-bottom:1px solid rgba(0,184,148,0.4); background:rgba(0,184,148,0.12); border-radius:8px 8px 0 0;">
+                    <span style="font-size:14px; color:#00b894; font-weight:bold;"><i class="fas fa-user-secret"></i> 동일인 의심 탐지</span>
+                    <span onclick="closeEntity()" style="cursor:pointer; color:#fff; font-size:16px; padding:0 8px; background:rgba(255,255,255,0.1); border-radius:4px;">×</span>
+                </div>
+                <div id="entity-body" style="padding:12px 14px; font-size:12px; color:#dfe6e9;"></div>
             </div>
 
             <!-- 이벤트 타임라인 패널 -->
@@ -3787,6 +3817,122 @@
             } catch (err) { }
         }
         function closeTimeline() { document.getElementById('timeline-panel').style.display = 'none'; }
+
+        // ══════════════════════════════════════════════════════════════
+        // 수사 분석 — 중심성·조직구조 / 엔티티 해소(동일인)
+        // ══════════════════════════════════════════════════════════════
+        function _lblKo(l) {
+            const m = { vt_psn: '인물', vt_bacnt: '계좌', vt_telno: '전화', vt_ip: 'IP', vt_site: '사이트', vt_atm: 'ATM', vt_dev: '기기', vt_transfer: '이체', vt_call: '통화', vt_case: '사건', vt_petition: '청원' };
+            return m[l] || l;
+        }
+        function _closeAnalysisPanels() {
+            ['fundflow-panel', 'centrality-panel', 'entity-panel'].forEach(id => { const p = document.getElementById(id); if (p) p.style.display = 'none'; });
+        }
+        function _centerNode(id) {
+            const n = cy.getElementById(id);
+            if (n && n.nonempty()) { cy.elements().removeClass('highlight'); n.addClass('highlight'); cy.animate({ center: { eles: n }, zoom: Math.max(1.2, cy.zoom()) }, { duration: 400 }); showToast('그래프에서 하이라이트', 'info'); }
+            else showToast('현재 캔버스에 없는 노드 (그래프를 로드하세요)', 'warning');
+        }
+
+        let _centralityMeta = null;
+        function runCentrality() {
+            const g = document.getElementById('targetGraphInfo').value;
+            showToast('🕸 중심성·조직구조 분석 중…', 'info');
+            fetch(`${API_URL}/analysis/centrality?graph_path=${encodeURIComponent(g)}&top_n=12`)
+                .then(r => r.json()).then(d => {
+                    if (d.error) { showToast('분석 실패: ' + d.error, 'error'); return; }
+                    _centralityMeta = d.node_meta || {};
+                    showCentrality(d);
+                }).catch(e => showToast('네트워크 오류: ' + e.message, 'error'));
+        }
+        function showCentrality(d) {
+            _closeAnalysisPanels();
+            const s = d.stats || {};
+            const rankList = (title, arr, color) => {
+                if (!arr || !arr.length) return '';
+                return `<div style="margin-bottom:8px;"><div style="color:${color}; font-weight:600; margin-bottom:3px;">${title}</div>`
+                    + arr.slice(0, 6).map((x, i) => `<div onclick="_centerNode('${x.id}')" style="cursor:pointer; font-size:11px; padding:2px 4px; display:flex; justify-content:space-between; border-radius:3px;" onmouseover="this.style.background='rgba(255,255,255,0.06)'" onmouseout="this.style.background='none'"><span>${i + 1}. ${x.name || ('…' + String(x.id).slice(-4))} <span style="color:#636e72;">[${_lblKo(x.label)}]</span></span><b style="color:${color};">${x.value}</b></div>`).join('') + `</div>`;
+            };
+            let html = `<div style="font-size:11px; color:#8e9abf; margin-bottom:8px;">노드 ${s.nodes} · 엣지 ${s.edges} · 커뮤니티 ${s.communities}${s.betweenness_computed ? '' : ' · (대형: betweenness 생략)'}</div>`;
+            html += rankList('🔗 핵심 연결책 (betweenness — 검거 급소)', d.top_betweenness, '#e17055');
+            html += rankList('⭐ 영향력 (PageRank — 조직 핵심)', d.top_pagerank, '#fdcb6e');
+            html += rankList('📊 연결 수 (degree)', d.top_degree, '#74b9ff');
+            if (d.communities && d.communities.length) {
+                html += `<div style="margin-top:8px; border-top:1px solid rgba(255,255,255,0.1); padding-top:6px;"><div style="color:#a29bfe; font-weight:600; margin-bottom:3px;">🏘 조직 셀 (커뮤니티 ${d.communities.length})</div>`;
+                d.communities.slice(0, 6).forEach(c => {
+                    const mix = Object.entries(c.label_mix || {}).map(([k, v]) => `${_lblKo(k)}${v}`).join(' ');
+                    html += `<div style="font-size:11px; margin:2px 0;">#${c.id} <b>${c.size}</b> ${c.lead && c.lead.name ? ('· ' + c.lead.name) : ''} <span style="color:#636e72;">${mix}</span></div>`;
+                });
+                html += `</div>`;
+            }
+            html += `<button onclick="colorByCommunity()" style="width:100%; margin-top:10px; background:#6c5ce7; color:white; border:none; padding:7px; font-size:11px; font-weight:600; border-radius:4px; cursor:pointer;">🎨 커뮤니티 채색 + 중심성 크기</button>`;
+            html += `<button onclick="resetGraphStyle()" style="width:100%; margin-top:4px; background:#2d3436; color:#b2bec3; border:1px solid #444; padding:6px; font-size:11px; border-radius:4px; cursor:pointer;">채색 해제</button>`;
+            document.getElementById('centrality-body').innerHTML = html;
+            document.getElementById('centrality-panel').style.display = 'block';
+            const top = d.top_betweenness && d.top_betweenness[0];
+            showToast(`🕸 분석 완료 — 핵심 연결책 ${top ? (top.name || top.id) : '-'}`, 'success');
+        }
+        const _COMM_COLORS = ['#e17055', '#0984e3', '#00b894', '#fdcb6e', '#a29bfe', '#e84393', '#00cec9', '#fab1a0', '#55efc4', '#ffeaa7', '#74b9ff', '#ff7675'];
+        function colorByCommunity() {
+            if (!_centralityMeta) { showToast('먼저 중심성 분석을 실행하세요', 'warning'); return; }
+            let applied = 0;
+            cy.nodes().forEach(n => {
+                const m = _centralityMeta[n.id()];
+                if (!m) return;
+                applied++;
+                const sz = 40 + m.b * 55;
+                n.style('background-color', _COMM_COLORS[m.c % _COMM_COLORS.length]);
+                n.style('width', sz + 'px'); n.style('height', sz + 'px');
+                n.style('border-color', '#ffffff'); n.style('border-width', 1 + m.b * 4);
+            });
+            showToast(`🎨 ${applied}개 노드 채색(커뮤니티)+크기(중심성) 적용`, applied ? 'info' : 'warning');
+        }
+        function resetGraphStyle() {
+            cy.nodes().forEach(n => { n.removeStyle('background-color'); n.removeStyle('width'); n.removeStyle('height'); n.removeStyle('border-color'); n.removeStyle('border-width'); });
+            showToast('노드 스타일 복원', 'info');
+        }
+        function closeCentrality() { document.getElementById('centrality-panel').style.display = 'none'; }
+
+        function runEntityResolution() {
+            const g = document.getElementById('targetGraphInfo').value;
+            showToast('🔎 동일인 의심 탐지 중…', 'info');
+            fetch(`${API_URL}/analysis/entity-resolution?graph_path=${encodeURIComponent(g)}&label=vt_psn&min_shared=1`)
+                .then(r => r.json()).then(d => {
+                    if (d.error) { showToast('탐지 실패: ' + d.error, 'error'); return; }
+                    showEntityResolution(d);
+                }).catch(e => showToast('네트워크 오류: ' + e.message, 'error'));
+        }
+        function showEntityResolution(d) {
+            _closeAnalysisPanels();
+            const cs = d.candidates || []; const s = d.stats || {};
+            const badge = { high: ['#d63031', '동일인 강력'], mid: ['#e17055', '의심'], low: ['#636e72', '연결'] };
+            window._entCands = cs;
+            let html = `<div style="font-size:11px; color:#8e9abf; margin-bottom:8px;">대상 ${s.targets}명 · 후보쌍 ${cs.length} · 기존 sameAs ${s.existing_sameas || 0}</div>`;
+            if (!cs.length) html += `<div style="color:#8e9abf; padding:12px 0;">강한 동일인 후보가 없습니다.<br>(이 그래프는 인물↔식별자원 공유가 적음)</div>`;
+            cs.slice(0, 20).forEach((c, i) => {
+                const b = badge[c.confidence] || badge.low;
+                const res = (c.shared_resources || []).slice(0, 4).map(r => `${r.name || ('…' + String(r.id).slice(-4))}${r.via ? '*' : ''}`).join(', ');
+                html += `<div onclick="entHighlight(${i})" style="cursor:pointer; border:1px solid rgba(255,255,255,0.08); border-left:3px solid ${b[0]}; border-radius:5px; padding:7px 9px; margin-bottom:6px;" onmouseover="this.style.background='rgba(255,255,255,0.04)'" onmouseout="this.style.background='none'">
+                    <div style="display:flex; justify-content:space-between; align-items:center;"><b>${c.a.name} ↔ ${c.b.name}</b><span style="background:${b[0]}; color:#fff; font-size:9px; padding:1px 6px; border-radius:8px;">${b[1]}</span></div>
+                    <div style="font-size:11px; color:#b2bec3; margin-top:2px;">${(c.reasons || []).join(' · ')}</div>
+                    ${res ? `<div style="font-size:10px; color:#8e9abf; margin-top:2px;">공유: ${res}</div>` : ''}
+                </div>`;
+            });
+            if (cs.length) html += `<div style="font-size:10px; color:#636e72; margin-top:4px;">* = 2-hop 공유 상대(인프라) · 강력 = 직접 공유 식별자원</div>`;
+            document.getElementById('entity-body').innerHTML = html;
+            document.getElementById('entity-panel').style.display = 'block';
+            showToast(`🔎 동일인 후보 ${cs.length}쌍`, cs.length ? 'success' : 'info');
+        }
+        function entHighlight(i) {
+            const c = (window._entCands || [])[i]; if (!c) return;
+            cy.elements().removeClass('highlight');
+            let any = null;
+            [c.a.id, c.b.id].forEach(id => { const n = cy.getElementById(id); if (n && n.nonempty()) { n.addClass('highlight'); if (!any) any = n; } });
+            (c.shared_resources || []).forEach(r => { const n = cy.getElementById(r.id); if (n && n.nonempty()) n.addClass('highlight'); });
+            if (any) cy.animate({ fit: { eles: cy.elements('.highlight'), padding: 80 } }, { duration: 400 });
+            showToast(`${c.a.name} ↔ ${c.b.name} 하이라이트`, any ? 'info' : 'warning');
+        }
+        function closeEntity() { document.getElementById('entity-panel').style.display = 'none'; }
 
         // ── 수사 세션 ID (탭 유지, 새로고침 시 초기화) ──────────────
         let _investSessionId = 'sess_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);

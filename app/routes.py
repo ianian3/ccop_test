@@ -409,6 +409,26 @@ def timeline_events():
     code = 400 if isinstance(result, dict) and result.get('error') else 200
     return jsonify(result), code
 
+@bp.route('/api/analysis/centrality', methods=['GET'])
+def analysis_centrality():
+    """중심성·조직구조 분석 (degree/betweenness/PageRank + 커뮤니티)"""
+    graph_path = request.args.get('graph_path', current_app.config.get('DEFAULT_GRAPH_PATH', 'tccop_graph_v6'))
+    result = GraphService.analyze_centrality(graph_path, top_n=request.args.get('top_n', 15, type=int))
+    code = 400 if isinstance(result, dict) and result.get('error') else 200
+    return jsonify(result), code
+
+@bp.route('/api/analysis/entity-resolution', methods=['GET'])
+def analysis_entity_resolution():
+    """엔티티 해소 — 동일인 의심 후보쌍 탐지 (공유 식별자원·이름유사)"""
+    graph_path = request.args.get('graph_path', current_app.config.get('DEFAULT_GRAPH_PATH', 'tccop_graph_v6'))
+    result = GraphService.resolve_entities(
+        graph_path,
+        target_label=request.args.get('label', 'vt_psn'),
+        min_shared=request.args.get('min_shared', 1, type=int),
+        top_n=request.args.get('top_n', 30, type=int))
+    code = 400 if isinstance(result, dict) and result.get('error') else 200
+    return jsonify(result), code
+
 # ------------------------------
 # 2.5 RDB → GDB 온톨로지 기반 변환
 # ------------------------------
