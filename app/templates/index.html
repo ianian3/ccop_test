@@ -1626,17 +1626,8 @@
             <!-- V4.0 툴바 (레이아웃 프리셋 + 수사 워크플로우) — Phase 4.3 + 4.4 -->
             <div id="v40Toolbar"
                 style="position: absolute; top: 56px; right: 16px; z-index: 9; background: rgba(26,32,53,0.96); border: 1px solid rgba(116,185,255,0.35); border-radius: 8px; padding: 10px; min-width: 240px; max-width: 280px; box-shadow: 0 4px 16px rgba(0,0,0,0.4);">
-                <!-- Layout presets -->
-                <div style="margin-bottom: 8px;">
-                    <div style="font-size: 10px; color: #74b9ff; font-weight: bold; letter-spacing: 0.5px; margin-bottom: 4px;">
-                        <i class="fas fa-project-diagram"></i> V4.0 레이아웃 프리셋
-                    </div>
-                    <div id="v40LayoutPills" style="display: flex; flex-wrap: wrap; gap: 4px;">
-                        <span style="font-size:10px; color:#8e9abf;">loading…</span>
-                    </div>
-                </div>
                 <!-- Workflows -->
-                <div style="border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 8px;">
+                <div>
                     <div style="font-size: 10px; color: #fdcb6e; font-weight: bold; letter-spacing: 0.5px; margin-bottom: 4px;">
                         <i class="fas fa-route"></i> V4.0 수사 워크플로우
                     </div>
@@ -2501,73 +2492,7 @@
         // ============================================================
         // V4.0 레이아웃 프리셋 (Phase 4.3)  +  수사 워크플로우 (Phase 4.4)
         // ============================================================
-        window.V40_LAYOUTS = null;
         window.V40_WORKFLOWS = null;
-
-        // 알고리즘 → Cytoscape layout option 매핑
-        function v40LayoutOptions(presetName, preset) {
-            const algo = (preset.algorithm || '').toLowerCase();
-            const common = { animate: true, animationDuration: 700, padding: 40, fit: true };
-            switch (algo) {
-                case 'breadthfirst':
-                    return { name: 'breadthfirst', directed: !!preset.directed,
-                             roots: preset.root_label ? `node[label="${preset.root_label}"]` : undefined,
-                             ...common };
-                case 'concentric':
-                    return { name: 'concentric',
-                             concentric: (n) => {
-                                 const labels = Array.isArray(preset.center_label) ? preset.center_label : [preset.center_label];
-                                 return labels.includes(n.data('label')) ? 10 : 1;
-                             },
-                             levelWidth: () => 1, ...common };
-                case 'cose':
-                case 'cose-bilkent':
-                    // cose-bilkent 가 로드 안되어 있으면 cose 로 fallback
-                    return { name: (algo === 'cose-bilkent' && typeof cytoscape.coseBilkent !== 'undefined') ? 'cose-bilkent' : 'cose',
-                             nodeRepulsion: 8000, idealEdgeLength: 100, ...common };
-                case 'timeline':
-                    // 커스텀 — sort_by 속성으로 x 좌표 결정
-                    return { name: 'preset', positions: (n) => {
-                                 const v = (n.data('props') || {})[preset.sort_by] || 0;
-                                 const tNum = (typeof v === 'string') ? Date.parse(v) || 0 : Number(v) || 0;
-                                 return { x: tNum / 1e8, y: Math.random() * 600 };
-                             }, ...common };
-                default:
-                    return { name: 'cose', ...common };
-            }
-        }
-
-        function applyV40LayoutPreset(name) {
-            if (!window.V40_LAYOUTS || !window.V40_LAYOUTS[name]) return;
-            const preset = window.V40_LAYOUTS[name];
-            try {
-                const opts = v40LayoutOptions(name, preset);
-                cy.layout(opts).run();
-                showToast?.(`레이아웃: ${name}`, 'info') ?? console.info(`[V4.0] layout=${name}`);
-            } catch (e) {
-                console.warn('[V4.0] layout 적용 실패:', e);
-            }
-            // 활성 표시
-            document.querySelectorAll('.v40-layout-pill').forEach(el => {
-                el.style.background = el.dataset.name === name ? '#0984e3' : '#253154';
-            });
-        }
-
-        function renderV40LayoutPills(presets) {
-            const container = document.getElementById('v40LayoutPills');
-            if (!container) return;
-            container.innerHTML = '';
-            Object.entries(presets || {}).forEach(([name, preset]) => {
-                const pill = document.createElement('span');
-                pill.className = 'v40-layout-pill';
-                pill.dataset.name = name;
-                pill.title = preset.description || name;
-                pill.textContent = name;
-                pill.style.cssText = 'background:#253154; color:#dfe6e9; padding:3px 8px; border-radius:10px; font-size:10px; cursor:pointer; border:1px solid rgba(255,255,255,0.12); white-space:nowrap;';
-                pill.onclick = () => applyV40LayoutPreset(name);
-                container.appendChild(pill);
-            });
-        }
 
         async function runV40Workflow(name) {
             if (!window.V40_WORKFLOWS || !window.V40_WORKFLOWS[name]) return;
@@ -2634,18 +2559,12 @@
 
         async function loadV40Toolbar() {
             try {
-                const [lRes, wRes] = await Promise.all([
-                    fetch('/api/v1/layout-presets'),
-                    fetch('/api/v1/workflows'),
-                ]);
-                if (!lRes.ok || !wRes.ok) return;
-                const lData = await lRes.json();
+                const wRes = await fetch('/api/v1/workflows');
+                if (!wRes.ok) return;
                 const wData = await wRes.json();
-                window.V40_LAYOUTS = lData.presets || {};
                 window.V40_WORKFLOWS = wData.workflows || {};
-                renderV40LayoutPills(window.V40_LAYOUTS);
                 renderV40WorkflowPills(window.V40_WORKFLOWS);
-                console.info(`[V4.0] 툴바 로드 — 레이아웃 ${Object.keys(window.V40_LAYOUTS).length}종 / 워크플로 ${Object.keys(window.V40_WORKFLOWS).length}종`);
+                console.info(`[V4.0] 워크플로 ${Object.keys(window.V40_WORKFLOWS).length}종 로드`);
             } catch (err) {
                 console.warn('[V4.0] 툴바 로드 실패:', err);
             }
