@@ -1623,19 +1623,6 @@
                 <div id="v40ScalarBody"></div>
             </div>
 
-            <!-- V4.0 툴바 (수사 워크플로우) — Phase 4.4 -->
-            <div id="v40Toolbar"
-                style="position: absolute; top: 56px; right: 16px; z-index: 9; background: rgba(26,32,53,0.96); border: 1px solid rgba(116,185,255,0.35); border-radius: 8px; padding: 10px; min-width: 240px; max-width: 280px; box-shadow: 0 4px 16px rgba(0,0,0,0.4);">
-                <!-- Workflows -->
-                <div>
-                    <div style="font-size: 10px; color: #fdcb6e; font-weight: bold; letter-spacing: 0.5px; margin-bottom: 4px;">
-                        <i class="fas fa-route"></i> V4.0 수사 워크플로우
-                    </div>
-                    <div id="v40WorkflowPills" style="display: flex; flex-direction: column; gap: 3px;">
-                        <span style="font-size:10px; color:#8e9abf;">loading…</span>
-                    </div>
-                </div>
-            </div>
         </div>
 
         <!-- GDB 모델링 모드 전용 툴바 -->
@@ -2490,87 +2477,6 @@
         }
 
         // ============================================================
-        // V4.0 수사 워크플로우 (Phase 4.4)
-        // ============================================================
-        window.V40_WORKFLOWS = null;
-
-        async function runV40Workflow(name) {
-            if (!window.V40_WORKFLOWS || !window.V40_WORKFLOWS[name]) return;
-            const wf = window.V40_WORKFLOWS[name];
-            // 현재 시각화 중인 그래프 가져오기 (targetGraphInfo = 메인 셀렉터)
-            const sel = document.getElementById('targetGraphInfo')
-                     || document.getElementById('graphSelect')
-                     || document.getElementById('graphSelector')
-                     || document.getElementById('graphList');
-            const rawVal = (sel && sel.value) || window.currentGraphPath || '';
-            // "schema/graph" 형식이면 마지막 토큰만 사용
-            const graphPath = (rawVal.includes('/') ? rawVal.split('/').pop() : rawVal) || 'tccop_v40_demo';
-            if (!sel || !sel.value) {
-                showToast?.(`⚠ 그래프 선택 안됨 — 기본값 ${graphPath} 사용`, 'warning');
-            }
-            try {
-                showToast?.(`▶ 워크플로우 실행 중: ${wf.description || name}…`, 'info');
-                const res = await fetch(`/api/v1/workflows/${encodeURIComponent(name)}/execute?graph_path=${encodeURIComponent(graphPath)}&limit=300`);
-                const data = await res.json();
-                if (data.status !== 'success') {
-                    showToast?.(`워크플로우 실패: ${data.message || '오류'}`, 'error');
-                    console.warn('[V4.0 workflow]', data);
-                    return;
-                }
-                const els = data.elements || [];
-                cy.elements().remove();
-                cy.add(els);
-                // 결과 후 적절한 레이아웃 선택
-                const fallbackLayout = (name === 'fund_flow' || name === 'case_to_suspects') ? 'breadthfirst' : 'cose';
-                try {
-                    cy.layout({ name: fallbackLayout, animate: true, animationDuration: 600, padding: 40, fit: true }).run();
-                } catch (e) {
-                    cy.layout({ name: 'cose', animate: true, fit: true }).run();
-                }
-                if (typeof updateFilterCounts === 'function') updateFilterCounts();
-                showToast?.(`✅ ${wf.description || name} — 노드 ${data.node_count}개 · 엣지 ${data.edge_count}개`, 'success');
-            } catch (err) {
-                console.error('[V4.0 workflow]', err);
-                showToast?.(`워크플로우 실행 실패: ${err}`, 'error');
-            }
-        }
-
-        function renderV40WorkflowPills(workflows) {
-            const container = document.getElementById('v40WorkflowPills');
-            if (!container) return;
-            container.innerHTML = '';
-            const ICON = {
-                case_to_suspects: '📁→👤',
-                suspect_to_assets: '👤→🏦',
-                phishing_campaign_view: '🎯→🌐',
-                fund_flow: '💸→💸',
-                relay_station_network: '📡→📞',
-                cross_graph_sameAs: '🔗',
-            };
-            Object.entries(workflows || {}).forEach(([name, wf]) => {
-                const btn = document.createElement('button');
-                btn.title = wf.description || name;
-                btn.style.cssText = 'background:#1e2844; color:#dfe6e9; padding:5px 8px; border-radius:6px; font-size:10px; cursor:pointer; border:1px solid rgba(255,255,255,0.1); text-align:left; display:flex; gap:6px; align-items:center;';
-                btn.innerHTML = `<span style="font-size:11px;">${ICON[name] || '▶'}</span><span>${wf.description || name}</span>`;
-                btn.onclick = () => runV40Workflow(name);
-                container.appendChild(btn);
-            });
-        }
-
-        async function loadV40Toolbar() {
-            try {
-                const wRes = await fetch('/api/v1/workflows');
-                if (!wRes.ok) return;
-                const wData = await wRes.json();
-                window.V40_WORKFLOWS = wData.workflows || {};
-                renderV40WorkflowPills(window.V40_WORKFLOWS);
-                console.info(`[V4.0] 워크플로 ${Object.keys(window.V40_WORKFLOWS).length}종 로드`);
-            } catch (err) {
-                console.warn('[V4.0] 툴바 로드 실패:', err);
-            }
-        }
-
-        // ============================================================
         // V4.0 Phase 4.6 — Scalar 결과 표시 (RETURN n.prop 패턴)
         // ============================================================
         // GraphService.execute_cypher 가 group='scalar' 원소를 생성하지만
@@ -2731,7 +2637,6 @@
         // 페이지 로드 후 V4.0 SSOT 비동기 오버레이
         document.addEventListener('DOMContentLoaded', () => {
             loadV40Styles();
-            loadV40Toolbar();
         });
 
         // ======================================================
