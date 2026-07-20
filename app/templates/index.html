@@ -2114,7 +2114,6 @@
             <div class="ctx-item" onclick="startEdgeCreation()"><i class="fas fa-link"></i> 엣지 연결 (Add Edge)</div>
             <div class="ctx-item" onclick="hideNode()"><i class="fas fa-eye-slash"></i> 노드 숨기기</div>
             <hr>
-            <div class="ctx-item" onclick="setPathSource()"><i class="fas fa-flag"></i> 출발점 설정 (Start)</div>
             <div class="ctx-item" onclick="findPathToTarget()"><i class="fas fa-route"></i> 경로 분석 (Path)</div>
             <hr>
             <div class="ctx-item" onclick="expandNodeFromMenu()"><i class="fas fa-project-diagram"></i> 관계 확장 (Expand)</div>
@@ -3640,16 +3639,6 @@
             return p.name || p.actno || p.telno || p.flnm || (node ? node.id() : '');
         }
 
-        // 출발점 설정: 출발점 지정 + 도착점 클릭 유도(가이드 모드 진입)
-        function setPathSource() {
-            if (!selectedNode) return;
-            cm.style.display = 'none';
-            pathSourceId = selectedNode.id();
-            cy.nodes('.path-source').removeClass('path-source');
-            selectedNode.addClass('path-source');
-            pathPickTarget = true;
-            showPathBanner(`🚩 출발점: <b>${_pathNodeName(selectedNode)}</b> — 이제 <b>도착점 노드를 클릭</b>하세요`);
-        }
         function clearPathHighlight() {
             cy.elements().removeClass('highlight path-source path-dim');
             const banner = document.getElementById('pathBanner');
@@ -3711,6 +3700,12 @@
 
                 // 엣지 하이라이트 (무방향 매칭)
                 cy.edges().forEach(e => {
+                    // 접힌 이벤트 엣지: 원본 이벤트 노드(_collapsedFrom)가 경로에 포함되면 하이라이트
+                    if (e.hasClass('collapsed-event')) {
+                        if (pathNodeIds.has(String(e.data('_collapsedFrom')))) e.addClass('highlight');
+                        else e.addClass('path-dim');
+                        return;
+                    }
                     const eid = String(e.id());
                     const src = String(e.source().id());
                     const tgt = String(e.target().id());
