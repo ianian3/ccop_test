@@ -3488,6 +3488,7 @@
         // ======================================================
         cy.on('tap', 'node', function (evt) {
             const node = evt.target;
+            if (pathPickTarget) { runPathAnalysis(node); return; }  // 경로 분석: 도착점 선택 모드
             selectedNode = node; // 전역 변수 업데이트
             const d = node.data();
             const p = d.props || {};
@@ -3632,21 +3633,29 @@
 
         // 경로 분석 관련
         let pathSourceId = null;
+        let pathPickTarget = false;   // 경로 분석: 도착점 클릭 대기 모드
+
+        function _pathNodeName(node) {
+            const p = (node && node.data('props')) || {};
+            return p.name || p.actno || p.telno || p.flnm || (node ? node.id() : '');
+        }
+
+        // 출발점 설정: 출발점 지정 + 도착점 클릭 유도(가이드 모드 진입)
         function setPathSource() {
             if (!selectedNode) return;
-            pathSourceId = selectedNode.id();
             cm.style.display = 'none';
-            // 이전 출발점 표시 제거 후 새 출발점 표시
+            pathSourceId = selectedNode.id();
             cy.nodes('.path-source').removeClass('path-source');
             selectedNode.addClass('path-source');
-            // 상단 안내
-            showPathBanner(`🚩 출발점: ${selectedNode.data('props')?.name || selectedNode.data('props')?.actno || selectedNode.data('props')?.telno || pathSourceId}  —  도착 노드를 우클릭 → "경로 분석" 을 선택하세요`);
+            pathPickTarget = true;
+            showPathBanner(`🚩 출발점: <b>${_pathNodeName(selectedNode)}</b> — 이제 <b>도착점 노드를 클릭</b>하세요`);
         }
         function clearPathHighlight() {
             cy.elements().removeClass('highlight path-source path-dim');
             const banner = document.getElementById('pathBanner');
             if (banner) banner.remove();
             pathSourceId = null;
+            pathPickTarget = false;
         }
         function showPathBanner(msg) {
             let banner = document.getElementById('pathBanner');
@@ -3658,24 +3667,39 @@
             }
             banner.innerHTML = `<span>${msg}</span><button onclick="clearPathHighlight()" style="background:#ff7675;border:none;color:#fff;padding:4px 12px;border-radius:12px;cursor:pointer;font-size:11px;">✕ 닫기</button>`;
         }
+        // 경로 분석(우클릭 메뉴): 출발점 미설정이면 우클릭 노드를 출발점으로 잡고
+        //   "도착점 노드를 클릭하세요" 유도. 출발점이 이미 있고 다른 노드면 즉시 분석.
         function findPathToTarget() {
-            if (!selectedNode || !pathSourceId) return alert("출발점을 먼저 설정해주세요.\n\n1. 출발 노드 우클릭 → '출발점 설정 (Start)'\n2. 도착 노드 우클릭 → '경로 분석 (Path)'");
-            if (pathSourceId === selectedNode.id()) return alert("출발점과 도착점이 같습니다.");
-            const graphName = document.getElementById('targetGraphInfo').value;
+            if (!selectedNode) return;
             cm.style.display = 'none';
+            if (pathSourceId && pathSourceId !== selectedNode.id()) {
+                runPathAnalysis(selectedNode);
+            } else {
+                pathSourceId = selectedNode.id();
+                cy.nodes('.path-source').removeClass('path-source');
+                selectedNode.addClass('path-source');
+                pathPickTarget = true;
+                showPathBanner(`🚩 출발점: <b>${_pathNodeName(selectedNode)}</b> — 이제 <b>도착점 노드를 클릭</b>하세요`);
+            }
+        }
+
+        // 실제 경로 분석 실행 (source=pathSourceId, target=targetNode)
+        function runPathAnalysis(targetNode) {
+            pathPickTarget = false;
+            if (!pathSourceId || !targetNode) return;
+            if (pathSourceId === targetNode.id()) { showToast('출발점과 도착점이 같습니다', 'warning'); return; }
+            const graphName = document.getElementById('targetGraphInfo').value;
             fetch(`${API_URL}/path`, {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ source: pathSourceId, target: selectedNode.id(), graph_path: graphName })
+                body: JSON.stringify({ source: pathSourceId, target: targetNode.id(), graph_path: graphName })
             }).then(r => r.json()).then(d => {
-                if (!d.found) return alert(`경로를 찾을 수 없습니다.\n\n출발: ${pathSourceId}\n도착: ${selectedNode.id()}\n그래프: ${graphName}`);
+                if (!d.found) { showToast('경로를 찾을 수 없습니다', 'warning'); return; }
                 // 1. 이전 하이라이트 초기화
                 cy.elements().removeClass('highlight path-source path-dim');
 
                 // 2. 경로 노드 순서대로 ID 수집
                 const pathNodesSeq = d.elements.filter(e => e.group === 'nodes').map(e => String(e.data.id));
                 const pathNodeIds = new Set(pathNodesSeq);
-
-                // API가 반환한 엣지 ID 목록 (백엔드와 프론트엔드 ID 체계가 다를 수 있음 주의)
                 const apiEdgeIds = new Set(d.elements.filter(e => e.group === 'edges').map(e => String(e.data.id)));
 
                 // 3. 기존 그래프에서 매칭 & 하이라이트
@@ -3685,27 +3709,19 @@
                     else n.addClass('path-dim');
                 });
 
-                // 엣지 하이라이트 (무방향 매칭 처리 로직 추가)
+                // 엣지 하이라이트 (무방향 매칭)
                 cy.edges().forEach(e => {
                     const eid = String(e.id());
                     const src = String(e.source().id());
                     const tgt = String(e.target().id());
-
-                    // 방식 1: ID가 정확히 일치하는 경우
                     let isPathEdge = apiEdgeIds.has(eid);
-
-                    // 방식 2: ID가 다르더라도 경로상 인접한 두 노드를 연결하는 엣지인 경우 (무방향 확인)
                     if (!isPathEdge) {
                         for (let i = 0; i < pathNodesSeq.length - 1; i++) {
                             const u = pathNodesSeq[i];
                             const v = pathNodesSeq[i + 1];
-                            if ((src === u && tgt === v) || (src === v && tgt === u)) {
-                                isPathEdge = true;
-                                break;
-                            }
+                            if ((src === u && tgt === v) || (src === v && tgt === u)) { isPathEdge = true; break; }
                         }
                     }
-
                     if (isPathEdge) e.addClass('highlight');
                     else e.addClass('path-dim');
                 });
@@ -3721,15 +3737,15 @@
                         added.addClass('highlight');
                     }
                 }
-                // 5. 경로 하이라이트된 노드로 뷰 포커스
+                // 5. 경로 노드로 뷰 포커스
                 const hlNodes = cy.nodes('.highlight');
                 if (hlNodes.length > 0) cy.animate({ fit: { eles: hlNodes, padding: 60 }, duration: 500 });
                 // 6. 경로 정보 배너
-                const srcName = cy.getElementById(pathSourceId)?.data('props')?.name || pathSourceId;
-                const tgtName = selectedNode.data('props')?.name || selectedNode.data('props')?.actno || selectedNode.id();
+                const srcName = _pathNodeName(cy.getElementById(pathSourceId));
+                const tgtName = _pathNodeName(targetNode);
                 const hops = pathNodeIds.size - 1;
                 showPathBanner(`🛤 ${srcName} → ${tgtName} (${hops}홉, ${pathNodeIds.size}노드)`);
-            });
+            }).catch(e => showToast('경로 분석 오류: ' + e.message, 'error'));
         }
         function expandNodeFromMenu() { if (selectedNode) { cy.trigger('dbltap', selectedNode); cm.style.display = 'none'; } }
         function copyNodeInfo() { if (selectedNode) { navigator.clipboard.writeText(JSON.stringify(selectedNode.data('props'))); cm.style.display = 'none'; } }
