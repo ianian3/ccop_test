@@ -1447,9 +1447,7 @@
         <button class="nav-tab active" onclick="switchTab('graph')" id="tab-graph">
             <i class="fas fa-project-diagram"></i> 지식그래프 탐색
         </button>
-        <button class="nav-tab" id="tab-v40-pipeline"
-            onclick="(function(){var p=document.getElementById('v40PipelinePanel'); var open=p.style.display==='block'; p.style.display=open?'none':'block'; if(!open){var g=document.getElementById('v40PipelineGraphName'); if(g){var ts=new Date(); var suffix=(ts.getMonth()+1)+''+ts.getDate()+'_'+ts.getHours()+ts.getMinutes(); g.value='v40_demo_'+suffix; g.removeAttribute('readonly'); g.removeAttribute('disabled'); setTimeout(function(){g.focus(); g.select();},50);}}})()"
-            style="background:linear-gradient(135deg,#0984e3,#74b9ff); color:white; border-color:#0984e3;">
+        <button class="nav-tab" id="tab-v40-pipeline" onclick="switchTab('v40-pipeline')">
             <i class="fas fa-layer-group"></i> V4.0 L1→L5 파이프라인
         </button>
         <button class="nav-tab" onclick="switchTab('etl')" id="tab-etl">
@@ -1542,21 +1540,19 @@
 
             <!-- V4.0 5계층 통합 마법사 (L1→L5) — 상단 탭바 버튼으로 토글 -->
             <div id="v40PipelinePanel"
-                style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); z-index:9999; background:rgba(20,26,46,0.99); border:2px solid #0984e3; border-radius:12px; padding:20px; width:720px; max-width:92vw; max-height:88vh; overflow-y:auto; box-shadow:0 12px 48px rgba(0,0,0,0.7); color:#dfe6e9; box-sizing:border-box;">
-
-                <!-- 헤더 -->
-                <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:16px; border-bottom:1px solid rgba(116,185,255,0.3); padding-bottom:12px;">
-                    <div>
-                        <div style="font-size:15px; color:#74b9ff; font-weight:bold; margin-bottom:4px;">
-                            <i class="fas fa-layer-group"></i> V4.0 5계층 통합 파이프라인
-                        </div>
-                        <div style="font-size:11px; color:#8e9abf;">
-                            L1 수집 → L2 표준화 → L3 매핑 → L4 그래프 → L5 시각화
-                        </div>
+                style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(22,30,51,0.88); z-index: 9999; align-items: center; justify-content: center; backdrop-filter: blur(3px); overflow-y: auto; padding: 20px 0;">
+                <div class="modal-content" style="width: 720px; max-height: 90vh; overflow-y: auto;">
+                    <!-- 헤더 (공통 모달 셸) -->
+                    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.10); padding-bottom: 10px; margin-bottom: 15px;">
+                        <h3 style="margin:0; color: var(--accent-blue);">
+                            <i class="fas fa-layer-group"></i> V4.0 L1→L5 파이프라인
+                            <span style="font-size:11px; color:#8e9abf; font-weight:normal; margin-left:8px;">L1 수집 → L2 표준화 → L3 매핑 → L4 그래프 → L5 시각화</span>
+                        </h3>
+                        <button onclick="closePipelineModal()"
+                            style="background:transparent; border:none; color:#5a6885; font-size:20px; cursor:pointer;" title="닫기">
+                            <i class="fas fa-times"></i>
+                        </button>
                     </div>
-                    <span onclick="document.getElementById('v40PipelinePanel').style.display='none'"
-                        style="cursor:pointer; color:white; font-size:20px; padding:2px 10px; background:rgba(255,255,255,0.1); border-radius:4px; line-height:1; flex-shrink:0;">×</span>
-                </div>
 
                 <!-- 입력 폼 -->
                 <div style="margin-bottom:16px;">
@@ -1614,6 +1610,7 @@
 
                 <!-- 결과 표시 -->
                 <div id="v40PipelineResult" style="font-size:11px; line-height:1.6;"></div>
+                </div><!-- /.modal-content -->
             </div>
             <!-- V4.0 스칼라 결과 패널 (Phase 4.6) — RETURN n.prop 패턴 결과 표시 -->
             <div id="v40ScalarPanel"
@@ -3088,6 +3085,9 @@
                     // 대시보드 모달 열기
                     openDashboardModal();
                     break;
+                case 'v40-pipeline':
+                    openPipelineModal();
+                    break;
             }
         }
 
@@ -3785,6 +3785,20 @@
 
         function openCsvModal() { modal.style.display = 'flex'; }
         function closeCsvModal() { modal.style.display = 'none'; }
+
+        // V4.0 파이프라인 모달 (공통 셸로 통일) — 열 때 그래프명 타임스탬프 자동 부여
+        function openPipelineModal() {
+            document.getElementById('v40PipelinePanel').style.display = 'flex';
+            const g = document.getElementById('v40PipelineGraphName');
+            if (g) {
+                const ts = new Date();
+                const suffix = (ts.getMonth() + 1) + '' + ts.getDate() + '_' + ts.getHours() + ts.getMinutes();
+                g.value = 'v40_demo_' + suffix;
+                g.removeAttribute('readonly'); g.removeAttribute('disabled');
+                setTimeout(() => { g.focus(); g.select(); }, 50);
+            }
+        }
+        function closePipelineModal() { document.getElementById('v40PipelinePanel').style.display = 'none'; }
 
         // [모델러 → ETL 매핑 적용]
         function applyModelerConfig() {
