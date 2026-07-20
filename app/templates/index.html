@@ -1435,11 +1435,6 @@
                         title="자동 그래프 배치 (dagre)">
                         <i class="fas fa-project-diagram"></i> 자동
                     </button>
-                    <button onclick="exportGraphImage()"
-                        style="background:#2d3436; border:1px solid #444; color:#a29bfe; padding:6px 10px; font-size:11px; margin-left:4px;"
-                        title="화면 캡처 (PNG 저장)">
-                        <i class="fas fa-camera"></i>
-                    </button>
                 </div>
             </div>
         </div>
@@ -5525,19 +5520,6 @@
         // ======================================================
         // 이미지 내보내기
         // ======================================================
-        function exportGraphImage() {
-            try {
-                const pngContent = cy.png({ full: true, bg: '#161e33' });
-                const link = document.createElement('a');
-                link.href = pngContent;
-                link.download = `graph_capture_${new Date().toISOString().slice(0, 19).replace(/[:-]/g, "")}.png`;
-                link.click();
-                showToast("이미지가 저장되었습니다", "success");
-            } catch (e) {
-                showToast("이미지 저장 실패: " + e, "error");
-            }
-        }
-
         // ======================================================
         // 사이드바 탭 기능
         // ======================================================
