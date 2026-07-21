@@ -1,0 +1,14 @@
+# Legal RAG 선택 의존성 (base requirements.txt 와 분리 — 필요할 때만 설치)
+#
+#   pip install -r requirements-vector.txt
+#
+# 언제 필요한가:
+#   - pypdf     : PDF 법률 코퍼스 적재 (scripts/ingest_legal_corpus.py, 개발/적재 단계 전용)
+#   - chromadb  : 벡터 백엔드를 Chroma 로 쓸 때 (.env 에 LEGAL_VECTOR_BACKEND=chroma)
+#                 미설정 시 기본 백엔드(PostgreSQL BYTEA + numpy)로 동작하며 이 의존성은 로드되지 않음.
+#
+# 폐쇄망: chromadb 는 우리 임베딩을 직접 add/query 하고 텔레메트리를 꺼서 외부통신 0.
+#         설치 시 딸려오는 무거운 하위 의존성은 사내 미러/휠로 사전 반입 권장.
+
+pypdf==3.17.4
+chromadb==0.4.22

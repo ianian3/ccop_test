@@ -15,11 +15,14 @@ import pytest
 from app.services.legal_rag_service import (
     BM25Index,
     LegalRAGService,
+    _assign_cids,
+    _index_text,
     chunk_text,
     normalize_record,
     rrf_fuse,
     tokenize,
 )
+from app.services.legal_vector_store import ChromaVectorStore
 
 
 # ─── 공용 fixture ──────────────────────────────────────────────
@@ -149,6 +152,16 @@ class TestNormalizeAndChunk:
         chunks = chunk_text(text, size=200, overlap=20)
         assert len(chunks) > 1
         assert all(len(c) <= 200 for c in chunks)
+
+    def test_assign_cids_stable_and_unique(self):
+        """cid = doc#ref#ordinal — 같은 (doc,ref) 는 ordinal 로 구분되어 유일해야 한다."""
+        chunks = [{"doc_id": "d", "article_ref": "제1조"},
+                  {"doc_id": "d", "article_ref": "제1조"},
+                  {"doc_id": "d", "article_ref": "제2조"}]
+        _assign_cids(chunks)
+        cids = [c["cid"] for c in chunks]
+        assert cids == ["d#제1조#0", "d#제1조#1", "d#제2조#0"]
+        assert len(set(cids)) == 3
 
 
 # ══════════════════════════════════════════════════════════════
@@ -366,3 +379,79 @@ class TestLegalAPI:
         body = r.get_json()
         assert body["index_loaded"] is True
         assert "embedding_backend" in body and "db" in body
+        assert "vector_backend" in body  # 선택 백엔드 노출
+
+
+# ══════════════════════════════════════════════════════════════
+# 9. Chroma 벡터 백엔드 (선택) — chromadb 미설치 시 전체 skip
+# ══════════════════════════════════════════════════════════════
+@pytest.mark.skipif(not ChromaVectorStore.available(),
+                    reason="chromadb 미설치 — pip install -r requirements-vector.txt")
+class TestChromaBackend:
+    """LEGAL_VECTOR_BACKEND=chroma 경로: Chroma 가 벡터 레인을 담당하고 BM25 와 RRF 융합.
+    임베딩은 결정적 mock(_mock_vec) — 네트워크 0. Chroma 는 tmp_path 에 격리."""
+
+    @pytest.fixture
+    def chroma(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("LEGAL_CHROMA_PATH", str(tmp_path / "chroma"))
+        monkeypatch.setattr(LegalRAGService, "_vector_backend", classmethod(lambda cls: "chroma"))
+        ChromaVectorStore._client = ChromaVectorStore._collection = None  # 클래스 캐시 격리
+        yield ChromaVectorStore
+        try:
+            ChromaVectorStore.reset()
+        except Exception:
+            pass
+        ChromaVectorStore._client = ChromaVectorStore._collection = None
+
+    def _populate(self, store, records=CORPUS):
+        """_sync_chroma 와 동일 방식: split→cid→mock임베딩 upsert + 인메모리 인덱스(emb=None) 설치."""
+        chunks = []
+        for rec in records:
+            c = normalize_record(rec)
+            if not c:
+                continue
+            for piece in chunk_text(c["content"]):
+                chunks.append({**c, "content": piece})
+        _assign_cids(chunks)
+        store.upsert(
+            ids=[c["cid"] for c in chunks],
+            embeddings=[[float(x) for x in _mock_vec(_index_text(c))] for c in chunks],
+            documents=[c["content"] for c in chunks],
+            metadatas=[{"doc_id": c["doc_id"], "law_name": c["law_name"],
+                        "article_ref": c["article_ref"]} for c in chunks])
+        state = LegalRAGService.build_index(records)  # emb=None → 벡터레인은 Chroma 단독
+        LegalRAGService.install_index(state)
+        return state
+
+    def test_roundtrip_query_returns_nearest(self, chroma):
+        state = self._populate(chroma)
+        assert chroma.count() == len(CORPUS)
+        hits = chroma.query(_mock_vec("지급정지 사기이용계좌"), 4)
+        assert hits
+        pos = state["pos_by_id"][hits[0][0]]           # cid → 인메모리 위치
+        assert state["chunks"][pos]["doc_id"] == "stop"
+
+    def test_hybrid_search_uses_chroma_vector_lane(self, chroma, monkeypatch):
+        self._populate(chroma)
+        monkeypatch.setattr(LegalRAGService, "_embed_query",
+                            classmethod(lambda cls, q: _mock_vec(q)))
+        r = LegalRAGService.hybrid_search("통장 양도 대포통장", top_k=3, mode="hybrid", rerank=False)
+        assert r["mode_used"] == "hybrid"                          # 강등 아님 = Chroma 레인 가동
+        assert any(x["scores"]["vector_rank"] is not None for x in r["results"])
+        assert r["results"][0]["doc_id"] == "account"
+
+    def test_empty_collection_degrades_to_bm25(self, chroma, monkeypatch):
+        """컬렉션이 비면(count 0) 벡터 불가 → BM25-only 강등(무중단)."""
+        state = LegalRAGService.build_index(CORPUS)
+        LegalRAGService.install_index(state)
+        monkeypatch.setattr(LegalRAGService, "_embed_query",
+                            classmethod(lambda cls, q: _mock_vec(q)))
+        r = LegalRAGService.hybrid_search("지급정지", top_k=2, mode="hybrid", rerank=False)
+        assert "bm25" in r["mode_used"]
+        assert r["results"][0]["doc_id"] == "stop"
+
+    def test_recreate_resets_collection(self, chroma):
+        self._populate(chroma)
+        assert chroma.count() == len(CORPUS)
+        chroma.reset()
+        assert chroma.count() == 0

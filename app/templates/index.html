@@ -1113,6 +1113,66 @@
         </div>
     </div>
 
+    <!-- 법률 검색 (Legal RAG) 모달 -->
+    <div id="legal-modal"
+        style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(22,30,51,0.88); z-index: 9999; align-items: center; justify-content: center; backdrop-filter: blur(3px); overflow-y: auto; padding: 20px 0;">
+        <div class="modal-content" style="max-height: 90vh; overflow-y: auto; width: 860px; max-width: 92vw;">
+            <div
+                style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.10); padding-bottom: 10px; margin-bottom: 15px;">
+                <h3 style="margin:0; color: var(--accent-blue);">
+                    <i class="fas fa-gavel"></i> 법률 검색 (RAG)
+                    <span id="legal-backend-badge" style="font-size:11px; color:#5a6885; font-weight:normal; margin-left:8px;"></span>
+                </h3>
+                <button onclick="closeLegalModal()"
+                    style="background:transparent; border:none; color:#5a6885; font-size:20px; cursor:pointer;" title="닫기">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+
+            <!-- 질의 입력 -->
+            <div
+                style="background: #1e2844; padding: 15px; border-radius: 6px; margin-bottom: 15px; border: 1px dashed rgba(255,255,255,0.15);">
+                <textarea id="legal-question" rows="2" placeholder="예: 대포통장을 양도하면 어떤 처벌을 받나요?"
+                    style="width:100%; box-sizing:border-box; background:#16213e; color:#dfe6e9; border:1px solid rgba(255,255,255,0.15); border-radius:4px; padding:10px; font-size:14px; resize:vertical; outline:none;"></textarea>
+                <div style="display:flex; align-items:center; gap:12px; margin-top:12px; flex-wrap:wrap;">
+                    <label style="color:#8e9abf; font-size:13px;">모드
+                        <select id="legal-mode"
+                            style="background:#16213e; color:var(--accent-blue); border:1px solid rgba(255,255,255,0.15); padding:5px 8px; border-radius:4px; font-size:13px; margin-left:4px;">
+                            <option value="hybrid">하이브리드(BM25+벡터)</option>
+                            <option value="bm25">BM25(단어)</option>
+                            <option value="vector">벡터(의미)</option>
+                        </select>
+                    </label>
+                    <label style="color:#8e9abf; font-size:13px; display:flex; align-items:center; gap:5px;">
+                        <input type="checkbox" id="legal-rerank" checked style="accent-color:#00b894;"> LLM 리랭킹
+                    </label>
+                    <div style="flex:1;"></div>
+                    <button onclick="legalSearch()"
+                        style="background:var(--accent-blue); color:#fff; border:none; padding:8px 16px; border-radius:4px; font-size:13px; font-weight:bold; cursor:pointer;">
+                        <i class="fas fa-search"></i> 근거 검색
+                    </button>
+                    <button onclick="legalAnswer()"
+                        style="background:#00b894; color:#fff; border:none; padding:8px 16px; border-radius:4px; font-size:13px; font-weight:bold; cursor:pointer;">
+                        <i class="fas fa-robot"></i> 답변 생성
+                    </button>
+                </div>
+            </div>
+
+            <!-- 답변 영역 -->
+            <div id="legal-answer-area"
+                style="display:none; background:#1a3a2a; border:1px solid #00b894; border-radius:6px; padding:15px; margin-bottom:15px;">
+                <div id="legal-answer-text" style="color:#dfe6e9; font-size:14px; line-height:1.7; white-space:pre-wrap;"></div>
+                <div id="legal-citations" style="margin-top:12px;"></div>
+                <div id="legal-disclaimer" style="margin-top:10px; color:#8e9abf; font-size:11px; font-style:italic;"></div>
+            </div>
+
+            <!-- 검색 결과 -->
+            <div id="legal-results-area">
+                <p style="color:#5a6885; text-align:center; font-size:13px;">질문을 입력하고 <b>근거 검색</b> 또는 <b>답변 생성</b>을 눌러주세요.</p>
+            </div>
+        </div>
+    </div>
+
     <!-- 적재 결과 요약 모달 -->
     <div id="etl-result-modal"
         style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(22,30,51,0.88); z-index: 10000; align-items: center; justify-content: center; backdrop-filter: blur(3px);">
@@ -1456,6 +1516,9 @@
         </button>
         <button class="nav-tab" onclick="switchTab('dashboard')" id="tab-dashboard">
             <i class="fas fa-tachometer-alt"></i> 대시보드
+        </button>
+        <button class="nav-tab" onclick="switchTab('legal')" id="tab-legal">
+            <i class="fas fa-gavel"></i> 법률 검색
         </button>
         <button class="nav-tab" onclick="window.location.href='/modeler'" id="tab-modeling">
             <i class="fas fa-pencil-alt"></i> GDB 모델링
@@ -2906,6 +2969,9 @@
                 case 'v40-pipeline':
                     openPipelineModal();
                     break;
+                case 'legal':
+                    openLegalModal();
+                    break;
             }
         }
 
@@ -3661,6 +3727,104 @@
         // [온톨로지 마법사 핸들러]
         const ontologyModal = document.getElementById('ontology-modal');
         function openOntologyModal() { ontologyModal.style.display = 'flex'; }
+
+        // ======================================================
+        // 법률 검색 (Legal RAG) — /api/legal/* (UI 세션 인증)
+        // ======================================================
+        function legalEsc(s) {
+            return (s == null ? '' : String(s)).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        }
+        function openLegalModal() {
+            document.getElementById('legal-modal').style.display = 'flex';
+            legalLoadStatus();
+        }
+        function closeLegalModal() {
+            document.getElementById('legal-modal').style.display = 'none';
+        }
+        function legalLoadStatus() {
+            fetch('/api/legal/status').then(r => r.json()).then(d => {
+                if (d.status !== 'success') return;
+                document.getElementById('legal-backend-badge').textContent =
+                    `벡터백엔드: ${d.vector_backend || 'postgres'} · 임베딩: ${d.embedding_backend || '-'} · 리랭킹: ${d.rerank || '-'}`;
+            }).catch(() => {});
+        }
+        function legalBusy(msg) {
+            document.getElementById('legal-results-area').innerHTML =
+                `<p style="color:var(--accent-blue); text-align:center; font-size:13px;"><i class="fas fa-spinner fa-spin"></i> ${legalEsc(msg)}</p>`;
+        }
+        function legalError(e) {
+            document.getElementById('legal-results-area').innerHTML =
+                `<p style="color:#ff7675; text-align:center; font-size:13px;"><i class="fas fa-exclamation-triangle"></i> ${legalEsc(typeof e === 'string' ? e : '오류가 발생했습니다.')}</p>`;
+        }
+        function legalGetQuestion() {
+            const q = document.getElementById('legal-question').value.trim();
+            if (!q) { alert('질문을 입력하세요.'); return null; }
+            return q;
+        }
+        function legalSearch() {
+            const q = legalGetQuestion(); if (!q) return;
+            document.getElementById('legal-answer-area').style.display = 'none';
+            legalBusy('법률 근거 검색 중…');
+            fetch('/api/legal/search', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    question: q,
+                    mode: document.getElementById('legal-mode').value,
+                    rerank: document.getElementById('legal-rerank').checked,
+                    top_k: 8
+                })
+            }).then(r => r.json()).then(renderLegalResults).catch(legalError);
+        }
+        function legalAnswer() {
+            const q = legalGetQuestion(); if (!q) return;
+            legalBusy('근거 검색 + 답변 생성 중… (LLM 호출)');
+            fetch('/api/legal/answer', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ question: q, top_k: 4 })
+            }).then(r => r.json()).then(d => {
+                if (d.status !== 'success') return legalError(d.message);
+                renderLegalAnswer(d);
+                if (d.retrieval) renderLegalResults(Object.assign({ status: 'success' }, d.retrieval));
+            }).catch(legalError);
+        }
+        function renderLegalAnswer(d) {
+            document.getElementById('legal-answer-area').style.display = 'block';
+            document.getElementById('legal-answer-text').textContent = d.answer || '';
+            const cites = (d.citations || []).map(c =>
+                `<span style="display:inline-block; background:#16213e; border:1px solid rgba(0,184,148,0.4); color:#55efc4; padding:3px 8px; border-radius:12px; font-size:11px; margin:2px;">[${c.n}] ${legalEsc(c.law_name)} ${legalEsc(c.article_ref)}</span>`
+            ).join('');
+            document.getElementById('legal-citations').innerHTML =
+                cites ? `<div style="color:#8e9abf; font-size:11px; margin-bottom:4px;">근거:</div>${cites}` : '';
+            document.getElementById('legal-disclaimer').textContent = d.disclaimer || '';
+        }
+        function renderLegalResults(d) {
+            const area = document.getElementById('legal-results-area');
+            if (!d || d.status !== 'success') return legalError((d && d.message) || '검색 실패');
+            const rows = d.results || [];
+            if (!rows.length) {
+                area.innerHTML = `<p style="color:#5a6885; text-align:center; font-size:13px;">관련 법률 근거를 찾지 못했습니다. 죄명·법령명·행위 유형을 명시해 보세요.</p>`;
+                return;
+            }
+            const badge = (label, v, color) => (v === null || v === undefined) ? '' :
+                `<span style="font-size:10px; color:${color}; margin-right:8px;">${label} ${legalEsc(v)}</span>`;
+            const notes = (d.notes || []).map(n =>
+                `<div style="color:#fdcb6e; font-size:11px; margin-bottom:4px;"><i class="fas fa-info-circle"></i> ${legalEsc(n)}</div>`).join('');
+            let html = `<div style="color:var(--accent-blue); font-size:13px; font-weight:bold; margin-bottom:8px;"><i class="fas fa-list-ol"></i> 검색 결과 (${legalEsc(d.mode_used)}${d.rerank_used ? ' + 리랭킹' : ''})</div>${notes}`;
+            html += rows.map(r => {
+                const s = r.scores || {};
+                const content = (r.content || '');
+                return `<div style="background:#1e2844; border-radius:6px; padding:12px 14px; margin-bottom:8px; border-left:3px solid #6c5ce7;">
+                    <div style="display:flex; justify-content:space-between; align-items:baseline;">
+                        <span style="color:#a29bfe; font-weight:bold; font-size:13px;">${r.rank}. ${legalEsc(r.law_name)} ${legalEsc(r.article_ref)}</span>
+                        <span>${badge('BM25', (s.bm25_rank != null) ? '#' + (s.bm25_rank + 1) : null, '#74b9ff')}${badge('벡터', (s.vector_rank != null) ? '#' + (s.vector_rank + 1) : null, '#00cec9')}${badge('관련성', s.rerank, '#55efc4')}</span>
+                    </div>
+                    ${r.title ? `<div style="color:#b2bec3; font-size:12px; margin-top:2px;">${legalEsc(r.title)}</div>` : ''}
+                    <div style="color:#dfe6e9; font-size:12px; margin-top:6px; line-height:1.6;">${legalEsc(content.slice(0, 300))}${content.length > 300 ? '…' : ''}</div>
+                    ${r.source ? `<div style="color:#5a6885; font-size:10px; margin-top:4px;"><i class="fas fa-file"></i> ${legalEsc(r.source)}</div>` : ''}
+                </div>`;
+            }).join('');
+            area.innerHTML = html;
+        }
         function closeOntologyModal() { ontologyModal.style.display = 'none'; }
 
         async function executeOntologyTransformation() {

@@ -1000,6 +1000,58 @@ def query_ai():
         return jsonify({"error": "분석 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요."}), 500
 
 # ------------------------------
+# 3.5 법률 RAG (Legal RAG) — UI 세션용. 알고리즘/백엔드는 LegalRAGService (파트너 API /api/v1/legal/* 와 동일 서비스).
+# ------------------------------
+@bp.route('/api/legal/search', methods=['POST'])
+def legal_search():
+    if not _check_ip_rate_limit(request.remote_addr):
+        return jsonify({"status": "error", "message": f"요청이 너무 많습니다. 분당 {_MAIN_API_RATE_LIMIT}회 제한."}), 429
+    data = request.get_json() or {}
+    question = (data.get('question') or '').strip()
+    if not question:
+        return jsonify({"status": "error", "message": "질문을 입력하세요."}), 400
+    mode = data.get('mode', 'hybrid')
+    if mode not in ('hybrid', 'bm25', 'vector'):
+        return jsonify({"status": "error", "message": "mode 는 hybrid/bm25/vector 중 하나여야 합니다."}), 400
+    top_k = min(max(int(data.get('top_k', 5) or 5), 1), 20)
+    rerank = data.get('rerank')  # None=auto
+    try:
+        from app.services.legal_rag_service import LegalRAGService
+        result = LegalRAGService.hybrid_search(question, top_k=top_k, mode=mode, rerank=rerank)
+        return jsonify({"status": "success", **result})
+    except Exception as e:
+        logger.error(f"Legal search error: {e}")
+        return jsonify({"status": "error", "message": "법률 검색 중 오류가 발생했습니다."}), 500
+
+
+@bp.route('/api/legal/answer', methods=['POST'])
+def legal_answer():
+    if not _check_ip_rate_limit(request.remote_addr):
+        return jsonify({"status": "error", "message": f"요청이 너무 많습니다. 분당 {_MAIN_API_RATE_LIMIT}회 제한."}), 429
+    data = request.get_json() or {}
+    question = (data.get('question') or '').strip()
+    if not question:
+        return jsonify({"status": "error", "message": "질문을 입력하세요."}), 400
+    top_k = min(max(int(data.get('top_k', 4) or 4), 1), 10)
+    try:
+        from app.services.legal_rag_service import LegalRAGService
+        result = LegalRAGService.answer(question, top_k=top_k)
+        return jsonify({"status": "success", **result})
+    except Exception as e:
+        logger.error(f"Legal answer error: {e}")
+        return jsonify({"status": "error", "message": "답변 생성 중 오류가 발생했습니다."}), 500
+
+
+@bp.route('/api/legal/status', methods=['GET'])
+def legal_status():
+    try:
+        from app.services.legal_rag_service import LegalRAGService
+        return jsonify({"status": "success", **LegalRAGService.status()})
+    except Exception as e:
+        logger.error(f"Legal status error: {e}")
+        return jsonify({"status": "error", "message": "상태 조회 오류"}), 500
+
+# ------------------------------
 # 4. ETL 관련 기능 -> ETLService 사용
 # ------------------------------
 @bp.route('/api/etl/ai-suggest', methods=['POST'])

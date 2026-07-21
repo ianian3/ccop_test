@@ -172,6 +172,18 @@ def _index_text(c):
     return f"{c['law_name']} {c['article_ref']} {c['title']} {c['content']}"
 
 
+def _assign_cids(chunks):
+    """각 청크에 안정적 id(cid) 부여: '{doc_id}#{article_ref}#{ordinal}'.
+    적재 순서(삽입순)와 로드 순서(ORDER BY id)가 같으므로 cid 가 재현되어,
+    Chroma id ↔ 인메모리 청크 위치 매핑이 일치한다(벡터 백엔드=chroma 일 때 사용)."""
+    seen = defaultdict(int)
+    for c in chunks:
+        key = f"{c['doc_id']}#{c.get('article_ref', '')}"
+        c["cid"] = f"{key}#{seen[key]}"
+        seen[key] += 1
+    return chunks
+
+
 # ─────────────────────────────────────────────────────────────
 # 서비스 본체
 # ─────────────────────────────────────────────────────────────
@@ -233,6 +245,7 @@ class LegalRAGService:
     def build_index(cls, records, embeddings=None):
         """레코드 리스트로 인메모리 인덱스 생성 (DB 불필요 — 테스트/평가 하니스 공용)."""
         chunks = [c for c in (normalize_record(r) for r in records) if c]
+        _assign_cids(chunks)
         bm25 = BM25Index([tokenize(_index_text(c)) for c in chunks])
         emb, emb_model = None, None
         if embeddings is not None and len(chunks) > 0 and len(embeddings) == len(chunks):
@@ -241,7 +254,8 @@ class LegalRAGService:
             norms[norms == 0] = 1.0
             emb = m / norms
             emb_model = "injected"
-        return {"chunks": chunks, "bm25": bm25, "emb": emb, "emb_model": emb_model}
+        return {"chunks": chunks, "bm25": bm25, "emb": emb, "emb_model": emb_model,
+                "pos_by_id": {c["cid"]: i for i, c in enumerate(chunks)}}
 
     @classmethod
     def install_index(cls, state):
@@ -318,6 +332,36 @@ class LegalRAGService:
             logger.warning(f"[LegalRAG] 질의 임베딩 실패 → BM25-only 강등: {e}")
             return None
 
+    # ── 벡터 레인 백엔드 (postgres+numpy 기본 / chroma 선택) ──
+    @classmethod
+    def _vector_backend(cls):
+        """'chroma' → Chroma ANN 인덱스, 그 외 → PostgreSQL BYTEA + numpy 브루트포스(기본)."""
+        return (cls._cfg("LEGAL_VECTOR_BACKEND", "postgres") or "postgres").strip().lower()
+
+    @classmethod
+    def _vector_candidates(cls, question, state):
+        """벡터 레인 후보를 '청크 위치 순위 리스트'로 반환. 불가하면 None(→ BM25 강등).
+        두 백엔드 모두 동일한 계약(위치 순위 리스트)을 반환해 hybrid_search 는 백엔드에 무지."""
+        if cls._vector_backend() == "chroma":
+            from app.services.legal_vector_store import ChromaVectorStore
+            if not ChromaVectorStore.available() or ChromaVectorStore.count() == 0:
+                return None
+            qv = cls._embed_query(question)
+            if qv is None:
+                return None
+            hits = ChromaVectorStore.query(qv, _CANDIDATE_POOL)
+            pos = state.get("pos_by_id", {})
+            return [pos[cid] for cid, _dist in hits if cid in pos] or None
+        # 기본: PostgreSQL 에서 로드한 임베딩으로 numpy 브루트포스
+        emb = state.get("emb")
+        if emb is None:
+            return None
+        qv = cls._embed_query(question)
+        if qv is None or qv.shape[0] != emb.shape[1]:
+            return None
+        sims = emb @ qv
+        return [int(i) for i in np.argsort(-sims)[:_CANDIDATE_POOL]]
+
     # ── 하이브리드 검색 ─────────────────────────────────
     @classmethod
     def hybrid_search(cls, question, top_k=5, mode="hybrid", rerank=None):
@@ -343,19 +387,16 @@ class LegalRAGService:
 
         vec_rank_of = {}
         want_vector = mode in ("hybrid", "vector")
-        if want_vector and state["emb"] is not None:
-            qv = cls._embed_query(question)
-            if qv is not None and qv.shape[0] == state["emb"].shape[1]:
-                sims = state["emb"] @ qv
-                order = np.argsort(-sims)[:_CANDIDATE_POOL]
+        if want_vector:
+            order = cls._vector_candidates(question, state)
+            if order:
                 vec_rank_of = {int(i): r for r, i in enumerate(order)}
             else:
                 if mode == "vector":
-                    notes.append("질의 임베딩 불가 → BM25 로 대체")
+                    notes.append("벡터 검색 불가(임베딩/백엔드 없음) → BM25 로 대체")
+                else:
+                    notes.append("벡터 레인 사용 불가 → BM25-only 강등 (임베딩 백엔드/코퍼스 확인)")
                 mode = "bm25_only" if mode == "vector" else "hybrid(bm25-only 강등)"
-        elif want_vector:
-            notes.append("코퍼스 임베딩 없음(BM25-only) — 임베딩 백엔드 설정 후 재적재 필요")
-            mode = "bm25_only" if mode == "vector" else "hybrid(bm25-only 강등)"
 
         if vec_rank_of and mode in ("hybrid",):
             fused = rrf_fuse([[i for i, _ in bm25_ranked], sorted(vec_rank_of, key=vec_rank_of.get)])
@@ -528,6 +569,7 @@ class LegalRAGService:
                 chunks.append({**c, "content": piece})
         if not chunks:
             return {"documents": 0, "chunks": 0, "embedded": 0, "model": None}
+        _assign_cids(chunks)
 
         vectors, model = [None] * len(chunks), None
         if embed:
@@ -579,8 +621,35 @@ class LegalRAGService:
                            (SELECT COUNT(*) FROM legal_chunks c WHERE c.doc_id = d.doc_id)""")
         finally:
             release_db_connection(conn)
+        if embed and cls._vector_backend() == "chroma":
+            cls._sync_chroma(chunks, vectors, list(docs.keys()), recreate)
         cls.reload()
-        return {"documents": len(docs), "chunks": len(chunks), "embedded": embedded, "model": model}
+        return {"documents": len(docs), "chunks": len(chunks), "embedded": embedded,
+                "model": model, "vector_backend": cls._vector_backend()}
+
+    @classmethod
+    def _sync_chroma(cls, chunks, vectors, doc_ids, recreate):
+        """임베딩을 Chroma 컬렉션에 미러링(벡터 백엔드=chroma). cid 로 upsert → 로드 시 위치와 매핑."""
+        from app.services.legal_vector_store import ChromaVectorStore
+        if not ChromaVectorStore.available():
+            logger.warning("[LegalRAG] LEGAL_VECTOR_BACKEND=chroma 이나 chromadb 미설치 → Chroma 동기화 생략")
+            return
+        if recreate:
+            ChromaVectorStore.reset()
+        else:
+            ChromaVectorStore.delete_by_doc(doc_ids)
+        ids, embs, docs_txt, metas = [], [], [], []
+        for c, v in zip(chunks, vectors):
+            if v is None:
+                continue
+            ids.append(c["cid"])
+            embs.append(np.asarray(v, dtype=np.float32).tolist())
+            docs_txt.append(c["content"])
+            metas.append({"doc_id": c["doc_id"], "law_name": c["law_name"],
+                          "article_ref": c.get("article_ref", "")})
+        n = ChromaVectorStore.upsert(ids, embs, docs_txt, metas)
+        logger.info(f"[LegalRAG] Chroma 동기화: {n} 벡터 upsert → "
+                    f"{os.getenv('LEGAL_CHROMA_PATH', 'data/legal_chroma')}")
 
     # ── 상태 ────────────────────────────────────────────
     @classmethod
@@ -597,6 +666,19 @@ class LegalRAGService:
         info["embedding_backend"] = ("endpoint" if cls._cfg("EMBEDDING_ENDPOINT")
                                      else ("openai" if client else "none(bm25-only)"))
         info["rerank"] = "enabled" if cls._rerank_enabled() else "disabled"
+        info["vector_backend"] = cls._vector_backend()
+        if cls._vector_backend() == "chroma":
+            try:
+                from app.services.legal_vector_store import ChromaVectorStore
+                if ChromaVectorStore.available():
+                    n = ChromaVectorStore.count()
+                    info["chroma"] = {"vectors": n}
+                    info["vector_enabled"] = n > 0   # 활성 백엔드(Chroma) 기준으로 정정
+                else:
+                    info["chroma"] = "unavailable(미설치)"
+                    info["vector_enabled"] = False
+            except Exception as e:
+                info["chroma"] = f"error ({type(e).__name__})"
         try:
             from app.database import get_db_connection, release_db_connection
             conn, cur = get_db_connection()

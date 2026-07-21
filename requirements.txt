@@ -29,8 +29,10 @@ requests==2.31.0
 # System Monitoring (선택) — monitoring_service.py 의 시스템 리소스 통계용
 psutil==5.9.8
 
-# (제거됨) Legal RAG(chromadb/pypdf/sentence-transformers): app 내 import 0건 — 죽은 의존성.
-#   torch 등 수백 MB 절감. 재도입 시 별도 requirements 로 분리 권장.
+# Legal RAG 선택 의존성은 base 에서 분리 — requirements-vector.txt 참조.
+#   - pypdf: PDF 코퍼스 적재(개발 전용, scripts/ingest_legal_corpus.py 지연 import)
+#   - chromadb: 벡터 백엔드=chroma 일 때만(LEGAL_VECTOR_BACKEND=chroma). 미설정 시 로드 0.
+#   base(런타임)는 신규 의존성 0 유지 — 벡터 백엔드 기본값은 PostgreSQL BYTEA + numpy.
 
 # Testing
 pytest==7.4.4
