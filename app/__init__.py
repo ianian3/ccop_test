@@ -30,8 +30,8 @@ def create_app():
                 return None
             auth = request.authorization
             if (auth and (auth.password is not None) and
-                    hmac.compare_digest(auth.username or '', _ba_user) and
-                    hmac.compare_digest(auth.password or '', _ba_pass)):
+                    hmac.compare_digest((auth.username or '').encode('utf-8'), _ba_user.encode('utf-8')) and
+                    hmac.compare_digest((auth.password or '').encode('utf-8'), _ba_pass.encode('utf-8'))):
                 return None
             return Response('Authentication required', 401,
                             {'WWW-Authenticate': 'Basic realm="CCOP"'})
