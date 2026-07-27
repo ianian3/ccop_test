@@ -5663,31 +5663,71 @@
     <!-- 수동 모델링(i2) 모달들 -->
     <div id="manual-node-modal"
         style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(22,30,51,0.88); z-index:9999; align-items:center; justify-content:center; backdrop-filter:blur(3px);">
-        <div class="modal-content" style="max-width: 400px;">
-            <h3 style="margin-top:0; color:#00cec9;"><i class="fas fa-plus-circle"></i> 노드 수동 생성</h3>
+        <div class="modal-content" style="max-width: 420px;">
+            <h3 style="margin-top:0; color:#00cec9;"><i class="fas fa-plus-circle"></i> 증거 노드 추가</h3>
             <div style="margin-bottom: 12px;">
-                <label style="display:block; margin-bottom:5px; color:#b2bec3;">노드 라벨 (Type)</label>
-                <select id="mn-label"
+                <label style="display:block; margin-bottom:5px; color:#b2bec3;">종류</label>
+                <select id="mn-label" onchange="renderNodeFields()"
                     style="width:100%; padding:8px; background:#253154; color:white; border:1px solid rgba(255,255,255,0.12); border-radius:4px;">
-                    <option value="vt_psn">👤 vt_psn (인물)</option>
-                    <option value="vt_bacnt">💳 vt_bacnt (계좌)</option>
-                    <option value="vt_telno">📱 vt_telno (전화번호)</option>
-                    <option value="vt_org">🏢 vt_org (조직/기관)</option>
-                    <option value="vt_ip">🖥️ vt_ip (IP 주소)</option>
-                    <option value="vt_case">📋 vt_case (사건)</option>
-                    <option value="vt_persona">🎭 vt_persona (가상자아)</option>
+                    <optgroup label="개체">
+                        <option value="vt_psn">👤 인물 (vt_psn)</option>
+                        <option value="vt_bacnt">💳 계좌 (vt_bacnt)</option>
+                        <option value="vt_telno">📱 전화번호 (vt_telno)</option>
+                        <option value="vt_org">🏢 조직/기관 (vt_org)</option>
+                        <option value="vt_ip">🖥️ IP주소 (vt_ip)</option>
+                        <option value="vt_site">🌐 사이트/URL (vt_site)</option>
+                        <option value="vt_file">📁 파일 (vt_file)</option>
+                        <option value="vt_id">🎭 계정/닉네임 (vt_id)</option>
+                        <option value="vt_case">📋 사건 (vt_case)</option>
+                    </optgroup>
+                    <optgroup label="이벤트(양쪽 연결)">
+                        <option value="vt_transfer">💸 이체 (vt_transfer)</option>
+                        <option value="vt_call">📞 통화 (vt_call)</option>
+                    </optgroup>
+                    <option value="__advanced__">⚙️ 기타(고급: JSON 직접입력)</option>
                 </select>
             </div>
-            <div style="margin-bottom: 12px;">
-                <label style="display:block; margin-bottom:5px; color:#b2bec3;">속성 (JSON 형식)</label>
-                <textarea id="mn-props" rows="4"
+            <!-- 라벨별 동적 필드 (renderNodeFields 가 채움) -->
+            <div id="mn-fields"></div>
+            <!-- 소유자/연결 (인물이 아닌 경우) -->
+            <div id="mn-link-wrap" style="margin-bottom: 12px;">
+                <label style="display:block; margin-bottom:5px; color:#b2bec3;">소유자 연결 <span style="color:#5a6885;">(선택)</span></label>
+                <select id="mn-link-owner"
+                    style="width:100%; padding:8px; background:#253154; color:white; border:1px solid rgba(255,255,255,0.12); border-radius:4px;">
+                    <option value="">— 연결 안 함 —</option>
+                </select>
+                <div style="font-size:11px; color:#5a6885; margin-top:4px;">선택 시 해당 인물과 자동 연결(계좌=소유, 전화=소유)</div>
+            </div>
+            <!-- 이벤트(이체/통화) 양끝 연결 -->
+            <div id="mn-event-wrap" style="display:none;">
+                <div style="margin-bottom:10px;">
+                    <label id="mn-ev-from-label" style="display:block; margin-bottom:5px; color:#b2bec3;">출발</label>
+                    <select id="mn-ev-from"
+                        style="width:100%; padding:8px; background:#253154; color:white; border:1px solid rgba(255,255,255,0.12); border-radius:4px;">
+                        <option value="">— 선택 —</option>
+                    </select>
+                </div>
+                <div style="margin-bottom:10px;">
+                    <label id="mn-ev-to-label" style="display:block; margin-bottom:5px; color:#b2bec3;">도착</label>
+                    <select id="mn-ev-to"
+                        style="width:100%; padding:8px; background:#253154; color:white; border:1px solid rgba(255,255,255,0.12); border-radius:4px;">
+                        <option value="">— 선택 —</option>
+                    </select>
+                </div>
+            </div>
+            <!-- 고급(JSON) — __advanced__ 일 때만 -->
+            <div id="mn-advanced" style="display:none; margin-bottom: 12px;">
+                <label style="display:block; margin-bottom:5px; color:#b2bec3;">라벨 + 속성(JSON)</label>
+                <input type="text" id="mn-adv-label" placeholder="라벨 (예: vt_ip)"
+                    style="width:100%; padding:8px; margin-bottom:6px; background:#253154; color:white; border:1px solid rgba(255,255,255,0.12); border-radius:4px;">
+                <textarea id="mn-props" rows="3"
                     style="width:100%; padding:8px; background:#253154; color:white; border:1px solid rgba(255,255,255,0.12); border-radius:4px;">{"name": "새로운 객체"}</textarea>
             </div>
             <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
                 <button onclick="document.getElementById('manual-node-modal').style.display='none'"
                     style="background: #344370; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;">취소</button>
                 <button onclick="submitManualNode()"
-                    style="background: #0984e3; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;">생성</button>
+                    style="background: #0984e3; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;">저장</button>
             </div>
         </div>
     </div>
@@ -5829,54 +5869,275 @@
             return document.getElementById('targetGraphInfo').value;
         }
 
+        // 라벨별 입력 필드 정의 (수사관 친화 — JSON 대신 필드)
+        const NODE_FIELD_SPECS = {
+            vt_psn: [
+                { key: 'name', label: '이름', type: 'text', ph: '예: 홍길동 (미상이면 성명불상)' },
+                { key: 'role_cd', label: '역할', type: 'select', opts: [['suspect', '피의자'], ['victim', '피해자'], ['witness', '참고인']] },
+            ],
+            vt_bacnt: [
+                { key: 'account_no', label: '계좌번호', type: 'text', ph: '예: 004-1000-2000', required: true },
+                { key: 'bnk_cd', label: '은행', type: 'select', opts: [['004', '국민'], ['088', '신한'], ['020', '우리'], ['081', '하나'], ['011', '농협'], ['090', '카카오뱅크'], ['', '기타/모름']] },
+                { key: 'holder_nm', label: '명의자', type: 'text', ph: '예금주명' },
+                { key: 'is_burner', label: '대포통장 의심', type: 'check' },
+            ],
+            vt_telno: [
+                { key: 'telno', label: '전화번호', type: 'text', ph: '예: 010-1234-5678 (하이픈 무관)', required: true },
+                { key: 'carr_cd', label: '통신사', type: 'select', opts: [['SKT', 'SKT'], ['KT', 'KT'], ['LGU+', 'LGU+'], ['MVNO', '알뜰폰'], ['', '모름']] },
+                { key: 'is_burner', label: '대포폰 의심', type: 'check' },
+            ],
+            vt_org: [
+                { key: 'org_nm', label: '조직/기관명', type: 'text', ph: '예: 강남 콜센터 / OO은행', required: true },
+                { key: 'org_category', label: '분류', type: 'select', opts: [['criminal', '범죄조직'], ['institution', '기관'], ['company', '기업'], ['government', '정부']] },
+            ],
+            vt_ip: [
+                { key: 'ip_addr', label: 'IP 주소', type: 'text', ph: '예: 175.100.0.1', required: true },
+                { key: 'country', label: '국가', type: 'text', ph: '예: KR / US' },
+                { key: 'is_vpn', label: 'VPN/우회 의심', type: 'check' },
+            ],
+            vt_site: [
+                { key: 'url_addr', label: 'URL', type: 'text', ph: '예: https://fake-bank.com/login', required: true },
+                { key: 'site_type', label: '유형', type: 'select', opts: [['phishing', '피싱'], ['malware', '악성코드'], ['fraud', '사기'], ['normal', '정상'], ['unknown', '미상']] },
+                { key: 'is_malicious', label: '악성 확인', type: 'check' },
+            ],
+            vt_file: [
+                { key: 'hash_val', label: '해시(권장)', type: 'text', ph: '예: sha256-... (없으면 파일명만)' },
+                { key: 'file_nm', label: '파일명', type: 'text', ph: '예: invoice.exe', required: true },
+                { key: 'is_malicious', label: '악성 확인', type: 'check' },
+            ],
+            vt_id: [
+                { key: 'id_val', label: '계정/닉네임', type: 'text', ph: '예: gildong99', required: true },
+                { key: 'platform', label: '플랫폼', type: 'select', opts: [['telegram', '텔레그램'], ['kakaotalk', '카카오톡'], ['instagram', '인스타'], ['naver', '네이버'], ['other', '기타']] },
+                { key: 'is_anonymous', label: '신원 미상', type: 'check' },
+            ],
+            vt_case: [
+                { key: 'case_no', label: '사건번호', type: 'text', ph: '예: CASE-2026-A-010', required: true },
+                { key: 'flnm', label: '사건명', type: 'text', ph: '예: 강남 보이스피싱' },
+                { key: 'occurred_at', label: '발생일', type: 'text', ph: '예: 2026-04-01' },
+            ],
+        };
+        // 소유자 연결 시 사용할 엣지 라벨
+        const OWNER_EDGE = { vt_bacnt: 'has_account', vt_telno: 'owns_phone' };
+
+        // 이벤트 노드(양끝 연결이 본질): 노드 생성 + from/to 엣지 자동 생성
+        const EVENT_SPECS = {
+            vt_transfer: {
+                fields: [
+                    { key: 'transfer_id', label: '이체 ID', type: 'text', ph: '예: TXN-N001', required: true },
+                    { key: 'amount', label: '금액(원)', type: 'text', ph: '예: 500000' },
+                    { key: 'occurred_at', label: '이체일시', type: 'text', ph: '예: 2026-05-20T14:30:00' },
+                ],
+                endpoint: 'vt_bacnt',                 // 양끝 = 계좌
+                fromLabel: '출금 계좌', fromEdge: 'from_account', fromDir: 'to_event',   // (계좌)-[from_account]->(이체)
+                toLabel: '입금 계좌', toEdge: 'to_account', toDir: 'from_event',         // (이체)-[to_account]->(계좌)
+            },
+            vt_call: {
+                fields: [
+                    { key: 'call_id', label: '통화 ID', type: 'text', ph: '예: CALL-N001', required: true },
+                    { key: 'duration', label: '통화시간(초)', type: 'text', ph: '예: 45' },
+                    { key: 'occurred_at', label: '통화일시', type: 'text', ph: '예: 2026-05-20T14:30:00' },
+                ],
+                endpoint: 'vt_telno',                 // 양끝 = 전화
+                fromLabel: '발신 번호', fromEdge: 'caller', fromDir: 'to_event',         // (전화)-[caller]->(통화)
+                toLabel: '수신 번호', toEdge: 'callee', toDir: 'from_event',             // (통화)-[callee]->(전화)
+            },
+        };
+
         function openNodeModal() {
             cm.style.display = 'none';
+            document.getElementById('mn-label').value = 'vt_psn';
             document.getElementById('manual-node-modal').style.display = 'flex';
-            document.getElementById('mn-props').value = '{"name": "새로운 객체"}';
+            renderNodeFields();
+            loadOwnerOptions();
+        }
+
+        function renderNodeFields() {
+            const label = document.getElementById('mn-label').value;
+            const adv = label === '__advanced__';
+            const ev = EVENT_SPECS[label];
+            document.getElementById('mn-advanced').style.display = adv ? 'block' : 'none';
+            document.getElementById('mn-fields').style.display = adv ? 'none' : 'block';
+            // 소유자 연결은 계좌/전화만, 이벤트 연결은 이체/통화만
+            document.getElementById('mn-link-wrap').style.display = OWNER_EDGE[label] ? 'block' : 'none';
+            document.getElementById('mn-event-wrap').style.display = ev ? 'block' : 'none';
+            if (adv) return;
+            // 이벤트 노드: 전용 필드 + from/to 드롭다운
+            if (ev) {
+                renderFieldList('mn-fields', ev.fields);
+                document.getElementById('mn-ev-from-label').textContent = ev.fromLabel;
+                document.getElementById('mn-ev-to-label').textContent = ev.toLabel;
+                loadEndpointOptions(ev.endpoint);
+                return;
+            }
+            renderFieldList('mn-fields', NODE_FIELD_SPECS[label] || []);
+        }
+
+        function renderFieldList(containerId, specs) {
+            let html = '';
+            for (const f of specs) {
+                const id = 'mnf-' + f.key;
+                html += `<div style="margin-bottom:10px;"><label style="display:block; margin-bottom:4px; color:#b2bec3;">${f.label}${f.required ? ' <span style="color:#e17055;">*</span>' : ''}</label>`;
+                if (f.type === 'select') {
+                    html += `<select id="${id}" style="width:100%; padding:8px; background:#253154; color:white; border:1px solid rgba(255,255,255,0.12); border-radius:4px;">` +
+                        f.opts.map(([v, t]) => `<option value="${v}">${t}</option>`).join('') + `</select>`;
+                } else if (f.type === 'check') {
+                    html += `<label style="display:flex; align-items:center; gap:6px; color:white; cursor:pointer;"><input type="checkbox" id="${id}" style="accent-color:#e17055;"> 예</label>`;
+                } else {
+                    html += `<input type="text" id="${id}" placeholder="${f.ph || ''}" style="width:100%; padding:8px; background:#253154; color:white; border:1px solid rgba(255,255,255,0.12); border-radius:4px;">`;
+                }
+                html += `</div>`;
+            }
+            document.getElementById(containerId).innerHTML = html;
+        }
+
+        // 이벤트(이체/통화) 양끝 후보 로딩 — 계좌 또는 전화 노드
+        function loadEndpointOptions(endpointLabel) {
+            const graphName = getModelingGraphName();
+            const from = document.getElementById('mn-ev-from'), to = document.getElementById('mn-ev-to');
+            from.innerHTML = to.innerHTML = '<option value="">— 선택 —</option>';
+            if (!graphName) return;
+            fetch(`${API_URL}/search?keyword=&graph_path=${encodeURIComponent(graphName)}`)
+                .then(r => r.json()).then(els => {
+                    const opts = (els || []).filter(e => e.data && e.data.label === endpointLabel).map(e => {
+                        const p = e.data.props || {};
+                        const nm = p.account_no || p.telno || p.name || e.data.id;
+                        return `<option value="${e.data.id}">${nm}</option>`;
+                    }).join('');
+                    from.innerHTML += opts; to.innerHTML += opts;
+                }).catch(() => {});
+        }
+
+        function loadOwnerOptions() {
+            const graphName = getModelingGraphName();
+            const sel = document.getElementById('mn-link-owner');
+            if (!graphName) return;
+            // 기존 인물(vt_psn) 검색 → 소유자 후보
+            fetch(`${API_URL}/search?keyword=&graph_path=${encodeURIComponent(graphName)}`)
+                .then(r => r.json()).then(els => {
+                    const persons = (els || []).filter(e => e.data && (e.data.label === 'vt_psn'));
+                    sel.innerHTML = '<option value="">— 연결 안 함 —</option>' +
+                        persons.map(p => {
+                            const nm = (p.data.props && (p.data.props.name || p.data.props.psn_id)) || p.data.id;
+                            return `<option value="${p.data.id}">${nm}</option>`;
+                        }).join('');
+                }).catch(() => { /* 검색 실패 시 연결 안 함만 */ });
+        }
+
+        // 식별자 정규화 (선행 0 소실·하이픈 불일치 방지)
+        function normalizeNodeProps(label, props) {
+            if (label === 'vt_telno' && props.telno) {
+                props.telno = String(props.telno).replace(/[^0-9]/g, '');   // 숫자만
+                props.id_format = 'no_hyphen_e164';
+            }
+            if (label === 'vt_bacnt' && props.account_no) {
+                props.account_no = String(props.account_no).trim();
+                props.id_format = 'plain_dash';
+            }
+            if (label === 'vt_psn') props.id_format = 'plain';
+            if (label === 'vt_site' && props.url_addr) {
+                props.url_addr = String(props.url_addr).trim();
+                if (!/^https?:\/\//i.test(props.url_addr)) props.url_addr = 'http://' + props.url_addr;
+                props.id_format = 'normalized_url';
+            }
+            if (label === 'vt_ip' && props.ip_addr) props.ip_addr = String(props.ip_addr).trim();
+            if (label === 'vt_id' && props.id_val) props.id_val = String(props.id_val).trim();
+            if (label === 'vt_transfer' && props.amount) props.amount = String(props.amount).replace(/[^0-9]/g, '');
+            if (label === 'vt_call' && props.duration) props.duration = String(props.duration).replace(/[^0-9]/g, '');
+            return props;
         }
 
         function submitManualNode() {
-            const label = document.getElementById('mn-label').value;
-            let props = {};
-            try {
-                props = JSON.parse(document.getElementById('mn-props').value);
-            } catch (e) {
-                showToast("JSON 형식이 올바르지 않습니다.", "error");
-                return;
-            }
+            let label = document.getElementById('mn-label').value;
             const graphName = getModelingGraphName();
             if (!graphName) return showToast("그래프를 먼저 선택하세요.", "warning");
+
+            let props = {};
+            const ev = EVENT_SPECS[label];
+            // 고급(JSON) 경로
+            if (label === '__advanced__') {
+                label = (document.getElementById('mn-adv-label').value || '').trim();
+                if (!label) return showToast("라벨을 입력하세요.", "warning");
+                try { props = JSON.parse(document.getElementById('mn-props').value); }
+                catch (e) { return showToast("JSON 형식이 올바르지 않습니다.", "error"); }
+            } else {
+                // 필드형/이벤트 공통 — 스펙대로 수집 + 필수 검증
+                const specs = ev ? ev.fields : (NODE_FIELD_SPECS[label] || []);
+                for (const f of specs) {
+                    const el = document.getElementById('mnf-' + f.key);
+                    if (!el) continue;
+                    let val = f.type === 'check' ? !!el.checked : (el.value || '').trim();
+                    if (f.required && (val === '' || val === false)) {
+                        return showToast(`${f.label}은(는) 필수입니다.`, "warning");
+                    }
+                    if (f.type === 'check') props[f.key] = val;
+                    else if (val !== '') props[f.key] = val;
+                }
+                props = normalizeNodeProps(label, props);
+                props.source_domain = 'investigation';
+                props.evidence_added_at = new Date().toISOString();
+            }
+
+            // 이벤트 노드: 생성 후 from/to 방향대로 엣지 연결
+            if (ev) return submitEventNode(graphName, label, props, ev);
+
+            const ownerId = document.getElementById('mn-link-owner').value;
+            const ownerEdge = OWNER_EDGE[label];
 
             fetch(`${API_URL}/graph/node/create`, {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ graph_name: graphName, label: label, properties: props })
             }).then(r => r.json()).then(d => {
-                if (d.status === 'success') {
-                    document.getElementById('manual-node-modal').style.display = 'none';
-                    showToast("✅ 노드가 생성되었습니다! (ID: " + d.node_id + ")", "success");
-
-                    if (isModelingMode) {
-                        // 모델링 모드: 캔버스에 해당 노드만 추가 (전체 리로드 안 함)
-                        cy.add({
-                            group: 'nodes',
-                            data: {
-                                id: d.node_id,
-                                label: label,
-                                props: props
-                            },
-                            position: {
-                                x: 200 + Math.random() * 400,
-                                y: 200 + Math.random() * 300
-                            }
-                        });
-                    } else {
-                        // 탐색 모드: 기존처럼 전체 리로드
-                        switchGraph();
-                    }
+                if (d.status !== 'success') return showToast("노드 생성 실패: " + d.message, "error");
+                const nodeId = d.node_id;
+                // 소유자 연결 (계좌/전화 + 소유자 선택 시)
+                if (ownerId && ownerEdge) {
+                    fetch(`${API_URL}/graph/edge/create`, {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ graph_name: graphName, src_id: ownerId, tgt_id: nodeId, label: ownerEdge, properties: {} })
+                    }).then(r => r.json()).then(e => {
+                        showToast(e.status === 'success'
+                            ? "✅ 저장 + 소유자 연결 완료" : "✅ 노드 저장(연결 실패: " + e.message + ")",
+                            e.status === 'success' ? "success" : "warning");
+                        finishNodeAdd();
+                    });
                 } else {
-                    showToast("노드 생성 실패: " + d.message, "error");
+                    showToast("✅ 저장되었습니다.", "success");
+                    finishNodeAdd();
                 }
             });
+        }
+
+        // 이벤트 노드(이체/통화) 생성 + 양끝 엣지 방향대로 연결
+        function submitEventNode(graphName, label, props, ev) {
+            const fromId = document.getElementById('mn-ev-from').value;
+            const toId = document.getElementById('mn-ev-to').value;
+            fetch(`${API_URL}/graph/node/create`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ graph_name: graphName, label: label, properties: props })
+            }).then(r => r.json()).then(d => {
+                if (d.status !== 'success') return showToast("생성 실패: " + d.message, "error");
+                const evId = d.node_id;
+                // fromDir/toDir: 'to_event' = (끝점)-[edge]->(이벤트),  'from_event' = (이벤트)-[edge]->(끝점)
+                const links = [];
+                if (fromId) links.push(ev.fromDir === 'to_event'
+                    ? { s: fromId, t: evId, l: ev.fromEdge } : { s: evId, t: fromId, l: ev.fromEdge });
+                if (toId) links.push(ev.toDir === 'to_event'
+                    ? { s: toId, t: evId, l: ev.toEdge } : { s: evId, t: toId, l: ev.toEdge });
+                Promise.all(links.map(lk => fetch(`${API_URL}/graph/edge/create`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ graph_name: graphName, src_id: lk.s, tgt_id: lk.t, label: lk.l, properties: {} })
+                }).then(r => r.json()))).then(results => {
+                    const ok = results.filter(x => x.status === 'success').length;
+                    showToast(`✅ 저장 완료 (연결 ${ok}/${links.length})`, ok === links.length ? "success" : "warning");
+                    finishNodeAdd();
+                });
+            });
+        }
+
+        function finishNodeAdd() {
+            document.getElementById('manual-node-modal').style.display = 'none';
+            if (isModelingMode) { switchGraph && switchGraph(); }
+            else { switchGraph(); }
         }
 
         let edgeSourceId = null;
