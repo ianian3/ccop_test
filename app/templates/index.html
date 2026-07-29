@@ -2155,6 +2155,9 @@
             </div>
         </div>
         <div id="context-menu">
+            <!-- 합계 노드 전용 — 우클릭한 묶음만 부분 펼치기 -->
+            <div class="ctx-item" id="ctxExpandAgg" onclick="expandAggFromMenu()" style="display:none; color:#f9ca24;"><i class="fas fa-expand-arrows-alt"></i> 이 묶음만 펼치기</div>
+            <hr id="ctxExpandAggHr" style="display:none;">
             <!-- 수동 모델링 (i2 style) -->
             <div class="ctx-item" onclick="openNodeModal()"><i class="fas fa-plus-circle"></i> 노드 추가 (Add Node)</div>
             <div class="ctx-item" onclick="startEdgeCreation()"><i class="fas fa-link"></i> 엣지 연결 (Add Edge)</div>
@@ -3401,11 +3404,13 @@
                     const inEdges = conn.filter(e => e.target().id() === ev.id() && cfg.inRel.includes(e.data('label')));
                     const outEdges = conn.filter(e => e.source().id() === ev.id() && cfg.outRel.includes(e.data('label')));
                     if (inEdges.length === 0 || outEdges.length === 0) {
-                        // 한쪽 끝만 있으면 끝점별 합계 노드 후보 (양끝 모두 없으면 그대로 유지)
-                        if (inEdges.length > 0 && outEdges.length === 0)
-                            singleEnded.push({ ev, endpointId: inEdges[0].source().id(), dir: 'in', label });
-                        else if (outEdges.length > 0 && inEdges.length === 0)
-                            singleEnded.push({ ev, endpointId: outEdges[0].target().id(), dir: 'out', label });
+                        // 한쪽 끝만 있으면 끝점별 합계 노드 후보 (양끝 모두 없거나 부분 펼침 옵트아웃이면 그대로 유지)
+                        if (!ev.hasClass('evt-agg-optout')) {
+                            if (inEdges.length > 0 && outEdges.length === 0)
+                                singleEnded.push({ ev, endpointId: inEdges[0].source().id(), dir: 'in', label });
+                            else if (outEdges.length > 0 && inEdges.length === 0)
+                                singleEnded.push({ ev, endpointId: outEdges[0].target().id(), dir: 'out', label });
+                        }
                         return;
                     }
                     const labelText = (cfg.relLabel + ' ' + _fmtEventVal(label, _firstProp(ev, cfg.prop))).trim();
@@ -3432,10 +3437,34 @@
             return collapsed;
         }
 
+        // 합계 노드 1개만 부분 펼치기 — 구성 이벤트를 합계 노드 위치 주변에 배치하고,
+        // 재계산 시 다시 흡수되지 않도록 옵트아웃 표시 (전체 접기 토글로 초기화)
+        function expandAggNode(nid) {
+            const agg = cy.getElementById(nid);
+            if (agg.empty() || !agg.hasClass('evt-agg-node')) return 0;
+            const ids = agg.data('_aggEventIds') || [];
+            const base = agg.position();
+            const R = 90 + Math.min(ids.length * 6, 160);
+            ids.forEach((id, i) => {
+                const ev = cy.getElementById(id);
+                if (ev.empty()) return;
+                ev.addClass('evt-agg-optout');
+                ev.removeClass('evt-nodeagg-hidden');
+                const ang = (2 * Math.PI * i) / Math.max(ids.length, 1);
+                ev.position({ x: base.x + R * Math.cos(ang), y: base.y + R * Math.sin(ang) });
+                ev.show();
+                ev.connectedEdges().removeClass('evt-nodeagg-hidden').show();
+            });
+            agg.remove();   // 합성 엣지도 함께 제거됨
+            if (typeof showToast === 'function') showToast(`🔺 ${ids.length}건 이벤트를 펼쳤습니다 — 전체 '이벤트 접기' 토글로 다시 묶을 수 있습니다`, 'info');
+            return ids.length;
+        }
+
         // 접기 원복 — 합성 엣지 제거 + 숨긴 이벤트 노드/엣지 복원
         function undoEventCollapse() {
             cy.edges('.collapsed-event').remove();   // 합계 엣지(.collapsed-event-agg 포함)도 함께 제거됨
             cy.nodes('.evt-agg-node').remove();      // 단끝 합계 노드 제거
+            cy.nodes('.evt-agg-optout').removeClass('evt-agg-optout');   // 부분 펼침 초기화 — 다음 접기에 재흡수
             cy.elements('.evt-nodeagg-hidden').removeClass('evt-nodeagg-hidden').show();
             cy.elements('.evt-hidden-edge').removeClass('evt-hidden-edge').show();
             cy.nodes('.evt-collapsed-src').removeClass('evt-collapsed-src').show();
@@ -3722,11 +3751,23 @@
             } else {
                 return; // 엣지는 아직 메뉴 없음
             }
+            // 합계 노드(.evt-agg-node)일 때만 '이 묶음만 펼치기' 항목 노출
+            const _isAgg = !!(selectedNode && selectedNode.hasClass && selectedNode.hasClass('evt-agg-node'));
+            const _aggItem = document.getElementById('ctxExpandAgg');
+            const _aggHr = document.getElementById('ctxExpandAggHr');
+            if (_aggItem) { _aggItem.style.display = _isAgg ? 'block' : 'none'; _aggHr.style.display = _isAgg ? 'block' : 'none'; }
             cm.style.display = 'block';
             cm.style.left = e.originalEvent.clientX + 'px';
             cm.style.top = e.originalEvent.clientY + 'px';
         });
         cy.on('tap', function (e) { if (e.target === cy) cm.style.display = 'none'; });
+
+        // 우클릭 메뉴 — 합계 노드의 묶음만 부분 펼치기
+        function expandAggFromMenu() {
+            cm.style.display = 'none';
+            if (selectedNode && selectedNode.hasClass && selectedNode.hasClass('evt-agg-node')) expandAggNode(selectedNode.id());
+            selectedNode = null;
+        }
 
         // 경로 분석 관련
         let pathSourceId = null;

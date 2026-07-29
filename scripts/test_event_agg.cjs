@@ -69,7 +69,8 @@ function buildElements() {
 const cy = cytoscape({ headless: true, styleEnabled: true, elements: buildElements() });
 const fns = {};
 eval(core + '\n;fns.applyEventCollapse=applyEventCollapse; fns.applyEventAggregation=applyEventAggregation;'
-          + 'fns.undoEventCollapse=undoEventCollapse; fns._computeEventAggregates=_computeEventAggregates; fns._fmtDur=_fmtDur;');
+          + 'fns.undoEventCollapse=undoEventCollapse; fns._computeEventAggregates=_computeEventAggregates;'
+          + 'fns._fmtDur=_fmtDur; fns.expandAggNode=expandAggNode;');
 
 // ── 4) 검증 ──────────────────────────────────────────────────
 let failed = 0;
@@ -123,12 +124,23 @@ check('재실행 시 추가 접힘 0', again === 0, `got ${again}`);
 check('합계 엣지 중복 없음 (3개 유지)', cy.edges('.collapsed-event-agg').length === 3, `got ${cy.edges('.collapsed-event-agg').length}`);
 check('합계 노드 중복 없음 (2개 유지)', cy.nodes('.evt-agg-node').length === 2, `got ${cy.nodes('.evt-agg-node').length}`);
 
+console.log('▶ 부분 펼치기 (우클릭 — 이 묶음만)');
+const expandedN = fns.expandAggNode('evtnodeagg__pB__out__vt_call');
+check('6건 펼침 + 해당 합계 노드 제거', expandedN === 6 && cy.getElementById('evtnodeagg__pB__out__vt_call').empty(), `expanded=${expandedN}`);
+check('펼친 이벤트 6건 표시 + 옵트아웃 표시', cy.nodes('.evt-agg-optout').filter(':visible').length === 6, `got ${cy.nodes('.evt-agg-optout').filter(':visible').length}`);
+check('합계 노드 위치(777,555) 주변 부채꼴 배치', cy.nodes('.evt-agg-optout').toArray().every(n => Math.abs(n.position('x') - 777) < 300 && Math.abs(n.position('y') - 555) < 300), 'scatter 위치 이상');
+fns.applyEventCollapse();
+check('재계산에도 펼친 묶음 재흡수 안 됨', cy.getElementById('evtnodeagg__pB__out__vt_call').empty() && cy.nodes('.evt-agg-optout').filter(':visible').length === 6, '재흡수됨');
+check('다른 묶음(a1 출금)은 유지', cy.getElementById('evtnodeagg__a1__in__vt_transfer').nonempty(), '사라짐');
+
 console.log('▶ 펼치기 (원복)');
 fns.undoEventCollapse();
 check('합성 엣지 전부 제거', cy.edges('.collapsed-event').length === 0, `잔존 ${cy.edges('.collapsed-event').length}`);
 check('합계 노드 전부 제거', cy.nodes('.evt-agg-node').length === 0, `잔존 ${cy.nodes('.evt-agg-node').length}`);
 check('이벤트 노드 27개 전부 복원·표시', cy.nodes('[label="vt_call"], [label="vt_transfer"]').filter(':visible').length === 27, `got ${cy.nodes('[label="vt_call"], [label="vt_transfer"]').filter(':visible').length}`);
 check('원본 연결 엣지 45개 전부 표시', cy.edges('[label="caller"], [label="callee"], [label="from_account"], [label="to_account"]').filter(':visible').length === 45, `got ${cy.edges('[label="caller"], [label="callee"], [label="from_account"], [label="to_account"]').filter(':visible').length}`);
+fns.applyEventCollapse();
+check('전체 토글 리셋 후 부분 펼침 묶음 재생성', cy.getElementById('evtnodeagg__pB__out__vt_call').nonempty() && cy.nodes('.evt-agg-optout').length === 0, `agg=${cy.getElementById('evtnodeagg__pB__out__vt_call').nonempty()}, optout=${cy.nodes('.evt-agg-optout').length}`);
 
 // ── 5) 시각 하네스 생성 (선택) ────────────────────────────────
 const hIdx = process.argv.indexOf('--harness');
