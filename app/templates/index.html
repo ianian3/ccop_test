@@ -1477,6 +1477,11 @@
                         style="background:#f39c12; border:1px solid #f39c12; color:#1a1a1a; padding:6px 10px; font-size:11px; font-weight:600; white-space:nowrap;">
                         <i class="fas fa-expand-arrows-alt"></i> 이벤트 펼치기
                     </button>
+                    <button id="layoutLockBtn" onclick="toggleLayoutLock()"
+                        title="클릭 시 노드 위치 고정 — 자동 재배치 중단 (드래그는 가능)"
+                        style="background:#2d3436; border:1px solid #444; color:#b2bec3; padding:6px 10px; font-size:11px; white-space:nowrap;">
+                        <i class="fas fa-lock-open"></i> 위치 고정
+                    </button>
                     <button onclick="clearGraphView()"
                         style="background:#2d3436; border:1px solid #444; color:#dfe6e9; padding:6px 10px; font-size:11px;"
                         title="화면(캔버스)만 초기화 — DB 데이터는 삭제하지 않음">
@@ -2817,6 +2822,7 @@
         function switchGraph() {
             const graphName = document.getElementById('targetGraphInfo').value;
             if (!graphName) return;
+            if (_layoutLocked) setLayoutLocked(false, true);   // 그래프 전체 교체 — 이전 배치가 무의미하므로 고정 자동 해제
             console.log('Switching to graph:', graphName);
 
             // 캔버스 초기화
@@ -2873,6 +2879,7 @@
         };
 
         function applyPoleLayerLayout() {
+            if (_layoutLocked) return;   // 위치 고정 중 — 재배치 생략
             const COL_GAP = 240;   // 레이어 간 x 간격
             const ROW_GAP = 110;   // 같은 레이어 내 노드 y 간격
             const START_X = 120;
@@ -2909,6 +2916,7 @@
         }
 
         function applyAutoLayout() {
+            if (_layoutLocked) return;   // 위치 고정 중 — 재배치 생략
             document.getElementById('layer-header').style.display = 'none';
             // :visible 만 배치 — 이벤트 접기로 숨긴 노드가 빈 공간을 만들지 않도록
             const vis = cy.elements(':visible');
@@ -3183,10 +3191,10 @@
                 cy.elements().remove();
                 added = cy.add(els);
             }
-            // 이벤트 접기 모드면 새로 들어온 이벤트도 즉시 접기 (멱등)
-            if (isEventCollapseMode()) applyEventCollapse();
-            // 누적인데 새로 추가된 게 없으면(전부 중복) 재배치 생략 — 화면 흔들림 방지
-            if (!additive || safe.length > 0) {
+            // 이벤트 접기 모드면 새로 들어온 이벤트도 즉시 접기 + 고정 모드 신규 노드 배치 (멱등)
+            afterElementsAdded(added);
+            // 누적인데 새로 추가된 게 없으면(전부 중복) 재배치 생략 — 화면 흔들림 방지 · 위치 고정 시 항상 생략
+            if ((!additive || safe.length > 0) && !_layoutLocked) {
                 const layoutEles = isEventCollapseMode() ? cy.elements(':visible') : cy.elements();
                 layoutEles.layout({ name: 'dagre', rankDir: 'LR', nodeSep: 50, rankSep: 100, animate: true, fit: true }).run();
             }
@@ -3323,7 +3331,7 @@
 
         // 단끝(상대 미상) 이벤트 병합 — 같은 (끝점, 방향, 타입) 이벤트 ≥2개를 합계 노드 1개로.
         //   예: 수신 상대만 있는 통화 16건 → "📞수신 16건 · 총 34분" 다이아몬드 1개 + 엣지 1개.
-        function _aggregateSingleEndedEvents(items) {
+        function _aggregateSingleEndedEvents(items, savedPos) {
             const groups = new Map();
             items.forEach(it => {
                 const k = it.endpointId + ' ' + it.dir + ' ' + it.label;
@@ -3346,8 +3354,16 @@
                 });
                 const dirName = dir === 'in' ? (cfg.inName || '발신') : (cfg.outName || '수신');
                 const nid = `evtnodeagg__${endpointId}__${dir}__${label}`;
+                // 위치: 이전(드래그) 위치가 있으면 그대로 복원, 없으면 끝점 노드 옆에 배치 — (0,0) 리셋 방지
+                let pos = savedPos && savedPos[nid];
+                if (!pos) {
+                    const ep = cy.getElementById(endpointId);
+                    const epos = ep.nonempty() ? ep.position() : { x: 0, y: 0 };
+                    pos = { x: epos.x + (dir === 'in' ? -140 : 140), y: epos.y + 90 + (label === 'vt_transfer' ? 50 : 0) };
+                }
                 cy.add({
                     group: 'nodes', classes: 'evt-agg-node',
+                    position: { x: pos.x, y: pos.y },
                     data: { id: nid, label: label, props: {},
                             _aggText: agg.fmtDir(arr.length, sum, dirName),
                             _aggColor: agg.color || '#f39c12', _aggCount: arr.length, _aggEventIds: evIds }
@@ -3370,7 +3386,9 @@
 
         // 현재 그래프의 접을 수 있는 이벤트 노드를 엣지로 축약. 반환: 접은 이벤트 수(양끝 완비분). (멱등)
         function applyEventCollapse() {
-            // 단끝 합계 재계산 리셋 — 새 이벤트 유입 시 그룹 재구성 (멱등)
+            // 단끝 합계 재계산 리셋 — 기존 합계 노드의 (드래그된) 위치를 보존했다가 재생성 시 복원 (멱등)
+            const _aggPos = {};
+            cy.nodes('.evt-agg-node').forEach(n => { _aggPos[n.id()] = { x: n.position('x'), y: n.position('y') }; });
             cy.nodes('.evt-agg-node').remove();
             cy.elements('.evt-nodeagg-hidden').removeClass('evt-nodeagg-hidden').show();
             let collapsed = 0;
@@ -3409,7 +3427,7 @@
                     collapsed++;
                 });
             });
-            _aggregateSingleEndedEvents(singleEnded);   // 단끝(상대 미상) 다건 → 합계 노드
+            _aggregateSingleEndedEvents(singleEnded, _aggPos);   // 단끝(상대 미상) 다건 → 합계 노드 (위치 보존)
             applyEventAggregation();                     // 중첩(같은 쌍 다건) → 합계 엣지
             return collapsed;
         }
@@ -3424,6 +3442,45 @@
         }
         // [COLLAPSE-CORE-END]
 
+        // ── 위치 고정(레이아웃 잠금) — 켜면 자동 재배치를 전부 건너뜀 (수동 드래그는 허용) ──
+        let _layoutLocked = false;
+        function isLayoutLocked() { return _layoutLocked; }
+        function updateLayoutLockBtn() {
+            const btn = document.getElementById('layoutLockBtn');
+            if (!btn) return;
+            if (_layoutLocked) {
+                btn.innerHTML = '<i class="fas fa-lock"></i> 위치 고정';
+                btn.style.background = '#6c5ce7'; btn.style.borderColor = '#6c5ce7'; btn.style.color = 'white';
+                btn.title = '위치 고정 중 — 자동 재배치 안 함 (클릭 시 해제)';
+            } else {
+                btn.innerHTML = '<i class="fas fa-lock-open"></i> 위치 고정';
+                btn.style.background = '#2d3436'; btn.style.borderColor = '#444'; btn.style.color = '#b2bec3';
+                btn.title = '클릭 시 노드 위치 고정 — 자동 재배치 중단 (드래그는 가능)';
+            }
+        }
+        function setLayoutLocked(v, silent) {
+            _layoutLocked = !!v;
+            updateLayoutLockBtn();
+            if (!silent) showToast(_layoutLocked ? '🔒 위치 고정 — 자동 재배치를 멈춥니다 (드래그는 가능)' : '🔓 위치 고정 해제', 'info');
+        }
+        function toggleLayoutLock() { setLayoutLocked(!_layoutLocked); }
+
+        // 요소 추가 공통 후처리 — 접기 모드면 즉시 접기(중첩·단끝 합계 포함),
+        // 위치 고정 모드면 새 노드를 (0,0) 뭉침 대신 현재 화면 중심 부근에 흩어 배치
+        function afterElementsAdded(added) {
+            const modeling = (typeof isModelingMode !== 'undefined') && isModelingMode;
+            if (isEventCollapseMode() && !modeling) applyEventCollapse();
+            if (_layoutLocked && added && added.nodes) {
+                const ext = cy.extent();
+                const cx = (ext.x1 + ext.x2) / 2, cyy = (ext.y1 + ext.y2) / 2;
+                added.nodes().forEach(n => {
+                    const p = n.position();
+                    if (!p || (p.x === 0 && p.y === 0))
+                        n.position({ x: cx + (Math.random() - 0.5) * 320, y: cyy + (Math.random() - 0.5) * 320 });
+                });
+            }
+        }
+
         function toggleEventCollapse() {
             _eventCollapsed = !_eventCollapsed;
             if (_eventCollapsed) {
@@ -3434,7 +3491,7 @@
                 showToast('🔺 이벤트 노드를 펼쳤습니다', 'info');
             }
             updateEventCollapseBtn();
-            cy.elements(':visible').layout({ name: 'dagre', rankDir: 'LR', nodeSep: 50, rankSep: 100, animate: true, fit: true }).run();
+            if (!_layoutLocked) cy.elements(':visible').layout({ name: 'dagre', rankDir: 'LR', nodeSep: 50, rankSep: 100, animate: true, fit: true }).run();
         }
 
         // ── 수사 세션 ID (탭 유지, 새로고침 시 초기화) ──────────────
@@ -3648,8 +3705,9 @@
             const graphName = document.getElementById('targetGraphInfo').value;
             fetch(`${API_URL}/expand?id=${node.id()}&graph_path=${graphName}`).then(r => r.json()).then(data => {
                 if (!data || data.length === 0) return alert("추가 연결 정보 없음");
-                cy.add(data);
-                cy.layout({ name: 'dagre', rankDir: 'LR', nodeSep: 50, rankSep: 100, animate: true }).run();
+                const added = cy.add(data);
+                afterElementsAdded(added);
+                if (!_layoutLocked) cy.layout({ name: 'dagre', rankDir: 'LR', nodeSep: 50, rankSep: 100, animate: true }).run();
             });
         });
 
@@ -3771,6 +3829,12 @@
                     if (newElements.length > 0) {
                         const added = cy.add(newElements);
                         added.addClass('highlight');
+                        afterElementsAdded(added);
+                        // 새로 접힌 합계/접힘 엣지도 경로 이벤트를 포함하면 하이라이트
+                        cy.edges('.collapsed-event').forEach(e => {
+                            const _ids = e.data('_aggEventIds') || [e.data('_collapsedFrom')];
+                            if (_ids.some(id => pathNodeIds.has(String(id)))) e.addClass('highlight');
+                        });
                     }
                 }
                 // 5. 경로 노드로 뷰 포커스
@@ -5446,8 +5510,9 @@
                     if (!data || data.length === 0) {
                         return showToast("추가 연결 정보가 없습니다", "info");
                     }
-                    cy.add(data);
-                    cy.layout({ name: 'dagre', rankDir: 'LR', animate: true, fit: false }).run();
+                    const added = cy.add(data);
+                    afterElementsAdded(added);
+                    if (!_layoutLocked) cy.layout({ name: 'dagre', rankDir: 'LR', animate: true, fit: false }).run();
                     showToast(`${data.length}개의 연결 정보 확장 완료`, "success");
                 })
                 .catch(e => {
@@ -5477,8 +5542,9 @@
                             return showToast("추가 연결 정보가 없습니다", "info");
                         }
 
-                        cy.add(newElements);
-                        cy.layout({ name: 'dagre', rankDir: 'LR', animate: true, fit: false }).run();
+                        const added = cy.add(newElements);
+                        afterElementsAdded(added);
+                        if (!_layoutLocked) cy.layout({ name: 'dagre', rankDir: 'LR', animate: true, fit: false }).run();
                         showToast(`다단계 확장 완료 (노드 ${data.stats.total_nodes}개, 엣지 ${data.stats.total_edges}개)`, "success");
                     } else if (data && data.error) {
                         showToast("확장 오류: " + data.error, "error");
@@ -5764,7 +5830,8 @@
                                 if (data && data.length > 0) {
                                     if (typeof cy !== 'undefined') {
                                         cy.elements().remove();
-                                        cy.add(data);
+                                        const added = cy.add(data);
+                                        afterElementsAdded(added);
                                         cy.layout({ name: 'dagre', rankDir: 'LR', nodeSep: 50, rankSep: 100, animate: true }).run();
                                     }
                                     if (typeof showToast === 'function') showToast(`'${autoGraph}' 그래프 로드 완료 (${data.length}개 요소)`, 'success');

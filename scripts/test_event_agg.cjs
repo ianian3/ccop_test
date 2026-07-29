@@ -110,6 +110,13 @@ check('a1 출금만 2건 → "💸출금 2건 · 합계 3,000,000원"', outAgg.n
 check('발신 단건(pC)은 병합 안 됨 · 원본 노드 유지', cy.getElementById('evtnodeagg__pC__in__vt_call').empty() && cy.getElementById('txcall_pC_0').visible(), '단건 처리 오류');
 check('단끝 이벤트 8건 + 엣지 8개 숨김', cy.elements('.evt-nodeagg-hidden').length === 16, `got ${cy.elements('.evt-nodeagg-hidden').length}`);
 
+console.log('▶ 합계 노드 위치 보존 (드래그 후 재계산)');
+check('신규 합계 노드는 끝점 부근 배치 — (0,0) 아님', !(rxAgg.position('x') === 0 && rxAgg.position('y') === 0), `got ${JSON.stringify(rxAgg.position())}`);
+rxAgg.position({ x: 777, y: 555 });        // 드래그 시뮬레이션
+fns.applyEventCollapse();                   // 확장 등으로 인한 재계산 시뮬레이션
+const rxAgg2 = cy.getElementById('evtnodeagg__pB__out__vt_call');
+check('재계산 후에도 드래그 위치 유지 (777,555)', Math.round(rxAgg2.position('x')) === 777 && Math.round(rxAgg2.position('y')) === 555, `got ${JSON.stringify(rxAgg2.position())}`);
+
 console.log('▶ 멱등성 (재실행)');
 const again = fns.applyEventCollapse();
 check('재실행 시 추가 접힘 0', again === 0, `got ${again}`);
