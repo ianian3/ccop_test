@@ -21,6 +21,14 @@ from app.services.ontology_service import KICSCrimeDomainOntology, OntologyEnric
 
 logger = logging.getLogger(__name__)
 
+
+def _norm_telno(v):
+    """전화번호 표준화(no_hyphen_e164 — 숫자만, 선행 0 보존).
+    L2(rdb_service.norm_telno)와 동일 규칙 — 기존 RDB의 비정규 값 대비 L4 이중 방어."""
+    import re
+    return re.sub(r'[^0-9]', '', str(v or ''))
+
+
 class RdbToGraphService:
     @staticmethod
     def get_db_connection():
@@ -348,7 +356,7 @@ class RdbToGraphService:
                     rows = cur.fetchall()
                     for r in rows:
                         try:
-                            telno = safe_str(r[0])
+                            telno = _norm_telno(safe_str(r[0]))
                             if not telno: continue
                             props = f"{{telno: '{telno}', type: '전화번호'}}"
                             cur.execute(f"MERGE (n:vt_telno {{telno: '{telno}'}}) SET n = {props}")
@@ -386,6 +394,7 @@ class RdbToGraphService:
                     for r in rows:
                         try:
                             cid, dur, dt, caller, callee = [safe_str(x) for x in r]
+                            caller, callee = _norm_telno(caller), _norm_telno(callee)
                             props = f"{{id: '{cid}', duration: '{dur}', date: '{dt}', caller: '{caller}', callee: '{callee}', type: '통화'}}"
                             cur.execute(f"MERGE (n:vt_call {{id: '{cid}'}}) SET n = {props}")
                             stats["nodes"] += 1; stats["calls"] += 1
@@ -518,7 +527,7 @@ class RdbToGraphService:
             rows = cur.fetchall()
             for r in rows:
                 try:
-                    telno = safe_str(r[0])
+                    telno = _norm_telno(safe_str(r[0]))
                     carrier_nm = safe_str(r[1]) if len(r) > 1 else ''
                     carrier_cd = safe_str(r[2]) if len(r) > 2 else ''
                     # StandardCodeMapper: 통신사명/약어 → 표준코드
@@ -602,7 +611,7 @@ class RdbToGraphService:
             rows = cur.fetchall()
             for r in rows:
                 try:
-                    eid, caller, callee, dt, dur = safe_str(r[0]), safe_str(r[1]), safe_str(r[2]), safe_str(r[3]), safe_str(r[4])
+                    eid, caller, callee, dt, dur = safe_str(r[0]), _norm_telno(safe_str(r[1])), _norm_telno(safe_str(r[2])), safe_str(r[3]), safe_str(r[4])
                     props = f"{{event_id: '{eid}', event_type: 'call', duration: '{dur}', timestamp: '{dt}', type: '통화'}}"
                     cur.execute(f"MERGE (n:vt_call {{event_id: '{eid}'}}) SET n = {props}")
                     stats["nodes"] += 1; stats["calls"] += 1

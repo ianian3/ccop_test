@@ -1652,6 +1652,11 @@
                             </select>
                         </div>
                     </div>
+                    <label style="display:flex; align-items:center; gap:8px; margin-top:12px; color:#dfe6e9; font-size:12px; cursor:pointer;">
+                        <input type="checkbox" id="v40PipelineFresh" checked style="cursor:pointer; accent-color:#00b894;">
+                        <span><b>새로 적재</b> — 기존 스테이징(test_v40) 비우고 이 파일들만으로 그래프 생성
+                            <span style="color:#8e9abf;">(끄면 이전 적재분에 누적)</span></span>
+                    </label>
                 </div>
 
                 <button id="v40PipelineRunBtn" onclick="runV40Pipeline()"
@@ -2644,6 +2649,8 @@
             for (const f of files) fd.append('files', f);
             fd.append('graph_name', graphName);
             fd.append('source_domain', sourceDomain);
+            const freshEl = document.getElementById('v40PipelineFresh');
+            fd.append('fresh', (freshEl ? freshEl.checked : true) ? '1' : '0');
 
             try {
                 const res = await fetch('/api/v1/pipeline/csv_to_v40_graph', {

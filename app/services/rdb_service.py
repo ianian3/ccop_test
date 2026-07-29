@@ -7,6 +7,17 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
+def norm_telno(v):
+    """전화번호 표준화 — 온톨로지 SoT(vt_telno) 기준 no_hyphen_e164: 숫자만 남김(선행 0 보존).
+
+    주의: CSV 숫자 추론으로 이미 선행 0이 소실된 값은 복원 불가 —
+    반드시 read_csv(dtype=str)와 함께 써야 한다. (L2 표준화 단일 지점)
+    """
+    import re
+    return re.sub(r'[^0-9]', '', str(v or ''))
+
+
 class RDBService:
     @staticmethod
     def get_db_connection():
@@ -62,10 +73,16 @@ class RDBService:
                     'TB_INST', 'TB_PRSN', 'TB_INCDNT_MST'
                 ]
                 for table in tables_to_clear:
-                    cur.execute(f"TRUNCATE TABLE {table} CASCADE;")
+                    # 개별 try — target_schema 에 없는 테이블에서 예외 나도 나머지(tb_telno_mst 등)까지 진행.
+                    # (autocommit 모드라 statement 단위 독립 — 이전엔 첫 미존재 테이블에서 루프 중단됐음)
+                    try:
+                        cur.execute(f"TRUNCATE TABLE {table} CASCADE;")
+                    except Exception as _te:
+                        logger.debug(f"   TRUNCATE 건너뜀({table}): {_te}")
                 logger.info("   [DB] 초기화 완료.")
             
-            df = pd.read_csv(file_path, encoding='utf-8-sig').fillna('')
+            # dtype=str: 전화번호·계좌 등 0-시작 식별자의 숫자 추론(선행 0 소실) 방지
+            df = pd.read_csv(file_path, encoding='utf-8-sig', dtype=str).fillna('')
             fname = filename.lower()
 
             import time, random, uuid as _uuid
@@ -85,7 +102,7 @@ class RDBService:
 
             elif 'tbl_vt_telno' in fname:
                 for _, row in df.iterrows():
-                    telno = str(row.get('telno', '')).strip()
+                    telno = norm_telno(row.get('telno', ''))
                     if telno:
                         cur.execute("""
                             INSERT INTO tb_telno_mst (telno, source_domain, source_id, reliability_tier)
@@ -112,8 +129,8 @@ class RDBService:
             elif 'tbl_eg_call' in fname:
                 from datetime import datetime as dt_parse
                 for _, row in df.iterrows():
-                    caller = str(row.get('dsptch_no', '')).strip()
-                    callee = str(row.get('rcptn_no', '')).strip()
+                    caller = norm_telno(row.get('dsptch_no', ''))
+                    callee = norm_telno(row.get('rcptn_no', ''))
                     start_dt = str(row.get('bgng_ymdhm', '')).strip()
                     end_dt = str(row.get('end_ymdhm', '')).strip()
                     tlcmco = str(row.get('tlcmco', '')).strip()
@@ -210,7 +227,7 @@ class RDBService:
             elif 'tbl_eg_telno_poss' in fname:
                 for _, row in df.iterrows():
                     flnm = str(row.get('flnm', '')).strip()
-                    telno = str(row.get('telno', '')).strip()
+                    telno = norm_telno(row.get('telno', ''))
                     if flnm and telno:
                         cur.execute("""
                             INSERT INTO tb_prsn (prsn_id, korn_flnm, prsn_se_cd, source_domain, source_id, reliability_tier)
@@ -320,11 +337,17 @@ class RDBService:
                     'TB_INST', 'TB_PRSN', 'TB_INCDNT_MST'
                 ]
                 for table in tables_to_clear:
-                    cur.execute(f"TRUNCATE TABLE {table} CASCADE;")
+                    # 개별 try — target_schema 에 없는 테이블에서 예외 나도 나머지(tb_telno_mst 등)까지 진행.
+                    # (autocommit 모드라 statement 단위 독립 — 이전엔 첫 미존재 테이블에서 루프 중단됐음)
+                    try:
+                        cur.execute(f"TRUNCATE TABLE {table} CASCADE;")
+                    except Exception as _te:
+                        logger.debug(f"   TRUNCATE 건너뜀({table}): {_te}")
                 logger.info("   [DB] 초기화 완료.")
             
             import pandas as pd
-            df = pd.read_csv(file_path).fillna('')
+            # dtype=str: 0-시작 식별자(전화·계좌)의 숫자 추론 방지
+            df = pd.read_csv(file_path, dtype=str).fillna('')
             count_stats = {"cases": 0, "suspects": 0, "accounts": 0, "phones": 0, 
                            "transfers": 0, "calls": 0, "ips": 0,
                            "orgs": 0, "sms": 0, "chats": 0, "joins": 0,

@@ -1675,9 +1675,12 @@ def pipeline_csv_to_v40_graph():
     }
     temp_paths = []
     try:
+        from werkzeug.utils import secure_filename
         for f in files:
             if not f or not f.filename: continue
-            temp_path = f"/tmp/{f.filename}"
+            # secure_filename: 업로드 파일명 경로조작 방지 (라우팅용 원본명은 별도 유지)
+            safe_name = secure_filename(f.filename) or f"upload_{int(time.time() * 1000)}.csv"
+            temp_path = f"/tmp/{safe_name}"
             f.save(temp_path)
             temp_paths.append((temp_path, f.filename))
             # 행수 카운트
@@ -1691,18 +1694,22 @@ def pipeline_csv_to_v40_graph():
         # ─── L2. test_v40 RDB 적재 ─────────────────────────
         target_schema = 'test_v40'
         current_app.config['_V40_TARGET_SCHEMA'] = target_schema
-        layer_results['L2'] = {'layer': 'L2 표준화 (test_v40 RDB)', 'tables': {}, 'total_inserted': 0}
+        # fresh=1(기본): 첫 파일 적재 전 test_v40 스테이징 초기화 → 이 업로드분만으로 그래프 구성.
+        #   여러 파일이면 첫 파일만 clear, 이후 파일은 누적. fresh=0이면 기존 스테이징에 누적.
+        fresh = (request.form.get('fresh', '1') != '0')
+        layer_results['L2'] = {'layer': 'L2 표준화 (test_v40 RDB)', 'tables': {}, 'total_inserted': 0, 'fresh': fresh}
 
-        for temp_path, fname in temp_paths:
+        for _idx, (temp_path, fname) in enumerate(temp_paths):
+            clear_now = fresh and _idx == 0   # 첫 파일에서만 초기화
             try:
                 if fname.lower().startswith('tbl_'):
                     success, result = RDBService.import_predefined_schema_to_rdb(
-                        temp_path, fname, clear_existing=False,
+                        temp_path, fname, clear_existing=clear_now,
                         source_domain=source_domain, source_id=source_id,
                     )
                 else:
                     success, result = RDBService.import_csv_to_rdb(
-                        temp_path, clear_existing=False,
+                        temp_path, clear_existing=clear_now,
                         source_domain=source_domain, source_id=source_id,
                     )
                 if success:
