@@ -2443,6 +2443,12 @@
                 { selector: 'edge[evid_grade = "C"]', style: { 'line-style': 'dotted', 'line-color': '#e74c3c', 'target-arrow-color': '#e74c3c', 'width': 1.5, 'opacity': 0.6 } },
                 // ── 접힌 이벤트 엣지 (이벤트-노드 접기 토글) — 주황 대시 + 라벨 강조 ──
                 { selector: 'edge.collapsed-event', style: { 'width': 3, 'line-style': 'dashed', 'line-dash-pattern': [10, 4], 'line-color': '#f39c12', 'target-arrow-color': '#f39c12', 'target-arrow-shape': 'triangle', 'color': '#f9ca24', 'font-size': '10px', 'font-weight': 'bold', 'text-background-color': '#2d2410', 'text-background-opacity': 1, 'z-index': 60 } },
+                // 중첩 이벤트 합계 엣지 — 실선·건수 비례 두께 (개별 접힌 엣지는 대시)
+                { selector: 'edge.collapsed-event-agg', style: { 'width': 'mapData(_aggCount, 2, 20, 4, 10)', 'line-style': 'solid', 'font-size': '11px', 'z-index': 61 } },
+                // 대형 그래프 성능 모드 — 엣지 수백~수천 개일 때 곡선·라벨·화살표 생략 (렌더링 수십 배 경량)
+                { selector: 'edge.big-graph', style: { 'curve-style': 'haystack', 'haystack-radius': 0.3, 'label': '', 'target-arrow-shape': 'none', 'width': 1, 'opacity': 0.55 } },
+                // 단끝(상대 미상) 이벤트 합계 노드 — 수신만/발신만/입출금만 다건을 대표 다이아몬드 1개로
+                { selector: 'node.evt-agg-node', style: { 'shape': 'diamond', 'background-color': 'data(_aggColor)', 'label': 'data(_aggText)', 'color': '#f9ca24', 'font-size': '10px', 'font-weight': 'bold', 'text-background-color': '#2d2410', 'text-background-opacity': 1, 'text-wrap': 'wrap', 'text-max-width': '110px', 'width': 'mapData(_aggCount, 2, 30, 32, 60)', 'height': 'mapData(_aggCount, 2, 30, 32, 60)', 'z-index': 61 } },
 
                 // ── 다단계 확장용 중간 투명 노드 ──
                 { selector: 'node[?hidden_intermediate]', style: { 'opacity': 0, 'text-opacity': 0, 'events': 'no' } },
@@ -2819,13 +2825,19 @@
             showToast(`📊 '${graphName}' 그래프로 전환 중...`, "info");
 
             // 선택된 그래프에서 노드/엣지 로드
-            fetch(`/api/graph/load?graph_path=${graphName}&limit=300`)
+            fetch(`/api/graph/load?graph_path=${graphName}&limit=3000`)
                 .then(r => r.json())
                 .then(data => {
                     if (data && data.length > 0) {
                         cy.add(data);
                         // 그래프 선택 로드 시에도 접기 모드(기본 ON)면 바로 접힌 상태로 표시
                         const collapsedN = isEventCollapseMode() ? applyEventCollapse() : 0;
+                        // 접고도 가시 엣지가 많은 밀집 그래프 → 성능 모드 (합계·접힌 엣지는 스타일 유지)
+                        const _visEdgeN = cy.edges(':visible').length;
+                        if (_visEdgeN > 800) {
+                            cy.edges().not('.collapsed-event').addClass('big-graph');
+                            showToast(`⚡ 대형 그래프(가시 엣지 ${_visEdgeN}개) — 성능 모드 표시 (엣지 라벨·화살표 생략)`, 'info');
+                        }
                         if (currentLayout === 'layer') applyPoleLayerLayout();
                         else applyAutoLayout();
                         const nodeCount = data.filter(e => e.group === 'nodes').length;
@@ -2899,10 +2911,16 @@
         function applyAutoLayout() {
             document.getElementById('layer-header').style.display = 'none';
             // :visible 만 배치 — 이벤트 접기로 숨긴 노드가 빈 공간을 만들지 않도록
-            cy.elements(':visible').layout({
+            const vis = cy.elements(':visible');
+            if (vis.length > 1500) {
+                // 대형 그래프: dagre가 수십 초 얼릴 수 있어 격자 배치로 대체 (즉시 완료)
+                vis.layout({ name: 'grid', fit: true, padding: 40 }).run();
+                return;
+            }
+            vis.layout({
                 name: 'dagre', rankDir: 'LR',
                 nodeSep: 50, edgeSep: 10, rankSep: 120,
-                animate: true, fit: true, padding: 40
+                animate: vis.length < 800, fit: true, padding: 40
             }).run();
         }
 
@@ -3189,10 +3207,11 @@
         // ── 이벤트-노드 접기(collapse) — L6 행위 노드를 화면에서만 직접 엣지로 축약 ──
         //    DB 정본(reified 노드)은 유지. 방향은 온톨로지 domain/range 기준:
         //    (출금계좌)-[from_account]->(이체)-[to_account]->(입금계좌) ⇒ 출금→입금 엣지
+        // [COLLAPSE-CORE-BEGIN] — 헤드리스 회귀테스트가 이 블록을 추출 실행함 (scripts/test_event_agg.cjs)
         const EVENT_COLLAPSE_MAP = {
-            vt_transfer: { inRel: ['from_account'], outRel: ['to_account'],   relLabel: '💸이체',   prop: ['amount', 'dlng_amt', 'blnc_amt'] },
-            vt_call:     { inRel: ['caller'],       outRel: ['callee'],       relLabel: '📞통화',   prop: ['call_strt_dt', 'call_dt', 'call_dur_sec'] },
-            vt_msg:      { inRel: ['sent_msg'],     outRel: ['received_msg'],  relLabel: '✉️메시지', prop: ['dsptch_dt', 'msg_type'] },
+            vt_transfer: { inRel: ['from_account'], outRel: ['to_account'],   relLabel: '💸이체',   prop: ['amount', 'dlng_amt', 'blnc_amt'], inName: '출금', outName: '입금' },
+            vt_call:     { inRel: ['caller'],       outRel: ['callee'],       relLabel: '📞통화',   prop: ['call_strt_dt', 'call_dt', 'call_dur_sec'], inName: '발신', outName: '수신' },
+            vt_msg:      { inRel: ['sent_msg'],     outRel: ['received_msg'],  relLabel: '✉️메시지', prop: ['dsptch_dt', 'msg_type'], inName: '발신', outName: '수신' },
         };
 
         // 이벤트 접기 상태 — 디폴트: 접힘(true). 버튼으로 펼치기↔접기 토글.
@@ -3234,9 +3253,128 @@
             return String(v).slice(0, 24);
         }
 
-        // 현재 그래프의 접을 수 있는 이벤트 노드를 엣지로 축약. 반환: 접은 이벤트 수. (멱등)
+        // ── 중첩 이벤트 합계 — 같은 (출발→도착, 이벤트 타입)의 접힌 엣지 ≥2개를 합계 엣지 1개로 ──
+        //    예: 전화쌍 사이 통화 12건 → "📞통화 12건 · 총 34분" 실선 1개. 개별 엣지는 숨김(펼치면 원복).
+        //    방향 구분 유지: A→B 와 B→A 는 별도 합계 (발신/수신 구분이 수사적으로 의미 있음).
+        const EVENT_AGG_CFG = {
+            vt_transfer: { sumProp: ['amount', 'dlng_amt'], color: '#F39C12',
+                           fmt: (n, s) => `💸이체 ${n}건` + (s > 0 ? ` · 합계 ${Math.round(s).toLocaleString()}원` : ''),
+                           fmtDir: (n, s, dn) => `💸${dn} ${n}건` + (s > 0 ? ` · 합계 ${Math.round(s).toLocaleString()}원` : '') },
+            vt_call:     { sumProp: ['call_dur_sec', 'duration'], color: '#E67E22',
+                           fmt: (n, s) => `📞통화 ${n}건` + (s > 0 ? ` · 총 ${_fmtDur(s)}` : ''),
+                           fmtDir: (n, s, dn) => `📞${dn} ${n}건` + (s > 0 ? ` · 총 ${_fmtDur(s)}` : '') },
+            vt_msg:      { sumProp: [], color: '#9b59b6', fmt: (n) => `✉️메시지 ${n}건`, fmtDir: (n, s, dn) => `✉️${dn} ${n}건` },
+        };
+
+        function _fmtDur(sec) {
+            sec = Math.round(sec);
+            if (sec < 60) return sec + '초';
+            const m = Math.floor(sec / 60), s = sec % 60;
+            if (m < 60) return s ? `${m}분 ${s}초` : `${m}분`;
+            return `${Math.floor(m / 60)}시간 ${m % 60}분`;
+        }
+
+        // 순수 그룹핑 로직 (cy 미참조 — 단위테스트 대상). 반환: count≥2 그룹만.
+        function _computeEventAggregates(edgeInfos) {
+            const groups = new Map();
+            edgeInfos.forEach((e, i) => {
+                const k = e.source + ' ' + e.target + ' ' + e.eventLabel;
+                if (!groups.has(k)) groups.set(k, { source: e.source, target: e.target, eventLabel: e.eventLabel, count: 0, sum: 0, idx: [] });
+                const g = groups.get(k);
+                g.count++; g.idx.push(i);
+                if (isFinite(e.sumVal)) g.sum += e.sumVal;
+            });
+            return [...groups.values()].filter(g => g.count >= 2);
+        }
+
+        // 합계 엣지 재계산 — 멱등: 기존 합계 제거·숨김 복원 후 다시 그룹핑
+        function applyEventAggregation() {
+            cy.edges('.collapsed-event-agg').remove();
+            cy.edges('.evt-agg-hidden').removeClass('evt-agg-hidden').show();
+            const singles = [], infos = [];
+            cy.edges('.collapsed-event').forEach(e => {
+                const cfg = EVENT_AGG_CFG[e.data('_eventLabel')];
+                const ev = cy.getElementById(e.data('_collapsedFrom'));
+                const raw = (cfg && cfg.sumProp.length && ev.nonempty()) ? _firstProp(ev, cfg.sumProp) : null;
+                infos.push({
+                    source: e.data('source'), target: e.data('target'), eventLabel: e.data('_eventLabel'),
+                    sumVal: (raw === null || raw === undefined) ? NaN : Number(String(raw).replace(/[^0-9.\-]/g, ''))
+                });
+                singles.push(e);
+            });
+            let made = 0;
+            _computeEventAggregates(infos).forEach(g => {
+                const cfg = EVENT_AGG_CFG[g.eventLabel] || { fmt: (n) => `${g.eventLabel} ${n}건` };
+                cy.add({
+                    group: 'edges', classes: 'collapsed-event collapsed-event-agg',
+                    data: {
+                        id: `evtagg__${g.source}__${g.target}__${g.eventLabel}`,
+                        source: g.source, target: g.target,
+                        label: cfg.fmt(g.count, g.sum),
+                        _eventLabel: g.eventLabel, _aggCount: g.count,
+                        _aggEventIds: g.idx.map(i => singles[i].data('_collapsedFrom'))
+                    }
+                });
+                g.idx.forEach(i => singles[i].addClass('evt-agg-hidden').hide());
+                made++;
+            });
+            return made;
+        }
+
+        // 단끝(상대 미상) 이벤트 병합 — 같은 (끝점, 방향, 타입) 이벤트 ≥2개를 합계 노드 1개로.
+        //   예: 수신 상대만 있는 통화 16건 → "📞수신 16건 · 총 34분" 다이아몬드 1개 + 엣지 1개.
+        function _aggregateSingleEndedEvents(items) {
+            const groups = new Map();
+            items.forEach(it => {
+                const k = it.endpointId + ' ' + it.dir + ' ' + it.label;
+                if (!groups.has(k)) groups.set(k, []);
+                groups.get(k).push(it);
+            });
+            let grouped = 0;
+            groups.forEach(arr => {
+                if (arr.length < 2) return;   // 단건은 원본 노드 유지
+                const { endpointId, dir, label } = arr[0];
+                const cfg = EVENT_COLLAPSE_MAP[label] || {};
+                const agg = EVENT_AGG_CFG[label] || { sumProp: [], color: '#f39c12', fmtDir: (n, s, dn) => `${dn} ${n}건` };
+                let sum = 0;
+                const evIds = [];
+                arr.forEach(it => {
+                    evIds.push(it.ev.id());
+                    const raw = (agg.sumProp && agg.sumProp.length) ? _firstProp(it.ev, agg.sumProp) : null;
+                    const v = (raw === null || raw === undefined) ? NaN : Number(String(raw).replace(/[^0-9.\-]/g, ''));
+                    if (isFinite(v)) sum += v;
+                });
+                const dirName = dir === 'in' ? (cfg.inName || '발신') : (cfg.outName || '수신');
+                const nid = `evtnodeagg__${endpointId}__${dir}__${label}`;
+                cy.add({
+                    group: 'nodes', classes: 'evt-agg-node',
+                    data: { id: nid, label: label, props: {},
+                            _aggText: agg.fmtDir(arr.length, sum, dirName),
+                            _aggColor: agg.color || '#f39c12', _aggCount: arr.length, _aggEventIds: evIds }
+                });
+                // 방향 보존: in(끝점→이벤트) = 발신/출금, out(이벤트→끝점) = 수신/입금
+                cy.add({
+                    group: 'edges', classes: 'collapsed-event',
+                    data: dir === 'in'
+                        ? { id: `${nid}__e`, source: endpointId, target: nid, label: (cfg.inRel || [''])[0], _aggEventIds: evIds }
+                        : { id: `${nid}__e`, source: nid, target: endpointId, label: (cfg.outRel || [''])[0], _aggEventIds: evIds }
+                });
+                arr.forEach(it => {
+                    it.ev.connectedEdges().addClass('evt-nodeagg-hidden').hide();
+                    it.ev.addClass('evt-nodeagg-hidden').hide();
+                });
+                grouped += arr.length;
+            });
+            return grouped;
+        }
+
+        // 현재 그래프의 접을 수 있는 이벤트 노드를 엣지로 축약. 반환: 접은 이벤트 수(양끝 완비분). (멱등)
         function applyEventCollapse() {
+            // 단끝 합계 재계산 리셋 — 새 이벤트 유입 시 그룹 재구성 (멱등)
+            cy.nodes('.evt-agg-node').remove();
+            cy.elements('.evt-nodeagg-hidden').removeClass('evt-nodeagg-hidden').show();
             let collapsed = 0;
+            const singleEnded = [];   // 한쪽 끝만 있는 이벤트 (상대 미상)
             Object.keys(EVENT_COLLAPSE_MAP).forEach(label => {
                 const cfg = EVENT_COLLAPSE_MAP[label];
                 cy.nodes(`[label="${label}"]`).forEach(ev => {
@@ -3244,7 +3382,14 @@
                     const conn = ev.connectedEdges();
                     const inEdges = conn.filter(e => e.target().id() === ev.id() && cfg.inRel.includes(e.data('label')));
                     const outEdges = conn.filter(e => e.source().id() === ev.id() && cfg.outRel.includes(e.data('label')));
-                    if (inEdges.length === 0 || outEdges.length === 0) return;  // 양끝 다 있어야 접힘 (없으면 노드 유지)
+                    if (inEdges.length === 0 || outEdges.length === 0) {
+                        // 한쪽 끝만 있으면 끝점별 합계 노드 후보 (양끝 모두 없으면 그대로 유지)
+                        if (inEdges.length > 0 && outEdges.length === 0)
+                            singleEnded.push({ ev, endpointId: inEdges[0].source().id(), dir: 'in', label });
+                        else if (outEdges.length > 0 && inEdges.length === 0)
+                            singleEnded.push({ ev, endpointId: outEdges[0].target().id(), dir: 'out', label });
+                        return;
+                    }
                     const labelText = (cfg.relLabel + ' ' + _fmtEventVal(label, _firstProp(ev, cfg.prop))).trim();
                     inEdges.forEach(ie => outEdges.forEach(oe => {
                         const a = ie.source(), b = oe.target();
@@ -3264,15 +3409,20 @@
                     collapsed++;
                 });
             });
+            _aggregateSingleEndedEvents(singleEnded);   // 단끝(상대 미상) 다건 → 합계 노드
+            applyEventAggregation();                     // 중첩(같은 쌍 다건) → 합계 엣지
             return collapsed;
         }
 
         // 접기 원복 — 합성 엣지 제거 + 숨긴 이벤트 노드/엣지 복원
         function undoEventCollapse() {
-            cy.edges('.collapsed-event').remove();
+            cy.edges('.collapsed-event').remove();   // 합계 엣지(.collapsed-event-agg 포함)도 함께 제거됨
+            cy.nodes('.evt-agg-node').remove();      // 단끝 합계 노드 제거
+            cy.elements('.evt-nodeagg-hidden').removeClass('evt-nodeagg-hidden').show();
             cy.elements('.evt-hidden-edge').removeClass('evt-hidden-edge').show();
             cy.nodes('.evt-collapsed-src').removeClass('evt-collapsed-src').show();
         }
+        // [COLLAPSE-CORE-END]
 
         function toggleEventCollapse() {
             _eventCollapsed = !_eventCollapsed;
@@ -3590,9 +3740,10 @@
 
                 // 엣지 하이라이트 (무방향 매칭)
                 cy.edges().forEach(e => {
-                    // 접힌 이벤트 엣지: 원본 이벤트 노드(_collapsedFrom)가 경로에 포함되면 하이라이트
+                    // 접힌 이벤트 엣지: 원본 이벤트 노드(_collapsedFrom, 합계면 _aggEventIds 중 하나)가 경로에 포함되면 하이라이트
                     if (e.hasClass('collapsed-event')) {
-                        if (pathNodeIds.has(String(e.data('_collapsedFrom')))) e.addClass('highlight');
+                        const _evIds = e.data('_aggEventIds') || [e.data('_collapsedFrom')];
+                        if (_evIds.some(id => pathNodeIds.has(String(id)))) e.addClass('highlight');
                         else e.addClass('path-dim');
                         return;
                     }
@@ -5607,7 +5758,7 @@
                     if (graphSel) {
                         graphSel.value = autoGraph;
                         // 그래프 로드 트리거
-                        fetch(`/api/graph/load?graph_path=${encodeURIComponent(autoGraph)}&limit=300`)
+                        fetch(`/api/graph/load?graph_path=${encodeURIComponent(autoGraph)}&limit=3000`)
                             .then(r => r.json())
                             .then(data => {
                                 if (data && data.length > 0) {
@@ -6406,7 +6557,7 @@
             showToast('그래프 "' + graphName + '" 로딩 중...', 'info');
             cy.elements().remove();
 
-            fetch(API_URL + '/graph/load?graph_path=' + graphName + '&limit=500')
+            fetch(API_URL + '/graph/load?graph_path=' + graphName + '&limit=3000')
                 .then(r => r.json()).then(elements => {
                     if (elements && elements.length > 0) {
                         cy.add(elements);
