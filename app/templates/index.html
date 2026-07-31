@@ -785,154 +785,31 @@
                     대기 중... 파일을 선택하고 적재 버튼을 눌러주세요.
                 </div>
             </div>
+
+            <!-- 기존 RDB → 온톨로지 그래프 변환 (구 '온톨로지 변환' 탭 통합) — CSV 없이 -->
+            <div style="background:#1a1e2e; padding:15px; border-radius:6px; border:1px solid rgba(108,92,231,0.35); margin-bottom:10px;">
+                <label style="display:block; color:#a29bfe; margin-bottom:8px; font-size:14px; font-weight:bold;">
+                    <i class="fas fa-sitemap"></i> 또는: 기존 RDB → 온톨로지 그래프 변환
+                </label>
+                <div style="font-size:12px; color:#b2bec3; margin-bottom:12px; line-height:1.5;">
+                    CSV 업로드 없이, 이미 <b>tccopdb</b>에 적재돼 있는 데이터를 KICS 온톨로지 지식그래프로 변환합니다.
+                </div>
+                <div style="display:flex; gap:8px; align-items:center;">
+                    <input type="text" id="rdbConvGraphName" placeholder="그래프 이름 (예: tccop_graph_v2)" value="tccop_graph_v2"
+                        style="flex:1; padding:10px; background:#253154; color:white; border:1px solid rgba(255,255,255,0.12); border-radius:4px; box-sizing:border-box;">
+                    <button onclick="convertExistingRdbToGraph()" id="rdbConvBtn"
+                        style="background:#6c5ce7; color:#fff; padding:10px 20px; border:none; border-radius:4px; cursor:pointer; font-weight:bold; white-space:nowrap;">
+                        <i class="fas fa-sitemap"></i> 그래프 변환
+                    </button>
+                </div>
+                <div id="rdbConvConsole"
+                    style="display:none; background:#1e2844; color:#a29bfe; padding:10px; border-radius:4px; font-size:11px; font-family:monospace; margin-top:10px; white-space:pre-wrap; line-height:1.4; max-height:160px; overflow-y:auto;"></div>
+            </div>
         </div>
     </div> <!-- End of graphMappingArea -->
 
     </div>
     </div> <!-- End of csv-modal -->
-
-    <!-- 온톨로지 변환 마법사 모달 -->
-    <div id="ontology-modal"
-        style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(22,30,51,0.88); z-index: 9999; align-items: center; justify-content: center; backdrop-filter: blur(3px); overflow-y: auto; padding: 20px 0;">
-        <div class="modal-content" style="max-height: 90vh; overflow-y: auto; width: 700px;">
-            <div
-                style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.10); padding-bottom: 10px; margin-bottom: 15px;">
-                <h3 style="margin:0; color: var(--accent-blue);">
-                    <i class="fas fa-project-diagram"></i> 지식그래프(GDB) 변환 마법사
-                </h3>
-                <button onclick="closeOntologyModal()"
-                    style="background:transparent; border:none; color:#5a6885; font-size:20px; cursor:pointer;" title="닫기">
-                    <i class="fas fa-times"></i>
-                </button>
-            </div>
-
-            <!-- Step 1: 대상 RDB 선택 -->
-            <div
-                style="background: #1e2844; padding: 15px; border-radius: 6px; margin-bottom: 15px; border: 1px dashed rgba(255,255,255,0.15);">
-                <label style="display:block; color:var(--accent-blue); margin-bottom:8px; font-size:14px; font-weight: bold;">
-                    <i class="fas fa-database"></i> 1. RDB 데이터베이스 선택
-                </label>
-                <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
-                    <span
-                        style="color:#00cec9; font-weight:bold; font-size:16px; background:#253154; padding:6px 12px; border-radius:4px; border:1px solid #00cec9;">
-                        tccopdb <span style="font-size:12px; color:#b2bec3; font-weight:normal;">(AgensGraph
-                            v2.1)</span>
-                    </span>
-                    <span style="font-size:12px; color:#5a6885;">표준 27개 RDB 테이블에서 데이터를 읽어옵니다.</span>
-                </div>
-            </div>
-
-            <!-- Step 2 & 3: 온톨로지 룰 및 프리뷰 -->
-            <div
-                style="background: #1e2844; padding: 15px; border-radius: 6px; margin-bottom: 15px; border: 1px dashed rgba(255,255,255,0.15);">
-                <label style="display:block; color:var(--accent-blue); margin-bottom:8px; font-size:14px; font-weight: bold;">
-                    <i class="fas fa-sitemap"></i> 2. 온톨로지 매핑 규칙 적용 및 검토
-                </label>
-                <div style="font-size:12px; color:#b2bec3; margin-bottom:15px; line-height:1.5;">
-                    RDB의 관계형 데이터가 아래의 <b style="color:var(--accent-blue);">22개 노드 유형</b>과 <b style="color:#00cec9;">45종 엣지 관계 규칙</b>에 따라 변환됩니다. (v3.4 POLE 6-Layer 온톨로지)
-                </div>
-
-                <div
-                    style="background:#253154; padding:10px; border-radius:4px; max-height:150px; overflow-y:auto; border:1px solid rgba(255,255,255,0.12); margin-bottom: 10px;">
-                    <table style="width:100%; border-collapse:collapse; font-size:11px;">
-                        <thead>
-                            <tr style="border-bottom:1px solid #555; text-align:left;">
-                                <th style="padding:5px; color:var(--accent-blue);">RDB Table</th>
-                                <th style="padding:5px; color:var(--accent-blue);">GDB Node</th>
-                                <th style="padding:5px; color:var(--accent-blue);">Primary Edges</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr>
-                                <td style="padding:5px;">TB_INCDNT_MST</td>
-                                <td style="padding:5px; color:#00cec9;">vt_case</td>
-                                <td style="padding:5px; color:#ffeaa7;">(인물) -suspect_in-> (사건)</td>
-                            </tr>
-                            <tr>
-                                <td style="padding:5px;">TB_PRSN</td>
-                                <td style="padding:5px; color:#00cec9;">vt_psn</td>
-                                <td style="padding:5px; color:#ffeaa7;">(인물) -owns_phone-> (전화)</td>
-                            </tr>
-                            <tr>
-                                <td style="padding:5px;">TB_BACNT</td>
-                                <td style="padding:5px; color:#00cec9;">vt_bacnt</td>
-                                <td style="padding:5px; color:#ffeaa7;">(인물) -owns_account-> (계좌)</td>
-                            </tr>
-                            <tr>
-                                <td style="padding:5px;">TB_TELNO</td>
-                                <td style="padding:5px; color:#00cec9;">vt_telno</td>
-                                <td style="padding:5px; color:#ffeaa7;">(전화) -caller→ (통화) -callee→ (전화)</td>
-                            </tr>
-                            <tr>
-                                <td style="padding:5px;">TB_VHCL_MST</td>
-                                <td style="padding:5px; color:#00cec9;">vt_vhcl</td>
-                                <td style="padding:5px; color:#ffeaa7;">(인물) -owns_vehicle-> (차량)</td>
-                            </tr>
-                            <tr>
-                                <td style="padding:5px;">TB_GEO_MBL_LOC...</td>
-                                <td style="padding:5px; color:#00cec9;">vt_movement</td>
-                                <td style="padding:5px; color:#ffeaa7;">(차량/전화) -recorded_in-> (이동이벤트)</td>
-                            </tr>
-                            <tr>
-                                <td style="padding:5px;">TB_WEB_DMN</td>
-                                <td style="padding:5px; color:#00cec9;">vt_site</td>
-                                <td style="padding:5px; color:#ffeaa7;">(IP) <span style="color:#00cec9;">★ -hosts-></span> (사이트)</td>
-                            </tr>
-                            <tr>
-                                <td style="padding:5px;">TB_DGTL_FILE...</td>
-                                <td style="padding:5px; color:#00cec9;">vt_file</td>
-                                <td style="padding:5px; color:#ffeaa7;">(사이트) <span style="color:#00cec9;">★ -contains_file-></span> (파일)</td>
-                            </tr>
-                            <tr>
-                                <td style="padding:5px;">TB_ATM_LOC</td>
-                                <td style="padding:5px; color:#00cec9;">vt_atm + vt_loc</td>
-                                <td style="padding:5px; color:#ffeaa7;">(ATM) <span style="color:#00cec9;">★ -located_at-></span> (위치)</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-
-                <div style="display:flex; justify-content:space-between; align-items:center;">
-                    <div style="font-size:12px; color:#5a6885;">
-                        * 변환될 그래프 이름: <input type="text" id="ontoGraphName" value="tccop_graph_v2"
-                            style="background:#253154; color:#00cec9; border:1px solid #555; font-size:12px; padding:3px 6px; border-radius:3px; margin-left:5px;">
-                    </div>
-                </div>
-            </div>
-
-            <!-- Step 4: 실행 및 결과 -->
-            <div
-                style="background: #1e2844; padding: 15px; border-radius: 6px; margin-bottom: 15px; text-align:center;">
-                <label
-                    style="display:block; color:var(--accent-blue); margin-bottom:12px; font-size:14px; font-weight: bold; text-align:left;">
-                    <i class="fas fa-play"></i> 3. 지식그래프 변환 시작
-                </label>
-                <div style="font-size:12px; color:#b2bec3; margin-bottom:15px; text-align:left; line-height:1.5;">
-                    <i class="fas fa-sync" style="color:#0984e3;"></i> <b>RDB (tccopdb)</b>의 모든 정형 데이터를 상호 연결된 노드와 엣지로
-                    변환하여, 시각적 그래프 탐색 및 다차원 AI 추론(Cypher)이 가능하도록 만듭니다.
-                </div>
-                <button onclick="executeOntologyTransformation()" id="ontoUploadBtn"
-                    style="background: var(--accent-blue); color:#fff; padding:12px 30px; border:none; border-radius:6px; cursor:pointer; font-weight:bold; font-size:15px; width:100%; transition:0.3s;">
-                    <i class="fas fa-magic"></i> 온톨로지 기반 GDB 적재 시작
-                </button>
-            </div>
-
-            <!-- 변환 과정 모니터링 콘솔 -->
-            <div
-                style="background: #0d1424; padding: 15px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.07); margin-bottom: 10px;">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-                    <label style="color:var(--accent-blue); font-size:13px; font-weight: bold; margin:0;">
-                        <i class="fas fa-terminal"></i> 4. 변환 로그 (Console)
-                    </label>
-                </div>
-                <div id="ontoConsole"
-                    style="background:#1e2844; color:var(--accent-blue); padding:10px; border-radius:4px; font-size:11px; font-family:monospace; min-height:120px; max-height:200px; overflow-y:auto; border:1px inset #555; white-space:pre-wrap; line-height:1.4;">
-                    대기 중... GDB 적재 버튼을 눌러 변환을 시작하세요.
-                </div>
-            </div>
-        </div>
-    </div>
-
 
     <!-- 대시보드 모달 -->
     <div id="dashboard-modal"
@@ -1515,9 +1392,6 @@
         </button>
         <button class="nav-tab" onclick="switchTab('etl')" id="tab-etl">
             <i class="fas fa-file-import"></i> 데이터 적재
-        </button>
-        <button class="nav-tab" onclick="switchTab('ontology')" id="tab-ontology">
-            <i class="fas fa-sitemap"></i> 온톨로지 변환
         </button>
         <button class="nav-tab" onclick="switchTab('dashboard')" id="tab-dashboard">
             <i class="fas fa-tachometer-alt"></i> 대시보드
@@ -2772,7 +2646,8 @@
                         ).join('');
 
                         // 캔버스가 비어있으면 현재 선택된 그래프 자동 로드
-                        if (cy.elements().length === 0 && select.value) {
+                        // (단, 비주얼 쿼리 결과 표시 모드에서는 자동 로드가 vq 결과를 덮으므로 스킵)
+                        if (cy.elements().length === 0 && select.value && !window._vqMode) {
                             switchGraph();
                         }
                     }
@@ -2994,9 +2869,6 @@
                 case 'etl':
                     // 데이터 적재 모달 열기
                     openCsvModal();
-                    break;
-                case 'ontology':
-                    openOntologyModal();
                     break;
                 case 'dashboard':
                     // 대시보드 모달 열기
@@ -3736,16 +3608,19 @@
             document.getElementById('node-actions').style.display = 'none';
         });
 
-        cy.on('dbltap', 'node', function (evt) {
-            const node = evt.target;
+        // 노드 관계 확장 — 더블탭·우클릭 메뉴가 공유하는 단일 경로
+        function expandNodeById(node) {
+            if (!node) return;
             const graphName = document.getElementById('targetGraphInfo').value;
-            fetch(`${API_URL}/expand?id=${node.id()}&graph_path=${graphName}`).then(r => r.json()).then(data => {
-                if (!data || data.length === 0) return alert("추가 연결 정보 없음");
+            fetch(`${API_URL}/expand?id=${node.id()}&graph_path=${graphName}&session_id=${_investSessionId}`).then(r => r.json()).then(data => {
+                if (!data || data.length === 0) return showToast("추가 연결 정보 없음", "info");
                 const added = cy.add(data);
                 afterElementsAdded(added);
                 if (!_layoutLocked) cy.layout({ name: 'dagre', rankDir: 'LR', nodeSep: 50, rankSep: 100, animate: true }).run();
-            });
-        });
+                showToast(`관계 확장: ${data.filter(e => e.group === 'nodes').length}개 노드 추가`, "success");
+            }).catch(e => showToast("관계 확장 오류: " + e.message, "error"));
+        }
+        cy.on('dbltap', 'node', function (evt) { expandNodeById(evt.target); });
 
         // 우클릭 메뉴
         let selectedNode = null;
@@ -3826,7 +3701,7 @@
             const graphName = document.getElementById('targetGraphInfo').value;
             fetch(`${API_URL}/path`, {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ source: pathSourceId, target: targetNode.id(), graph_path: graphName })
+                body: JSON.stringify({ source: pathSourceId, target: targetNode.id(), graph_path: graphName, session_id: _investSessionId })
             }).then(r => r.json()).then(d => {
                 if (!d.found) { showToast('경로를 찾을 수 없습니다', 'warning'); return; }
                 // 1. 이전 하이라이트 초기화
@@ -3895,7 +3770,7 @@
                 showPathBanner(`🛤 ${srcName} → ${tgtName} (${hops}홉, ${pathNodeIds.size}노드)`);
             }).catch(e => showToast('경로 분석 오류: ' + e.message, 'error'));
         }
-        function expandNodeFromMenu() { if (selectedNode) { cy.trigger('dbltap', selectedNode); cm.style.display = 'none'; } }
+        function expandNodeFromMenu() { if (selectedNode) { expandNodeById(selectedNode); cm.style.display = 'none'; } }
         function copyNodeInfo() { if (selectedNode) { navigator.clipboard.writeText(JSON.stringify(selectedNode.data('props'))); cm.style.display = 'none'; } }
         function hideNode() { if (selectedNode) { selectedNode.remove(); cm.style.display = 'none'; } }
 
@@ -3945,6 +3820,45 @@
         function openCsvModal() { modal.style.display = 'flex'; }
         function closeCsvModal() { modal.style.display = 'none'; }
 
+        // 기존 RDB → 온톨로지 그래프 변환 (구 '온톨로지 변환' 탭 기능을 데이터 적재 탭에 통합)
+        async function convertExistingRdbToGraph() {
+            const btn = document.getElementById('rdbConvBtn');
+            const consoleDiv = document.getElementById('rdbConvConsole');
+            const graphName = (document.getElementById('rdbConvGraphName').value || '').trim();
+            if (!graphName) { showToast('그래프 이름을 입력하세요', 'warning'); return; }
+            const orig = btn.innerHTML;
+            btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 변환 중...';
+            consoleDiv.style.display = 'block';
+            consoleDiv.textContent = `[시스템] tccopdb RDB → 지식그래프(${graphName}) 변환 시작...\n27개 RDB 테이블에서 노드/엣지 추출 중...\n`;
+            try {
+                const res = await fetch('/api/rdb/to-graph', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ graph_name: graphName })
+                });
+                const data = await res.json();
+                if (data.status === 'success') {
+                    const s = data.stats;
+                    consoleDiv.textContent += `\n✅ 변환 완료 — 노드 ${s.nodes}개, 엣지 ${s.edges}개\n'${graphName}' 그래프 탐색 가능.\n`;
+                    showToast(`온톨로지 변환 완료! 노드 ${s.nodes}·엣지 ${s.edges} → ${graphName}`, 'success');
+                    setTimeout(() => {
+                        closeCsvModal();
+                        switchTab('graph');
+                        if (typeof loadGraphList === 'function') loadGraphList();
+                        const gs = document.getElementById('targetGraphInfo');
+                        if (gs) { gs.value = graphName; if (typeof switchGraph === 'function') switchGraph(); }
+                    }, 1500);
+                } else {
+                    consoleDiv.textContent += `\n❌ 변환 실패: ${data.message}\n`;
+                    showToast('변환 실패: ' + data.message, 'error');
+                    btn.disabled = false; btn.innerHTML = orig;
+                }
+            } catch (e) {
+                consoleDiv.textContent += `\n❌ 오류: ${e.message}\n`;
+                showToast('오류: ' + e.message, 'error');
+                btn.disabled = false; btn.innerHTML = orig;
+            }
+        }
+
         // V4.0 파이프라인 모달 (공통 셸로 통일) — 열 때 그래프명 타임스탬프 자동 부여
         function openPipelineModal() {
             document.getElementById('v40PipelinePanel').style.display = 'flex';
@@ -3986,10 +3900,6 @@
                 if (typeof showToast === 'function') showToast(`매핑 적용: ${cfg.table} → ${cfg.node_label}`, 'success');
             } catch(e) { console.error('applyModelerConfig error', e); }
         }
-
-        // [온톨로지 마법사 핸들러]
-        const ontologyModal = document.getElementById('ontology-modal');
-        function openOntologyModal() { ontologyModal.style.display = 'flex'; }
 
         // ======================================================
         // 법률 검색 (Legal RAG) — /api/legal/* (UI 세션 인증)
@@ -4088,78 +3998,6 @@
             }).join('');
             area.innerHTML = html;
         }
-        function closeOntologyModal() { ontologyModal.style.display = 'none'; }
-
-        async function executeOntologyTransformation() {
-            const btn = document.getElementById('ontoUploadBtn');
-            const consoleDiv = document.getElementById('ontoConsole');
-            const graphName = document.getElementById('ontoGraphName').value.trim();
-
-            if (!graphName) {
-                alert("그래프 이름을 입력해주세요.");
-                return;
-            }
-
-            btn.disabled = true;
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 변환 진행 중...';
-            btn.style.opacity = '0.7';
-
-            consoleDiv.innerHTML = `[시스템] tccopdb RDB 데이터의 지식그래프(GDB) 변환을 시작합니다...\n`;
-            consoleDiv.innerHTML += `[대상 그래프] ${graphName}\n`;
-            consoleDiv.innerHTML += `[단계 1/2] 27개 RDB 테이블에서 엔티티 노드 추출 중...\n`;
-            consoleDiv.scrollTop = consoleDiv.scrollHeight;
-
-            try {
-                const convertRes = await fetch('/api/rdb/to-graph', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ graph_name: graphName })
-                });
-                const convertData = await convertRes.json();
-
-                if (convertData.status === 'success') {
-                    const s = convertData.stats;
-                    consoleDiv.innerHTML += `[단계 2/2] 노드 간 엣지 관계 추론 및 생성 완료.\n\n`;
-                    consoleDiv.innerHTML += `✅ [변환 완료] 총 노드: ${s.nodes}개, 총 엣지: ${s.edges}개\n`;
-                    consoleDiv.innerHTML += `새로운 지식그래프 '${graphName}' 탐색이 가능합니다.\n`;
-
-                    showToast(`온톨로지 변환 완료! 노드 ${s.nodes}개, 엣지 ${s.edges}개 → ${graphName}`, "success");
-
-                    // 1.5초 후 모달 닫고 그래프 탐색 탭으로 이동
-                    setTimeout(() => {
-                        closeOntologyModal();
-                        switchTab('graph');
-                        if (typeof loadGraphList === 'function') loadGraphList();
-
-                        // 새로 만든 그래프 선택
-                        setTimeout(() => {
-                            const sel = document.getElementById('targetGraphInfo');
-                            if (sel) {
-                                for (let opt of sel.options) {
-                                    if (opt.value === graphName || opt.value.includes(graphName)) {
-                                        sel.value = opt.value;
-                                        sel.dispatchEvent(new Event('change'));
-                                        if (typeof switchGraph === 'function') switchGraph();
-                                        break;
-                                    }
-                                }
-                            }
-                        }, 800);
-                    }, 2000);
-
-                } else {
-                    throw new Error(convertData.message || '변환 중 서버 오류가 발생했습니다.');
-                }
-            } catch (convertErr) {
-                consoleDiv.innerHTML += `❌ [오류 발생] ${convertErr.message}\n`;
-            }
-
-            consoleDiv.scrollTop = consoleDiv.scrollHeight;
-            btn.disabled = false;
-            btn.innerHTML = '<i class="fas fa-magic"></i> 온톨로지 기반 GDB 적재 시작';
-            btn.style.opacity = '1.0';
-        }
-
         // [핵심] 파일 선택 및 AI 분석 시작
         function previewCsv() {
             const file = document.getElementById('csvFile').files[0];
@@ -5551,7 +5389,7 @@
             showLoading("관계 확장 중...");
             const graphName = document.getElementById('targetGraphInfo').value;
 
-            fetch(`${API_URL}/expand?id=${selectedNode.id()}&graph_path=${graphName}`)
+            fetch(`${API_URL}/expand?id=${selectedNode.id()}&graph_path=${graphName}&session_id=${_investSessionId}`)
                 .then(r => r.json())
                 .then(data => {
                     hideLoading();
@@ -5576,7 +5414,7 @@
             showLoading(`${depth}-Depth 다단계 확장 중...`);
             const graphName = document.getElementById('targetGraphInfo').value;
 
-            fetch(`${API_URL}/expand/multi?node_id=${selectedNode.id()}&depth=${depth}&graph_path=${graphName}`)
+            fetch(`${API_URL}/expand/multi?node_id=${selectedNode.id()}&depth=${depth}&graph_path=${graphName}&session_id=${_investSessionId}`)
                 .then(r => r.json())
                 .then(data => {
                     hideLoading();
@@ -5864,6 +5702,9 @@
             // 모델러에서 ETL 전송 시 자동 처리
             const urlParams = new URLSearchParams(window.location.search);
 
+            // 비주얼 쿼리 결과 모드 — loadGraphList 의 자동 그래프 로드가 vq 결과를 덮지 않도록 차단
+            window._vqMode = (urlParams.get('vq') === '1');
+
             // 모델러 데이터 적재 후 자동 그래프 로드
             const autoGraph = urlParams.get('graph');
             if (autoGraph) {
@@ -5889,6 +5730,43 @@
                             })
                             .catch(e => console.error('Graph auto-load error:', e));
                     }
+                }, 600);
+            }
+
+            // 모델러 비주얼 쿼리 결과 표시 (?vq=1 + sessionStorage)
+            if (urlParams.get('vq') === '1') {
+                setTimeout(() => {
+                    try {
+                        const raw = sessionStorage.getItem('ccop_vq_result');
+                        const vqGraph = sessionStorage.getItem('ccop_vq_graph') || '';
+                        sessionStorage.removeItem('ccop_vq_result');
+                        const els = raw ? JSON.parse(raw) : [];
+                        const graphSel = document.getElementById('targetGraphInfo');
+                        if (graphSel && vqGraph) graphSel.value = vqGraph;   // 이후 확장/조작이 같은 그래프로 향하도록
+                        if (typeof cy !== 'undefined') {
+                            cy.elements().remove();
+                            // 비주얼 쿼리 결과는 그린 패턴 그대로 표시 — 이벤트 접기 OFF
+                            // (이체/통화 이벤트도 노드로 보이며 엣지로 연결된 서브그래프 유지)
+                            if (typeof _eventCollapsed !== 'undefined') {
+                                _eventCollapsed = false;
+                                if (typeof updateEventCollapseBtn === 'function') updateEventCollapseBtn();
+                            }
+                            if (els.length > 0) {
+                                const added = cy.add(els);
+                                afterElementsAdded(added);
+                                if (!(typeof _layoutLocked !== 'undefined' && _layoutLocked)) {
+                                    cy.layout({ name: 'dagre', rankDir: 'LR', nodeSep: 50, rankSep: 100, animate: false, fit: true, padding: 50 }).run();
+                                    cy.fit(cy.elements(':visible'), 50);   // dagre fit 보정
+                                }
+                                if (typeof updateFilterCounts === 'function') setTimeout(updateFilterCounts, 100);
+                            }
+                        }
+                        const nodeN = els.filter(e => e.group === 'nodes').length;
+                        if (typeof showToast === 'function')
+                            showToast(nodeN > 0 ? `🔍 패턴 조회 결과: 노드 ${nodeN}개` : '패턴에 매칭되는 데이터가 없습니다', nodeN > 0 ? 'success' : 'info');
+                    } catch (e) { console.error('Visual query render error:', e); }
+                    finally { window._vqMode = false; }   // 렌더 후 해제 — 이후 그래프 전환은 정상 자동 로드
+
                 }, 600);
             }
 

@@ -766,65 +766,6 @@ def analyze_csv_extended():
         }), 500
 
 
-@api_v1.route('/etl/import-extended', methods=['POST'])
-def import_with_extended_schema():
-    """
-    KICS 확장 스키마 기반 그래프 적재
-    
-    Action 노드(Transfer/Call/Access/Message) 자동 생성 포함
-    
-    Request:
-        multipart/form-data
-        - file: CSV 파일
-        - graph: 대상 그래프 이름
-    
-    Response:
-        {
-            "status": "success",
-            "action_nodes": 10,
-            "entity_nodes": 50,
-            "relationships": 30
-        }
-    """
-    from app.services.etl_service import ETLService
-    
-    try:
-        # 파일 확인
-        if 'file' not in request.files:
-            return jsonify({"error": "No file provided"}), 400
-        
-        file = request.files['file']
-        graph = request.form.get('graph', 'tccop_graph_v6')
-        
-        if not file.filename.endswith('.csv'):
-            return jsonify({"error": "Only CSV files are supported"}), 400
-        
-        # KICS 확장 스키마 기반 ETL 실행
-        success, results = ETLService.import_with_schema_mapping(file, graph)
-        
-        if success:
-            return jsonify({
-                "status": "success",
-                "graph": graph,
-                "action_nodes": results.get("action_nodes", 0),
-                "entity_nodes": results.get("entity_nodes", 0),
-                "relationships": results.get("relationships", 0),
-                "mapping": results.get("mapping", {})
-            }), 200
-        else:
-            return jsonify({
-                "error": "ETL failed",
-                "details": results.get("error", "Unknown error")
-            }), 500
-        
-    except Exception as e:
-        current_app.logger.error(f"[API v1] etl/import-extended error: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({
-            "error": "Import failed",
-            "details": str(e)
-        }), 500
 
 
 @api_v1.route('/schema/layers', methods=['GET'])

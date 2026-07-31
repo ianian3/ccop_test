@@ -1509,3 +1509,113 @@ class GraphService:
             return False, str(e)
         finally:
             conn.close()
+
+    # ── 비주얼 쿼리 빌더 (modeler 패턴 → MATCH 조회) ────────────────────
+    #   modeler 캔버스의 schema {nodes, edges} 를 MATCH Cypher 로 컴파일해
+    #   대상 그래프에서 매칭되는 실제 데이터를 조회한다. (생성=CREATE 와 반대: 조회)
+    _VQ_ID_RE = __import__('re').compile(r'^[a-zA-Z_][a-zA-Z0-9_]*$')
+
+    @staticmethod
+    def compile_visual_pattern(schema):
+        """schema {nodes:[{id,label}], edges:[{source_id,target_id,type}]} →
+        (match_clause, node_vars, var_map, edge_specs). 라벨/엣지타입은 식별자
+        화이트리스트로 injection 차단(modeler UI가 온톨로지 값만 생성하지만 서버 방어)."""
+        nodes = schema.get('nodes', []) or []
+        edges = schema.get('edges', []) or []
+        if not nodes:
+            raise ValueError('패턴에 노드가 없습니다')
+
+        var_map, decl = {}, {}
+        for i, n in enumerate(nodes):
+            label = (n.get('label') or '').strip()
+            if not GraphService._VQ_ID_RE.match(label):
+                raise ValueError(f'유효하지 않은 라벨: {label!r}')
+            v = f'n{i}'
+            var_map[n.get('id')] = v
+            decl[v] = label
+
+        declared = set()
+
+        def ref(v):
+            # 변수 첫 등장만 (v:label), 이후 (v) — AgensGraph 라벨 재선언 회피
+            if v in declared:
+                return f'({v})'
+            declared.add(v)
+            return f'({v}:{decl[v]})'
+
+        parts, edge_specs = [], []
+        for e in edges:
+            s = var_map.get(e.get('source_id'))
+            t = var_map.get(e.get('target_id'))
+            et = (e.get('type') or '').strip()
+            if not s or not t:
+                continue
+            if not GraphService._VQ_ID_RE.match(et):
+                raise ValueError(f'유효하지 않은 엣지 타입: {et!r}')
+            parts.append(f'{ref(s)}-[:{et}]->{ref(t)}')
+            edge_specs.append((s, t, et))
+
+        for v in decl:                       # 엣지에 안 걸린 고립 노드
+            if v not in declared:
+                parts.append(ref(v))
+
+        match_clause = 'MATCH ' + ', '.join(parts)
+        return match_clause, list(decl.keys()), var_map, edge_specs
+
+    @staticmethod
+    def run_visual_query(schema, graph_path, limit=100):
+        """비주얼 패턴 → MATCH 조회 실행. 반환: {cypher, elements, match_count} 또는 {error}."""
+        try:
+            match_clause, node_vars, var_map, edge_specs = GraphService.compile_visual_pattern(schema)
+        except ValueError as ve:
+            return {"error": str(ve), "elements": []}
+
+        conn, cur = GraphService.get_db_connection()
+        if not conn:
+            return {"error": "DB 연결 실패", "elements": []}
+        try:
+            safe_set_graph_path(cur, graph_path)
+            ret = ', '.join(f'id({v})' for v in node_vars)
+            cypher = f'{match_clause} RETURN {ret} LIMIT {int(limit)}'
+            cur.execute(cypher)
+            rows = cur.fetchall()
+
+            node_ids = set()
+            for row in rows:
+                node_ids.update(str(x) for x in row)
+
+            elements = []
+            for nid in node_ids:
+                cur.execute(f"MATCH (n) WHERE id(n) = '{nid}' RETURN id(n), labels(n), properties(n)")
+                r = cur.fetchone()
+                if r:
+                    elements.append({"group": "nodes", "data": {
+                        "id": str(r[0]), "label": r[1][0], "props": GraphService.safe_props(r[2])}})
+
+            # 조회된 노드 집합 내부의 모든 실제 엣지 — 패턴 엣지뿐 아니라 노드끼리의 다른 관계까지
+            # 포함해 "연결된 서브그래프"로 표시. 각 노드의 나가는 엣지를 조회하고 상대가 결과
+            # 집합에 있는 것만 채택(AgensGraph id() = '...' 등호는 검증된 방식, IN 리스트는 미지원).
+            seen_edges = set()
+            for nid in node_ids:
+                try:
+                    cur.execute(f"MATCH (a)-[r]->(b) WHERE id(a) = '{nid}' "
+                                f"RETURN id(r), type(r), properties(r), id(b)")
+                    for er in cur.fetchall():
+                        tgt = str(er[3])
+                        eid = str(er[0])
+                        if tgt in node_ids and eid not in seen_edges:
+                            seen_edges.add(eid)
+                            elements.append({"group": "edges", "data": {
+                                "id": eid, "source": nid, "target": tgt,
+                                "label": er[1], "props": GraphService.safe_props(er[2])}})
+                except Exception as _ee:
+                    logger.warning(f"▶ [VisualQuery] 엣지 조회 실패(node={nid}): {_ee}")
+
+            logger.info(f"▶ [VisualQuery] graph={graph_path} matches={len(rows)} "
+                        f"nodes={len(node_ids)} · {cypher}")
+            return {"cypher": cypher, "elements": elements, "match_count": len(rows)}
+        except Exception as e:
+            logger.error(f"▶ [VisualQuery] ERROR: {e} · pattern={match_clause}")
+            return {"error": str(e), "elements": [], "cypher": match_clause}
+        finally:
+            conn.close()

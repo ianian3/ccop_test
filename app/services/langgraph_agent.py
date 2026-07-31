@@ -1154,6 +1154,7 @@ AS (p agtype);
                   (cypher_cn or "")[:2000],
                   (input_cn or "")[:500],
                   result_status, result_cnt, exec_ms))
+            conn.commit()   # ← 누락 시 커넥션 종료로 롤백되어 감사 이력이 남지 않음
             cur.close()
             conn.close()
         except Exception:

@@ -154,6 +154,15 @@
     <button class="btn btn-blue" onclick="generateCypher()"><i class="fas fa-code"></i> Cypher 생성</button>
     <button class="btn btn-green" onclick="executeSchema()"><i class="fas fa-play"></i> 그래프 생성</button>
     <button class="btn btn-teal" id="loadDataBtn" onclick="loadData()"><i class="fas fa-database"></i> 데이터 적재</button>
+    <div style="width:1px;height:24px;background:#333;margin:0 2px;flex-shrink:0;"></div>
+    <select id="vqTargetGraph" title="조회 대상 그래프" onmousedown="loadVqGraphList()"
+            style="background:#1a1a1a;color:#dfe6e9;border:1px solid #444;border-radius:6px;padding:6px 8px;font-size:12px;max-width:150px;">
+      <option value="">조회 대상…</option>
+    </select>
+    <button class="btn" style="background:#e17055;color:#fff;" onclick="runVisualQuery()"
+            title="그린 패턴을 조회 조건으로 DB에서 실제 데이터 검색 (결과는 메인 뷰에 표시)">
+      <i class="fas fa-search"></i> 패턴으로 조회
+    </button>
   </div>
 </div>
 
@@ -1236,6 +1245,42 @@ function loadKICSPreset() {
 // =========================================================
 // Cypher 생성
 // =========================================================
+// ── 비주얼 쿼리 (패턴 → 조회) — 결과는 메인 그래프뷰로 전달 ──────────
+async function loadVqGraphList() {
+  const sel = document.getElementById('vqTargetGraph');
+  if (sel.dataset.loaded) return;                 // 1회만 채움
+  try {
+    const res = await fetch('/api/graph/list');
+    const data = await res.json();
+    const graphs = data.graphs || data || [];
+    sel.innerHTML = '<option value="">조회 대상…</option>' +
+      graphs.map(g => { const name = (typeof g === 'string') ? g : (g.name || g.graph_path); return `<option value="${name}">${name}</option>`; }).join('');
+    sel.dataset.loaded = '1';
+  } catch (e) { /* 목록 실패 시 수동 입력 불가 — 무시 */ }
+}
+
+async function runVisualQuery() {
+  const target = document.getElementById('vqTargetGraph').value;
+  if (!target) { showToast('조회 대상 그래프를 선택하세요', 'error'); return; }
+  if (!schema.nodes.length) { showToast('조회할 패턴(노드)을 캔버스에 그리세요', 'error'); return; }
+  showToast('패턴으로 조회 중…', 'info');
+  try {
+    const res = await fetch('/api/modeler/query-match', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ schema, graph_path: target, limit: 300, session_id: 'modeler_vq' })
+    });
+    const data = await res.json();
+    if (data.error) { showToast('조회 오류: ' + data.error, 'error'); return; }
+    const els = data.elements || [];
+    if (!els.length) { showToast(`매칭 결과 없음 (패턴 ${data.match_count || 0}건)`, 'warning'); return; }
+    // 결과를 메인 그래프뷰로 전달 (sessionStorage → /?vq=1)
+    sessionStorage.setItem('ccop_vq_result', JSON.stringify(els));
+    sessionStorage.setItem('ccop_vq_graph', target);
+    showToast(`매칭 ${data.match_count}건 — 메인 뷰로 이동`, 'success');
+    setTimeout(() => { window.location.href = '/?vq=1'; }, 700);
+  } catch (e) { showToast('조회 실패: ' + e.message, 'error'); }
+}
+
 async function generateCypher() {
   const graphName = document.getElementById('graphName').value.trim();
   if (!graphName) { showToast('그래프 이름을 입력하세요', 'error'); return; }

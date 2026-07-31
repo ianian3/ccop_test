@@ -3,6 +3,49 @@ from flask import Blueprint, render_template, request, jsonify, current_app, ses
 from collections import defaultdict
 from datetime import datetime, timezone
 import json
+import time
+
+
+# ── 비주얼 쿼리 감사(Phase 1) ─────────────────────────────────────
+#   수사관의 그래프 조작(확장/경로/네트워크)을 TB_AUDIT_LOG 에 세션 단위로 기록한다.
+#   목적: 재현성·증거능력. 서버에서 기록해야 위변조 불가(프론트 우회 방지).
+def _audit_count(r):
+    """결과 요소 수 — 조작별 반환 형태(list/dict) 흡수."""
+    if isinstance(r, list):
+        return len(r)
+    if isinstance(r, dict):
+        for k in ('elements', 'nodes', 'hubs'):
+            if isinstance(r.get(k), list):
+                return len(r[k])
+    return None
+
+
+def _audit_visual(action_cd, graph_path, session_id, input_cn='', cypher_cn='',
+                  result_cnt=None, exec_ms=None, status='success'):
+    """비주얼 조작 감사 로그 → TB_AUDIT_LOG. **비동기 fire-and-forget** — 조작 응답을
+    절대 지연/차단하지 않는다(감사 DB가 느리거나 죽어도 수사 조작은 정상 진행).
+    Phase 1: cypher_cn 은 재현용 대표 쿼리(실제 실행 Cypher 정밀 캡처는 후속 단계)."""
+    import threading
+    try:
+        app = current_app._get_current_object()   # 스레드에서 쓸 실제 app 참조
+    except Exception:
+        return
+
+    def _work():
+        try:
+            with app.app_context():
+                from app.services.langgraph_agent import LangGraphAgent
+                LangGraphAgent._write_audit_log(
+                    action_cd=action_cd, graph_path=graph_path, cypher_cn=cypher_cn,
+                    input_cn=input_cn, result_status=status, result_cnt=result_cnt,
+                    exec_ms=exec_ms, session_id=session_id)
+        except Exception:
+            pass
+
+    try:
+        threading.Thread(target=_work, daemon=True).start()
+    except Exception:
+        pass
 
 # 메인 API Rate Limiter: {ip: {minute_bucket: count}}
 _ip_counters: dict = defaultdict(lambda: defaultdict(int))
@@ -322,11 +365,17 @@ def expand_node():
     # 'id' 또는 'node_id' 둘 다 지원
     node_id = request.args.get('id') or request.args.get('node_id')
     graph_path = request.args.get('graph_path', current_app.config.get('DEFAULT_GRAPH_PATH', 'tccop_graph_v6'))
-    
+    session_id = request.args.get('session_id')
+
     if not node_id: return jsonify([])
-    
+
     # 서비스 호출
+    _t0 = time.time()
     elements = GraphService.expand_node(node_id, graph_path)
+    _audit_visual('EXPAND', graph_path, session_id,
+                  input_cn=f'node_id={node_id}',
+                  cypher_cn=f"MATCH (n)-[r]-(m) WHERE id(n)='{node_id}' RETURN r, m",
+                  result_cnt=_audit_count(elements), exec_ms=int((time.time() - _t0) * 1000))
     return jsonify(elements)
 
 @bp.route('/api/path', methods=['POST'])
@@ -335,9 +384,17 @@ def find_path():
     src = data.get('source')
     tgt = data.get('target')
     graph_path = data.get('graph_path', current_app.config.get('DEFAULT_GRAPH_PATH', 'tccop_graph_v6'))
-    
+    session_id = data.get('session_id')
+
+    _t0 = time.time()
     found, elements = GraphService.find_shortest_path(src, tgt, graph_path)
-    
+    _audit_visual('PATH', graph_path, session_id,
+                  input_cn=f'{src} -> {tgt}',
+                  cypher_cn=f"MATCH p=shortestPath((a)-[*..6]-(b)) WHERE id(a)='{src}' AND id(b)='{tgt}' RETURN p",
+                  result_cnt=(_audit_count(elements) if found else 0),
+                  status=('success' if found else 'not_found'),
+                  exec_ms=int((time.time() - _t0) * 1000))
+
     if found: return jsonify({"found": True, "elements": elements})
     else: return jsonify({"found": False, "message": "경로를 찾을 수 없습니다."})
 
@@ -353,8 +410,14 @@ def multi_hop_expand():
     
     if not node_id:
         return jsonify({"error": "node id required"}), 400
-    
+
+    session_id = request.args.get('session_id')
+    _t0 = time.time()
     result = GraphService.multi_hop_expand(node_id, depth, graph_path)
+    _audit_visual('MULTI_HOP', graph_path, session_id,
+                  input_cn=f'node_id={node_id} depth={depth}',
+                  cypher_cn=f"MATCH (n)-[r*1..{depth}]-(m) WHERE id(n)='{node_id}' RETURN r, m",
+                  result_cnt=_audit_count(result), exec_ms=int((time.time() - _t0) * 1000))
     return jsonify(result)
 
 @bp.route('/api/network/accomplice', methods=['GET'])
@@ -362,11 +425,37 @@ def accomplice_network():
     """공범 네트워크 조회"""
     node_id = request.args.get('id') or request.args.get('node_id')
     graph_path = request.args.get('graph_path', current_app.config.get('DEFAULT_GRAPH_PATH', 'tccop_graph_v6'))
-    
+
     if not node_id:
         return jsonify({"error": "node id required"}), 400
-    
+
+    session_id = request.args.get('session_id')
+    _t0 = time.time()
     result = GraphService.find_accomplice_network(node_id, graph_path)
+    _audit_visual('ACCOMPLICE', graph_path, session_id,
+                  input_cn=f'node_id={node_id}',
+                  cypher_cn=f"/* accomplice network for id(n)='{node_id}' */",
+                  result_cnt=_audit_count(result), exec_ms=int((time.time() - _t0) * 1000))
+    return jsonify(result)
+
+@bp.route('/api/modeler/query-match', methods=['POST'])
+def modeler_query_match():
+    """비주얼 쿼리 빌더 — modeler 패턴(schema) → MATCH 조회 → 매칭 데이터 반환.
+    body: {schema:{nodes,edges}, graph_path, session_id?, limit?}"""
+    data = request.get_json() or {}
+    schema = data.get('schema', {})
+    graph_path = data.get('graph_path') or current_app.config.get('DEFAULT_GRAPH_PATH', 'tccop_graph_v6')
+    session_id = data.get('session_id')
+    limit = data.get('limit', 100)
+
+    _t0 = time.time()
+    result = GraphService.run_visual_query(schema, graph_path, limit)
+    _audit_visual('VISUAL_QUERY', graph_path, session_id,
+                  input_cn=f"nodes={len(schema.get('nodes', []))} edges={len(schema.get('edges', []))}",
+                  cypher_cn=result.get('cypher', ''),
+                  result_cnt=result.get('match_count'),
+                  status=('error' if result.get('error') else 'success'),
+                  exec_ms=int((time.time() - _t0) * 1000))
     return jsonify(result)
 
 @bp.route('/api/network/hubs', methods=['GET'])
@@ -374,8 +463,14 @@ def hub_nodes():
     """허브 노드 탐지"""
     graph_path = request.args.get('graph_path', current_app.config.get('DEFAULT_GRAPH_PATH', 'tccop_graph_v6'))
     top_n = request.args.get('top_n', 10, type=int)
-    
+
+    session_id = request.args.get('session_id')
+    _t0 = time.time()
     hubs = GraphService.find_hub_nodes(graph_path, top_n)
+    _audit_visual('HUB', graph_path, session_id,
+                  input_cn=f'top_n={top_n}',
+                  cypher_cn=f"/* hub detection top {top_n} */",
+                  result_cnt=_audit_count(hubs), exec_ms=int((time.time() - _t0) * 1000))
     return jsonify({"hubs": hubs})
 
 # ------------------------------
@@ -1065,22 +1160,6 @@ def etl_suggest():
         
         mapping = AIService.suggest_mapping(headers, sample)
         return jsonify({"status": "success", "mapping": mapping})
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
-
-@bp.route('/api/etl/import', methods=['POST'])
-def etl_import():
-    try:
-        file = request.files['file']
-        mapping = json.loads(request.form.get('mapping'))
-        graph_path = request.form.get('graph_path', current_app.config.get('DEFAULT_GRAPH_PATH', 'tccop_graph_v6'))
-        
-        success, nodes, edges, msg = ETLService.import_csv(file, mapping, graph_path)
-        
-        if success:
-            return jsonify({"status": "success", "nodes_created": nodes, "edges_created": edges, "target_graph": graph_path})
-        else:
-            return jsonify({"status": "error", "message": msg}), 500
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
