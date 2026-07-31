@@ -1,14 +1,14 @@
 """
 온톨로지 기반 그래프 분석 서비스
 
-CCOP V4.0 온톨로지 — POLE 정렬 6레이어 아키텍처 (현행 SSOT)
-현행 설계 기준: docs/CCOP_ONTOLOGY_V4.0.md (+ 상세: ONTOLOGY_FINAL_ARCHITECTURE_v3.7.md)
+CCOP V4.1 온톨로지 — POLE 정렬 6레이어 아키텍처 (현행 SSOT)
+현행 설계 기준: docs/CCOP_ONTOLOGY_V4.1.md (+ 상세: ONTOLOGY_FINAL_ARCHITECTURE_v3.7.md)
 버전 이력:
   - v3.7: pt_cluster/site_cluster 노드(군집 허브 패턴), is_anonymous, used_in_device,
           clusters_with deprecated, RelayStationDetection 추론 규칙
   - V4.0: DOMAIN_USAGE·NODE_ID_STANDARD·INFERENCE_RULES_V37 메타를 SSOT로 격상
-  - 2026-07-31 정합화: 엣지 의미(RELATIONSHIPS)↔시각(EDGE_STYLE_V40) 이원화 해소
-          — 실사용되나 카탈로그 한쪽에만 있던 엣지 등재, id 표준을 실 MERGE 키로 정정
+  - V4.1 (2026-07-31 정합화): 엣지 의미(RELATIONSHIPS)↔시각(EDGE_STYLE_V40) 이원화 해소
+          — 실사용되나 카탈로그 한쪽에만 있던 엣지 등재(53 명목→60 실측), id 표준을 실 MERGE 키로 정정
 노드: 25 | 엣지: 60 (의미=시각 일치) | 추론 규칙: 10(list) + 4(INFERENCE_RULES_V37)
 """
 

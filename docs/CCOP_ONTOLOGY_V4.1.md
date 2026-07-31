@@ -1,24 +1,21 @@
-# CCOP 통합 온톨로지 V4.0 — 전체 설계 명세
+# CCOP 통합 온톨로지 V4.1 — 전체 설계 명세
 
-> ⚠️ **DEPRECATED — `docs/CCOP_ONTOLOGY_V4.1.md` 사용 권장.**
-> 2026-07-31 정합화(엣지 카탈로그 이원화 해소, id 표준 정정)가 **V4.1로 승격**되었습니다.
-> 현행 SSOT 문서: `docs/CCOP_ONTOLOGY_V4.1.md` (변경 이력은 그 문서 §0.1 참조).
-
-**작성일**: 2026-05-21
-**상태**: **DEPRECATED** (→ V4.1로 정합화·승격, 2026-07-31)
-**대체 대상**: V3.5 / V3.6 (OSINT) / V3.7 문서 (모두 deprecated → V4.0 통합)
+**작성일**: 2026-07-31 (V4.0 2026-05-21 → V4.1 정합화)
+**상태**: **현행 SSOT** (Single Source of Truth)
+**대체 대상**: V4.0 (→ V4.1로 정합화·승격), V3.5 / V3.6 / V3.7 (deprecated)
 **SSOT 코드**: `app/middleware/services/ontology_service.py:KICSCrimeDomainOntology`
 
 > **V3.7 (수사 풀스택) + OSINT V3.6 (공개정보)** 통합 표준
 > 단일 SSOT 카탈로그 + 도메인 사용 매트릭스 + 추론 규칙 + 표준 메타
+> **V4.1**: V4.0의 카탈로그를 코드와 3자 정합화(엣지 60 확정, id 표준 정정) — §0.1 참조
 
 ---
 
-## 0. V4.0 핵심 변화 한눈에
+## 0. V4.1 핵심 변화 한눈에
 
-| 차원 | V3.7 (이전) | **V4.0 (통합)** |
+| 차원 | V3.7 (이전) | **V4.1 (현행)** |
 |---|---|---|
-| 카탈로그 | 25 노드 / 60 엣지 | **동일** (SSOT 안정성) — 엣지 60은 2026-07-31 정합화 실측(구 "53" 명목치 정정) |
+| 카탈로그 | 25 노드 / 53 엣지(명목) | **25 노드 / 60 엣지** — 정합화로 의미·시각·엑셀 3자 실측 일치 (구 "53"은 명목 오류) |
 | 의미론적 레이어 | POLE 6 | **POLE 6 + Hub 7** ⭐ (군집 허브 명시) |
 | 도메인 사용 명시 | 암묵적 (보고서 산재) | **DOMAIN_USAGE 표준 메타** ⭐ (25 × 4) |
 | 식별자 형식 | 표준 컬럼명만 | **NODE_ID_STANDARD 표준 메타** ⭐ (id_format) |
@@ -26,6 +23,40 @@
 | Provenance | reliability_tier 부분 | **모든 노드 source_domain + reliability_tier 의무화** ⭐ |
 | Deprecated 정책 | 암묵적 | **read-only 표준화** ⭐ (clusters_with) |
 | Cross-domain 연결 | 수동 | **sameAs + canonical_id + id_format 자동화 가능** ⭐ |
+
+---
+
+## 0.1 V4.0 → V4.1 변경 이력 (2026-07-31 정합화)
+
+V4.1은 **새 노드/엣지를 추가하지 않는다.** V4.0 문서·코드·엑셀 3자를 대조해 발견한 카탈로그
+불일치를 해소하고, 명목 수치를 실측으로 정정한 **정합화 릴리스**다.
+
+### 배경 — 왜 필요했나
+V4.0은 "엣지 53종"으로 표기했으나, 코드를 정적 분석하니 **의미 카탈로그(`RELATIONSHIPS`) 52 /
+시각 카탈로그(`EDGE_STYLE_V40`) 55**로 셋 다 "53"과 달랐다. 즉 같은 엣지의 정의가 두 곳에
+나뉘어(**이원화**) 동기화되지 않았고, "53"은 실측 근거 없는 명목치였다. 특히 **시각 스타일은
+있으나 의미 정의가 없는 엣지 8종**은 화면엔 그려지면서도 T2C·검증·비주얼 쿼리에서 인식되지
+않는 사각지대였다.
+
+### 변경 항목
+
+| # | 항목 | 내용 |
+|---|------|------|
+| **A** | 엣지 의미 등재 | 시각-only 8종(`involves`·`communicated_with`·`contacted`·`impersonates`·`owns_wallet`·`performed_by`·`uses_device`·`verified_by`)을 `RELATIONSHIPS`에 의미 정의(출발/도착/의미/법적의미) 등재 |
+| **B** | 엣지 시각 등재 | 의미-only 2종(`used_ip`·`owns`)을 `EDGE_STYLE_V40`에 스타일 등재 |
+| **C** | 보류 3종 처리 | `controls`(실질지배)·`located_at`(정적위치) 정식 등재, `owns_device`는 `uses_device` 별칭(deprecated) |
+| **D** | id 표준 정정 | `NODE_ID_STANDARD.canonical_field`를 실제 MERGE 키에 맞춤: `vt_case` case_no→**flnm**, `vt_email`→**email_addr**, `vt_crypto`→**wallet_addr**, `vt_vhcl`→**vhclno**, `vt_movement`→**mov_id**. 이벤트 6종 id_format을 엑셀에서 plain→**uuid**로 정정(코드 기준) |
+| **E** | 수치 삼면 동기화 | 코드 docstring·본 문서·엑셀의 "53" → **60** 통일 |
+| **F** | 재발 방지 | `scripts/test_ontology_catalog_sync.py` 회귀 테스트 추가 — 시각-only 엣지 금지 + 노드 5구조 25 정합 검증 |
+
+### 결과
+- **엣지 60종**: `RELATIONSHIPS`(의미) = `EDGE_STYLE_V40`(시각) = 엑셀 = **60 완전 일치**
+- **노드 25종**: 변동 없음 (id 표준 필드명만 실측 정정)
+- 8종 엣지가 이제 T2C 스키마·검증 화이트리스트·비주얼 쿼리 컴파일러에서 **정식 인식**
+- **D의 함의**: 표준 정의(NODE_ID_STANDARD)가 실제 ETL과 여러 곳 달랐고, **실제 MERGE 키가 현실**이었다(vt_case는 `case_no`가 아닌 `flnm`으로 저장). 표준을 현실에 맞춤
+
+### 남은 과제 (V4.2 후보)
+- 추론 규칙 이원화: `INFERENCE_RULES`(리스트 10) ↔ `INFERENCE_RULES_V37`(딕셔너리 4)의 구조 통합, `RelayStationDetection` 중복 정리, 문서가 약속한 `SameAsResolution` 구현/삭제 결정
 
 ---
 
