@@ -2,7 +2,7 @@
 온톨로지 서비스 — 호환성 re-export 모듈
 
 이 파일은 app.middleware.services.ontology_service의 alias입니다.
-소스 오브 트루스: app/middleware/services/ontology_service.py (v3.5)
+소스 오브 트루스: app/middleware/services/ontology_service.py (V4.0)
 
 변경 이력:
   v3.0~v3.2: 이 파일이 직접 정의를 포함

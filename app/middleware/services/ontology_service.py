@@ -1,16 +1,15 @@
 """
 온톨로지 기반 그래프 분석 서비스
 
-CCOP v3.7 온톨로지 — POLE 정렬 6레이어 아키텍처
-최종 설계 기준: docs/ONTOLOGY_FINAL_ARCHITECTURE_v3.7.md
-v3.6 → v3.7:
-  - pt_cluster 노드 추가 (CASE LAYER) — clusters_with O(n²) 엣지 → 허브 노드 패턴
-  - site_cluster 노드 추가 (OBJECT LAYER) — SimHash 기반 피싱 캠페인 군집
-  - vt_psn.is_anonymous 속성 추가 — 성명불상 피의자 관리
-  - used_in_device 엣지 추가 (Phone→Device) — 불법 중계기 탐지
-  - clusters_with deprecated (신규 생성 금지)
-  - RelayStationDetection 추론 규칙 추가 (10번째)
-노드: 25개 | 엣지: 53종 | 추론 규칙: 10개
+CCOP V4.0 온톨로지 — POLE 정렬 6레이어 아키텍처 (현행 SSOT)
+현행 설계 기준: docs/CCOP_ONTOLOGY_V4.0.md (+ 상세: ONTOLOGY_FINAL_ARCHITECTURE_v3.7.md)
+버전 이력:
+  - v3.7: pt_cluster/site_cluster 노드(군집 허브 패턴), is_anonymous, used_in_device,
+          clusters_with deprecated, RelayStationDetection 추론 규칙
+  - V4.0: DOMAIN_USAGE·NODE_ID_STANDARD·INFERENCE_RULES_V37 메타를 SSOT로 격상
+  - 2026-07-31 정합화: 엣지 의미(RELATIONSHIPS)↔시각(EDGE_STYLE_V40) 이원화 해소
+          — 실사용되나 카탈로그 한쪽에만 있던 엣지 등재, id 표준을 실 MERGE 키로 정정
+노드: 25 | 엣지: 60 (의미=시각 일치) | 추론 규칙: 10(list) + 4(INFERENCE_RULES_V37)
 """
 
 class KICSCrimeDomainOntology:
