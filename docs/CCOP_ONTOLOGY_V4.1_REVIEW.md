@@ -131,11 +131,26 @@ Part 1·2의 개선점을 통합하여 우선순위화:
 | 순위 | 항목 | 근거 | 성격 | 비고 |
 |---|---|---|---|---|
 | 🔴 1 | **CASE/UCO 매핑 레이어** | Part1-#1, 렌즈 D | 전략(장기) | 국제 상호운용; 구조 유사로 난이도 낮음 |
-| 🟠 2 | **추론규칙 이원화 해소** | 렌즈 B | 즉시 실행(V4.2) | 코드로 바로. INFERENCE_RULES(리스트 10) ↔ INFERENCE_RULES_V37(딕셔너리 4) 통합 |
-| 🟠 3 | **Text2Cypher 질문별 스키마 pruning** | Part1-#6, 렌즈 E | 코드 구현 | few_shot_router에 질문별 스키마 필터링 추가 → v42 정확도 |
+| ✅ 2 | **추론규칙 이원화 해소** | 렌즈 B | **완료** (V4.2, `d850173`) | INFERENCE_RULES 단일 dict 13종 통합 + 회귀 테스트 |
+| ✅ 3 | **Text2Cypher 질문별 스키마 pruning** | Part1-#6, 렌즈 E | **완료+실측** (`4d8f1a0`) | 키워드 exact-match 라벨 보강 → A/B **+5.5p** (아래 실측 결과) |
 | 🟠 4 | **증거 파생 체인**(derivedFrom/informedBy) | Part1-#3 | 설계 확장 | 법정 증거능력; CASE 수준 chain of custody |
 | 🟡 5 | **Competency Questions 공식화** | 렌즈 E | 문서화 | 232문항 → 온톨로지 커버리지 체크리스트 |
 | 🟡 6 | **RDF 뷰 검토**(하이브리드, OWL 추론 대체) | 렌즈 C | 선택(장기) | 국제 교환용 |
+
+### 🟠3 실측 결과 — 스키마 pruning 키워드 보강 A/B (2026-07-31)
+
+제언 🟠3을 구현(커밋 `4d8f1a0`)하고, 실서비스 langgraph 경로(v42 sLLM, 엘리스 A100 80GB)에서 45케이스 A/B를 **4회**(단발 1 + 반복 3) 측정했다. router(LLM)의 semantic 라벨 예측에 **질문 키워드 exact-match 라벨 보강**(recall 안전장치 `LABEL_ALIASES` — 근거 arXiv 2505.05118)을 합집합으로 더한 결과:
+
+| 조건 | 평균 정답률 | 범위 |
+|---|---|---|
+| OFF (순수 semantic router) | 88.9% | 86.7 ~ 91.1% |
+| **ON (키워드 exact-match 보강)** | **94.5%** | 93.3 ~ 95.6% |
+| **Δ** | **+5.5p** (하한 +4.4p) | 4회 모두 양수 |
+
+- **regression 0** — 4회 측정 전부 ON ≥ OFF. sLLM 생성 비결정성이 있어도 augmentation은 **단방향 개선**.
+- **분산 감소** — ON(폭 2.3p)이 OFF(폭 4.4p)보다 안정적. 보강이 정답률을 올릴 뿐 아니라 router 누락을 방어해 **하한을 끌어올림**(recall 안전장치의 전형적 효과).
+- **결정론적 재현 케이스**: "진정서에서 전환된 사건"(`vt_petition` 누락), "피싱 캠페인의 사이트의 호스팅 IP"(3-hop `vt_site` 누락)가 4회 전부 OFF✗ → ON✓.
+- 재현 자산: `scripts/ab_schema_augment.py` (`use_keyword_augment` on/off 스위치).
 
 ---
 
