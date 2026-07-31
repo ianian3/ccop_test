@@ -128,6 +128,22 @@ class TestOntologyDefinition:
         assert set(Onto.INFERENCE_RULES_V37) == enrichment, "V37 하위호환 뷰 불일치"
         print(f"  ✅ 추론 규칙 통합 13종 (탐지 9 + enrichment 4), V37 뷰 정합")
 
+    def test_label_alias_keyword_matching(self):
+        """LABEL_ALIASES 스키마 pruning recall 보강 (arXiv 2505.05118 exact-match)"""
+        node_labels = set(Onto.LABEL_KO_MAP.keys())
+        alias_labels = set(Onto.LABEL_ALIASES.keys())
+        assert alias_labels <= node_labels, f"별칭 사전에 미존재 라벨: {alias_labels - node_labels}"
+        # 대표 질문 — router가 놓쳐도 키워드가 잡아야 (recall 보강)
+        assert set(Onto.match_labels_by_keywords('계좌 이체 내역')) == {'vt_bacnt', 'vt_transfer'}
+        assert 'vt_impersonation' in Onto.match_labels_by_keywords('기관 사칭 사건')
+        assert Onto.match_labels_by_keywords('한국 수도는?') == []
+        # valid_labels 교차 — 현재 그래프에 없는 라벨 제외 (precision 유지)
+        assert Onto.match_labels_by_keywords('계좌 이체', valid_labels={'vt_bacnt'}) == ['vt_bacnt']
+        # 빈/None 입력 안전
+        assert Onto.match_labels_by_keywords('') == []
+        assert Onto.match_labels_by_keywords(None) == []
+        print(f"  ✅ LABEL_ALIASES {len(alias_labels)}종 · 키워드 매칭·교차·안전 정상")
+
 
 # ─────────────────────────────────────────────────────────────
 # 2. 온톨로지 변환(Enrichment) 테스트

@@ -11,6 +11,7 @@ from openai import OpenAI
 from app.services.ai_service import AIService
 from app.services.graph_service import GraphService
 from app.services.schema_tools_server import SchemaToolServer
+from app.services.ontology_service import KICSCrimeDomainOntology
 
 logger = logging.getLogger(__name__)
 
@@ -434,6 +435,20 @@ class LangGraphAgent:
                 active_schema = base_schema
             else:
                 active_schema = dynamic_schema
+
+        # exact-match 라벨 보강 (recall 안전장치): router(LLM) semantic 예측이 놓친 라벨을
+        # 질문 텍스트의 스키마 용어 매칭으로 결정론적 보강 (근거: arXiv 2505.05118)
+        # use_keyword_augment=False 로 끄면 기존(순수 semantic) 동작 — A/B 평가용
+        if config.get("use_keyword_augment", True):
+            kw_labels = KICSCrimeDomainOntology.match_labels_by_keywords(
+                state.get('question', ''), set(active_schema.get('node_labels', {}).keys())
+            )
+            if kw_labels:
+                _before = set(predicted_labels)
+                predicted_labels = list(dict.fromkeys(list(predicted_labels) + kw_labels))
+                _added = set(predicted_labels) - _before
+                if _added:
+                    logger.info(f"[Schema] keyword-augmented labels: +{sorted(_added)}")
 
         # 라우터 예측 레이블로 스키마 축소 (관련 노드·엣지만 남김)
         if predicted_labels:

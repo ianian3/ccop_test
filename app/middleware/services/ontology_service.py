@@ -949,7 +949,57 @@ class KICSCrimeDomainOntology:
         'Event':  ['vt_transfer', 'vt_call', 'vt_access', 'vt_msg', 'vt_movement',
                    'vt_impersonation'],                               # V3.3
     }
-    
+
+    # ── Text2Cypher 스키마 pruning용 라벨 별칭 사전 (recall 안전장치) ──────────
+    # router(LLM) semantic 예측이 놓친 노드 라벨을, 질문에 명시된 용어의 substring
+    # 매칭으로 결정론적으로 보강한다. 근거: arXiv 2505.05118 (exact-match schema filtering).
+    # ※ 지식 출처는 ai_service.route_question 프롬프트의 라벨 힌트와 동일 —
+    #   향후 그 프롬프트를 본 dict에서 생성해 SoT 단일화 권장 (V4.3 후보).
+    #   모호어(은행/번호/거래 등 다의어)는 과잉매칭 방지를 위해 의도적으로 제외.
+    LABEL_ALIASES = {
+        'vt_case':          ['사건', '범죄사건', '형사사건'],
+        'vt_petition':      ['진정서', '진정', '신고서', '접수'],
+        'vt_psn':           ['피의자', '피해자', '참고인', '용의자', '공범'],
+        'vt_org':           ['조직', '단체', '범죄조직', '법인'],
+        'vt_bacnt':         ['계좌', '통장', '대포통장', '계좌번호'],
+        'vt_telno':         ['전화번호', '핸드폰', '휴대폰', '대포폰', '사칭번호'],
+        'vt_ip':            ['아이피', '접속주소', '접속ip'],
+        'vt_site':          ['사이트', '도메인', '홈페이지', '피싱사이트'],
+        'vt_file':          ['악성코드', '악성파일', '해시값', '첨부파일'],
+        'vt_id':            ['아이디', '계정', '닉네임'],
+        'vt_email':         ['이메일', '메일주소', '이메일주소'],
+        'vt_crypto':        ['가상화폐', '가상자산', '지갑주소', '코인', '블록체인', '비트코인'],
+        'vt_vhcl':          ['차량', '번호판', '자동차', '차량번호'],
+        'vt_dev':           ['중계기', '단말기', 'imei', 'relay'],
+        'vt_atm':           ['현금인출기', '자동화기기'],
+        'vt_loc':           ['위치', '좌표', '기지국', 'cctv'],
+        'vt_transfer':      ['이체', '송금', '출금', '입금', '자금흐름', '자금세탁'],
+        'vt_call':          ['통화', '통화내역', '전화기록'],
+        'vt_access':        ['접속기록', '로그인', '접속로그'],
+        'vt_msg':           ['문자메시지', '문자', '메시지', '채팅'],
+        'vt_movement':      ['이동경로', '동선', '교통카드'],
+        'vt_impersonation': ['사칭', '위장', '스푸핑', '기관사칭'],
+    }
+
+    @staticmethod
+    def match_labels_by_keywords(question, valid_labels=None):
+        """질문 텍스트에 명시된 스키마 용어를 substring 매칭해 노드 라벨을 반환.
+
+        Text2Cypher 스키마 pruning의 recall 안전장치 — router(LLM) semantic 예측이
+        놓친 라벨을 결정론적으로 보강한다. (근거: arXiv 2505.05118, exact-match filtering)
+        valid_labels 지정 시 그 집합과 교차(현재 그래프에 실재하는 라벨만 반환).
+        """
+        if not question:
+            return []
+        q = str(question).lower()
+        hits = []
+        for label, aliases in KICSCrimeDomainOntology.LABEL_ALIASES.items():
+            if valid_labels is not None and label not in valid_labels:
+                continue
+            if any(alias.lower() in q for alias in aliases):
+                hits.append(label)
+        return hits
+
     @classmethod
     def get_gdb_label(cls, concept_name):
         """개념명을 GDB 라벨로 변환 (Person → vt_psn)"""
