@@ -97,12 +97,12 @@ class KICSCrimeDomainOntology:
         },
         # V4.0 P2 — 나머지 16노드 id_format 표준 (감사 리포트 §6 보강)
         'vt_src':          {'canonical_field': 'src_id',        'id_formats': ['plain'],         'default_format': 'plain'},
-        'vt_case':         {'canonical_field': 'case_no',       'id_formats': ['plain'],         'default_format': 'plain'},
+        'vt_case':         {'canonical_field': 'flnm',          'id_formats': ['plain'],         'default_format': 'plain'},  # [정합화] 실 MERGE 키=flnm
         'vt_petition':     {'canonical_field': 'petition_id',   'id_formats': ['plain'],         'default_format': 'plain'},
         'vt_org':          {'canonical_field': 'org_id',        'id_formats': ['plain'],         'default_format': 'plain'},
-        'vt_email':        {'canonical_field': 'eml_addr',      'id_formats': ['normalized'],    'default_format': 'normalized'},
-        'vt_crypto':       {'canonical_field': 'addr',          'id_formats': ['base58check'],   'default_format': 'base58check'},
-        'vt_vhcl':         {'canonical_field': 'vhcl_no',       'id_formats': ['plain'],         'default_format': 'plain'},
+        'vt_email':        {'canonical_field': 'email_addr',    'id_formats': ['normalized'],    'default_format': 'normalized'},  # [정합화] 실 MERGE 키=email_addr
+        'vt_crypto':       {'canonical_field': 'wallet_addr',   'id_formats': ['base58check'],   'default_format': 'base58check'},  # [정합화] 실 MERGE 키=wallet_addr
+        'vt_vhcl':         {'canonical_field': 'vhclno',        'id_formats': ['plain'],         'default_format': 'plain'},  # [정합화] 실 MERGE 키=vhclno
         'vt_dev':          {'canonical_field': 'dev_id',        'id_formats': ['plain', 'imei'], 'default_format': 'plain'},
         'vt_atm':          {'canonical_field': 'atm_id',        'id_formats': ['plain'],         'default_format': 'plain'},
         'vt_loc':          {'canonical_field': 'loc_id',        'id_formats': ['plain', 'geohash'], 'default_format': 'plain'},
@@ -110,7 +110,7 @@ class KICSCrimeDomainOntology:
         'vt_call':         {'canonical_field': 'call_id',       'id_formats': ['uuid'],          'default_format': 'uuid'},
         'vt_access':       {'canonical_field': 'access_id',     'id_formats': ['uuid'],          'default_format': 'uuid'},
         'vt_msg':          {'canonical_field': 'msg_id',        'id_formats': ['uuid'],          'default_format': 'uuid'},
-        'vt_movement':     {'canonical_field': 'movement_id',   'id_formats': ['uuid'],          'default_format': 'uuid'},
+        'vt_movement':     {'canonical_field': 'mov_id',        'id_formats': ['uuid'],          'default_format': 'uuid'},  # [정합화] 실 MERGE 키=mov_id
         'vt_impersonation':{'canonical_field': 'impersonation_id','id_formats': ['uuid'],        'default_format': 'uuid'},
     }
 
@@ -321,6 +321,12 @@ class KICSCrimeDomainOntology:
         'uses_email':         {'color': '#A569BD', 'width': 1, 'arrow': 'triangle', 'style': 'solid'},
         'owns_wallet':        {'color': '#F1C40F', 'width': 2, 'arrow': 'triangle', 'style': 'solid'},
         'uses_device':        {'color': '#7D3C98', 'width': 2, 'arrow': 'triangle', 'style': 'solid'},
+        # [V4.0 정합화] 의미 카탈로그에만 있던 실사용 엣지 스타일 등재 (2026-07-31)
+        'used_ip':            {'color': '#5499C7', 'width': 1, 'arrow': 'triangle', 'style': 'solid'},    # Person→Digital 계열 (uses_id 동계열)
+        'owns':               {'color': '#0066CC', 'width': 1, 'arrow': 'triangle', 'style': 'dashed'},   # 범용 소유 — has_account 계열의 보조형(얇은 대시)
+        'controls':           {'color': '#0052A3', 'width': 2, 'arrow': 'triangle', 'style': 'dashed'},   # 실질지배 — 소유(진파랑)의 강조 대시
+        'located_at':         {'color': '#00B894', 'width': 1, 'arrow': 'triangle', 'style': 'dotted'},   # Location 계열 (정적 위치, 점선)
+        'owns_device':        {'color': '#7D3C98', 'width': 2, 'arrow': 'triangle', 'style': 'dashed'},   # uses_device 별칭(deprecated) — 동색 대시로 구분
         # 기타
         'registered_to':      {'color': '#5499C7', 'width': 1, 'arrow': 'triangle', 'style': 'solid'},
         'operates':           {'color': '#9B59B6', 'width': 2, 'arrow': 'triangle', 'style': 'solid'},
@@ -1447,6 +1453,123 @@ class KICSCrimeDomainOntology:
             'label_ko': '목적지',
             'meaning': '접속이벤트의 목적지 사이트 (accessed_from과 쌍으로 사용)',
             'legal_significance': '통신자료',
+            'properties': ['source_id', 'rec_created']
+        },
+        # ═══════════════════════════════════════════════════════════
+        # [V4.0 정합화] 시각 카탈로그(EDGE_STYLE_V40)에만 있던 실사용 엣지 8종
+        #   — 의미 정의를 CCOP_Ontology_V4.0.xlsx 엣지카탈로그 기준으로 등재 (2026-07-31)
+        # ═══════════════════════════════════════════════════════════
+        'involves': {
+            'domain': 'Case',
+            'range': 'Person',
+            'source_types': [],
+            'semantic_relation': 'involves',
+            'label_ko': '사건관련',
+            'meaning': '사건에 관련된 인물 (역할 미상 시 suspect_in/victim_in/witness_in 대신 사용)',
+            'legal_significance': '사건관련성',
+            'properties': ['source_id', 'rec_created']
+        },
+        'communicated_with': {
+            'domain': 'NetworkTrace',
+            'range': 'NetworkTrace',
+            'source_types': [],
+            'semantic_relation': 'communicatedWith',
+            'label_ko': 'IP통신',
+            'meaning': 'IP 간 직접 통신 이력',
+            'legal_significance': '통신사실확인자료',
+            'properties': ['source_id', 'rec_created']
+        },
+        'contacted': {
+            'domain': 'Phone',
+            'range': 'Phone',
+            'source_types': [],
+            'semantic_relation': 'contacted',
+            'label_ko': '연락관계',
+            'meaning': '전화번호 간 통화/연락 관계 (vt_call 이벤트의 요약 엣지 성격)',
+            'legal_significance': '통신사실확인자료',
+            'properties': ['source_id', 'rec_created']
+        },
+        'impersonates': {
+            'domain': 'Person',
+            'range': 'Organization',
+            'source_types': [],
+            'semantic_relation': 'impersonates',
+            'label_ko': '사칭',
+            'meaning': '인물이 기관/조직을 사칭 (v3.3에서 vt_impersonation 노드로 승격 — 본 직접 엣지는 read-only 유지)',
+            'legal_significance': '사칭수법',
+            'properties': ['source_id', 'rec_created']
+        },
+        'owns_wallet': {
+            'domain': 'Person',
+            'range': 'CryptoWallet',
+            'source_types': [],
+            'semantic_relation': 'ownsWallet',
+            'label_ko': '지갑소유',
+            'meaning': '인물이 가상자산 지갑을 소유',
+            'legal_significance': '재산관계',
+            'properties': ['source_id', 'rec_created']
+        },
+        'performed_by': {
+            'domain': 'Any',  # Access or Movement
+            'range': 'Person',
+            'source_types': [],
+            'semantic_relation': 'performedBy',
+            'label_ko': '수행주체',
+            'meaning': '접속(vt_access)·이동(vt_movement) 이벤트의 수행 주체 인물',
+            'legal_significance': '행위귀속',
+            'properties': ['source_id', 'rec_created']
+        },
+        'uses_device': {
+            'domain': 'Person',
+            'range': 'Device',
+            'source_types': [],
+            'semantic_relation': 'usesDevice',
+            'label_ko': '기기사용',
+            'meaning': '인물이 기기를 소유/사용',
+            'legal_significance': '디지털증거',
+            'properties': ['valid_from', 'valid_to', 'source_id', 'rec_created']
+        },
+        'verified_by': {
+            'domain': 'Person',
+            'range': 'Person',
+            'source_types': [],
+            'semantic_relation': 'verifiedBy',
+            'label_ko': '검증자',
+            'meaning': '수사관(인물)이 대상 정보를 검증함 (Provenance 계열)',
+            'legal_significance': '증거검증',
+            'properties': ['verified_dt', 'source_id', 'rec_created']
+        },
+        # ── [V4.0 정합화 C단계] 의미-only 였던 3종 처리 (2026-07-31) ──
+        'controls': {
+            'domain': 'Person',
+            'range': 'BankAccount',
+            'source_types': [],
+            'semantic_relation': 'controls',
+            'label_ko': '실질지배',
+            'meaning': '인물이 계좌를 실질 지배(명의자와 무관한 실사용자) — 소유(has_account)와 구별',
+            'legal_significance': '실사용자',
+            'properties': ['confidence', 'source_id', 'rec_created']
+        },
+        'located_at': {
+            'domain': 'Any',  # ATM / Organization 등 고정 객체
+            'range': 'Location',
+            'source_types': [],
+            'semantic_relation': 'locatedAt',
+            'label_ko': '위치',
+            'meaning': '고정 객체(ATM·기관 등)의 정적 위치 (이벤트 경유 occurred_at과 구별)',
+            'legal_significance': '위치정보',
+            'properties': ['source_id', 'rec_created']
+        },
+        'owns_device': {
+            'domain': 'Person',
+            'range': 'Device',
+            'source_types': [],
+            'semantic_relation': 'usesDevice',
+            'label_ko': '기기소유',
+            'meaning': '[DEPRECATED — uses_device 사용] 인물이 기기를 소유. 신규 데이터는 uses_device로 통일',
+            'legal_significance': '디지털증거',
+            'deprecated': True,
+            'alias_of': 'uses_device',
             'properties': ['source_id', 'rec_created']
         },
     }
