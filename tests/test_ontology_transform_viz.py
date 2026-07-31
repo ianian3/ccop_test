@@ -108,14 +108,25 @@ class TestOntologyDefinition:
         print(f"  ✅ 엣지 정의 필수 필드 완전 ({len(Onto.RELATIONSHIPS)}개 엣지)")
 
     def test_inference_rules_count(self):
-        """INFERENCE_RULES 10개 정의 확인 (V3.7: 군집 추론 규칙 추가)"""
-        count = len(Onto.INFERENCE_RULES)
-        assert count == 10, f"추론 규칙 수 불일치: 기대 10개, 실제 {count}개"
-        for rule in Onto.INFERENCE_RULES:
-            assert 'name' in rule and 'confidence' in rule, (
-                f"추론 규칙 필수 필드 누락: {rule}"
-            )
-        print(f"  ✅ 추론 규칙 8개 완전 정의")
+        """INFERENCE_RULES 통합 카탈로그 확인 (V4.2: 이원화 해소 — 단일 dict 13종)"""
+        rules = Onto.INFERENCE_RULES
+        assert isinstance(rules, dict), "INFERENCE_RULES는 SoT 단일 dict여야 함 (V4.2 이원화 해소)"
+        assert len(rules) == 13, f"추론 규칙 수 불일치: 기대 13종, 실제 {len(rules)}종"
+        detection = {n for n, r in rules.items() if r.get('rule_type') == 'detection'}
+        enrichment = {n for n, r in rules.items() if r.get('rule_type') == 'enrichment'}
+        assert len(detection) == 9, f"탐지 규칙 9종 기대, 실제 {len(detection)}종"
+        assert len(enrichment) == 4, f"enrichment 규칙 4종 기대, 실제 {len(enrichment)}종"
+        assert detection | enrichment == set(rules), "rule_type 미태깅 규칙 존재"
+        for name, rule in rules.items():
+            assert rule.get('rule_type') in ('detection', 'enrichment'), f"rule_type 오류: {name}"
+            if rule['rule_type'] == 'detection':
+                assert 'confidence' in rule, f"탐지 규칙 confidence 누락: {name}"
+        # RelayStationDetection: 구 list(탐지)+구 V37(생성) 중복이 단일로 병합, 정보 무손실
+        rs = rules['RelayStationDetection']
+        assert rs['algorithm'] and rs['confidence'] and rs['output_edges'] == ['used_in_device']
+        # 하위호환 뷰: INFERENCE_RULES_V37 == enrichment 부분집합 (기존 /ontology/meta API)
+        assert set(Onto.INFERENCE_RULES_V37) == enrichment, "V37 하위호환 뷰 불일치"
+        print(f"  ✅ 추론 규칙 통합 13종 (탐지 9 + enrichment 4), V37 뷰 정합")
 
 
 # ─────────────────────────────────────────────────────────────

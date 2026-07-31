@@ -9,11 +9,14 @@ CCOP V4.1 온톨로지 — POLE 정렬 6레이어 아키텍처 (현행 SSOT)
   - V4.0: DOMAIN_USAGE·NODE_ID_STANDARD·INFERENCE_RULES_V37 메타를 SSOT로 격상
   - V4.1 (2026-07-31 정합화): 엣지 의미(RELATIONSHIPS)↔시각(EDGE_STYLE_V40) 이원화 해소
           — 실사용되나 카탈로그 한쪽에만 있던 엣지 등재(53 명목→60 실측), id 표준을 실 MERGE 키로 정정
-노드: 25 | 엣지: 60 (의미=시각 일치) | 추론 규칙: 10(list) + 4(INFERENCE_RULES_V37)
+  - V4.2 (2026-07-31 정합화): 추론 규칙 이원화 해소 — 구 INFERENCE_RULES(list 10)와
+          INFERENCE_RULES_V37(dict 4)의 RelayStationDetection 중복을 단일 dict로 병합(13종).
+          rule_type(detection/enrichment)으로 목적 구분, V37은 enrichment 하위호환 뷰.
+노드: 25 | 엣지: 60 (의미=시각 일치) | 추론 규칙: 13종 통합 dict (탐지 9 + enrichment 4)
 """
 
 class KICSCrimeDomainOntology:
-    """KICS 기반 한국형 사이버 범죄 온톨로지 (v3.7 POLE 6레이어, 53종 엣지)"""
+    """KICS 기반 한국형 사이버 범죄 온톨로지 (V4.2 POLE 6레이어 · 60종 엣지 · 추론규칙 13종)"""
 
     # 엣지 공통 메타속성 스키마 (EDGE_META_SCHEMA)
     EDGE_META_SCHEMA = {
@@ -148,11 +151,102 @@ class KICSCrimeDomainOntology:
     }
 
     # ══════════════════════════════════════════════════════════════════════════
-    # 추론 규칙 카탈로그 (V3.7) - INFERENCE_RULES_V37
-    # 기존 KICSCrimeDomainOntology.INFERENCE_RULES (list)와 충돌 회피
+    # 추론 규칙 통합 카탈로그 (V4.2 정합화) — INFERENCE_RULES
     # ══════════════════════════════════════════════════════════════════════════
-    INFERENCE_RULES_V37 = {
+    # V4.1까지 이원화되어 있던 두 카탈로그를 단일 dict로 통합 (SoT 단일화):
+    #   구 INFERENCE_RULES(list 10종, 탐지) + 구 INFERENCE_RULES_V37(dict 4종, enrichment)
+    #   → 양쪽에 중복이던 RelayStationDetection을 무손실 1건으로 병합 → 총 13종
+    # 키 = 규칙명(고유 → 중복 구조적 차단). rule_type 으로 목적 구분:
+    #   detection  : 패턴 탐지 → 플래그/추론엣지 (pattern·trigger·threshold·confidence·legal_basis)
+    #   enrichment : ETL 군집/엔티티 생성       (algorithm·input_nodes·output_nodes·frequency)
+    # 하위호환: INFERENCE_RULES_V37 = enrichment 뷰(아래 자동 파생) → 기존 /ontology/meta API 무변경
+    INFERENCE_RULES = {
+        # ─── Detection 규칙 (9종): 패턴 탐지 → 플래그/추론엣지 ─────────────────
+        'OrganizedCrime': {
+            'rule_type':         'detection',
+            'pattern':           'shared_resource_usage',
+            'trigger':           '동일 계좌/전화가 3건+ 사건에서 사용',
+            'threshold':         3,
+            'confidence':        0.80,
+            'output_edge':       'accomplice_of',
+            'legal_basis':       '범죄수익은닉규제법',
+        },
+        'MoneyLaundering': {
+            'rule_type':         'detection',
+            'pattern':           'multi_hop_transfer',
+            'trigger':           '3단계+ 계좌이체 (hop_level >= 3)',
+            'threshold':         3,
+            'confidence':        0.75,
+            'output_edge':       'suspicious_transfer',
+            'legal_basis':       '특정금융거래정보법',
+        },
+        'Accomplice': {
+            'rule_type':         'detection',
+            'pattern':           'shared_contacts',
+            'trigger':           '2인 이상이 5건+ 공통 통화 대상 공유',
+            'threshold':         5,
+            'confidence':        0.70,
+            'output_edge':       'accomplice_of',
+            'legal_basis':       '형법 제30조 공동정범',
+        },
+        'BurnerAccount': {
+            'rule_type':         'detection',
+            'pattern':           'high_frequency_transfer',
+            'trigger':           '1시간 내 10건+ 이체 또는 3일 이내 개설·사용·해지',
+            'threshold':         10,
+            'confidence':        0.85,
+            'output_node_flag':  'vt_bacnt.is_burner = True',
+            'legal_basis':       '전자금융거래법',
+        },
+        'BurnerPhone': {
+            'rule_type':         'detection',
+            'pattern':           'prepaid_high_activity',
+            'trigger':           '선불폰 (join_typ_cd=PREPAID) + 스팸신고 3건+',
+            'threshold':         3,
+            'confidence':        0.80,
+            'output_node_flag':  'vt_telno.is_burner = True',
+            'legal_basis':       '전기통신사업법',
+        },
+        'EntityResolutionCandidate': {
+            'rule_type':         'detection',
+            'pattern':           'shared_phone_and_account',
+            'trigger':           '두 vt_psn이 동일 전화번호 + 계좌 1개 이상 공유',
+            'threshold':         1,
+            'confidence':        0.85,
+            'output_edge':       'sameAs',
+            'review_required':   True,   # 사람/조직 해소는 human-in-the-loop (자동 확정 금지)
+            'legal_basis':       None,
+        },
+        'CrossDomainHub': {
+            'rule_type':         'detection',
+            'pattern':           'ip_account_phone_correlation',
+            'trigger':           '동일 IP에서 다수 계좌+전화 접속',
+            'threshold':         2,
+            'confidence':        0.80,
+            'output_flag':       'hub_suspect',
+            'legal_basis':       '정보통신망법',
+        },
+        'NightCrimePattern': {
+            'rule_type':         'detection',
+            'pattern':           'night_time_activity',
+            'trigger':           '00~06시 3건+ 이체/통화',
+            'threshold':         3,
+            'confidence':        0.65,
+            'output_flag':       'night_activity',
+            'legal_basis':       '야간 범행 가중처벌',
+        },
+        'RecruitChainAccomplice': {
+            'rule_type':         'detection',
+            'pattern':           'recruits_chain',
+            'trigger':           '총책 → 조직원 → 말단 recruits 체인 2단계+',
+            'threshold':         2,
+            'confidence':        0.75,
+            'output_edge':       'accomplice_of',
+            'legal_basis':       '형법 제30조 공동정범',
+        },
+        # ─── Enrichment 규칙 (4종): ETL 군집/엔티티 생성 ──────────────────────
         'SiteClusterDetection': {
+            'rule_type':         'enrichment',
             'description':       'HTML SimHash 지문 기반 피싱 캠페인 군집화',
             'input_nodes':       ['vt_site'],
             'input_attributes':  ['html_fingerprint', 'html_src'],
@@ -164,6 +258,7 @@ class KICSCrimeDomainOntology:
             'frequency':         'batch_daily',
         },
         'PtClusterDetection': {
+            'rule_type':         'enrichment',
             'description':       '진정서 유사도 군집화',
             'input_nodes':       ['vt_petition'],
             'input_attributes':  ['petition_text', 'TB_PETTN_CLSTR'],
@@ -173,18 +268,8 @@ class KICSCrimeDomainOntology:
             'applicable_domains':['investigation', 'inference'],
             'frequency':         'batch_daily',
         },
-        'RelayStationDetection': {
-            'description':       '동일 IMEI 3대+ 공유 vt_telno → vt_dev(relay_station)',
-            'input_nodes':       ['vt_telno'],
-            'input_attributes':  ['imei'],
-            'algorithm':         'group_by imei, count >= 3',
-            'output_nodes':      ['vt_dev'],
-            'output_attributes': {'dev_type': 'relay_station'},
-            'output_edges':      ['used_in_device'],
-            'applicable_domains':['investigation', 'inference'],
-            'frequency':         'batch_daily',
-        },
         'AnonymousFlagDetection': {
+            'rule_type':         'enrichment',
             'description':       'name/korn_flnm 비식별 노드 → is_anonymous=true (vt_psn, vt_id)',
             'input_nodes':       ['vt_psn', 'vt_id'],
             'input_attributes':  ['name', 'korn_flnm', 'real_name'],
@@ -195,7 +280,32 @@ class KICSCrimeDomainOntology:
             'applicable_domains':['investigation', 'osint'],
             'frequency':         'on_ingest',
         },
-        # ... 나머지 6종은 향후 추가
+        # RelayStationDetection: 구 list(탐지) + 구 V37(생성)의 중복을 무손실 병합 (이원화 해소 핵심)
+        'RelayStationDetection': {
+            'rule_type':         'enrichment',   # vt_dev 노드/엣지 생성이 주기능, 동시에 탐지 신호
+            'description':       '동일 IMEI 3대+ 공유 vt_telno → vt_dev(relay_station) 생성·탐지',
+            'pattern':           'multi_phone_same_imei',
+            'trigger':           '동일 IMEI(device_id)에 전화번호 3개+',
+            'threshold':         3,
+            'confidence':        0.90,
+            'input_nodes':       ['vt_telno'],
+            'input_attributes':  ['imei'],
+            'algorithm':         'group_by imei, count >= 3',
+            'output_nodes':      ['vt_dev'],
+            'output_attributes': {'dev_type': 'relay_station'},
+            'output_edges':      ['used_in_device'],
+            'output_node_flag':  'vt_dev.dev_type = relay_station',
+            'applicable_domains':['investigation', 'inference'],
+            'frequency':         'batch_daily',
+            'legal_basis':       '전기통신사업법 제30조 (불법중계기 제조·사용 금지)',
+        },
+    }
+
+    # 하위호환 뷰 — 구 INFERENCE_RULES_V37 (enrichment 규칙만). 기존 /ontology/meta API 무변경.
+    # ※ dict-comprehension의 최외곽 iterable(INFERENCE_RULES.items())만 클래스 스코프에서 평가되므로 정상 동작.
+    INFERENCE_RULES_V37 = {
+        _name: _rule for _name, _rule in INFERENCE_RULES.items()
+        if _rule.get('rule_type') == 'enrichment'
     }
 
     # ══════════════════════════════════════════════════════════════════════════
@@ -1784,100 +1894,9 @@ class KICSCrimeDomainOntology:
         'lng': 'lng',
     }
     
-    # 추론 규칙 v3.0 — ONTOLOGY_FINAL_ARCHITECTURE_v3.6.md §9 기준 (8개 규칙)
-    INFERENCE_RULES = [
-        {
-            'name': 'OrganizedCrime',
-            'pattern': 'shared_resource_usage',
-            'trigger': '동일 계좌/전화가 3건+ 사건에서 사용',
-            'threshold': 3,
-            'confidence': 0.80,
-            'output_edge': 'accomplice_of',
-            'legal_basis': '범죄수익은닉규제법'
-        },
-        {
-            'name': 'MoneyLaundering',
-            'pattern': 'multi_hop_transfer',
-            'trigger': '3단계+ 계좌이체 (hop_level >= 3)',
-            'threshold': 3,
-            'confidence': 0.75,
-            'output_edge': 'suspicious_transfer',
-            'legal_basis': '특정금융거래정보법'
-        },
-        {
-            'name': 'Accomplice',
-            'pattern': 'shared_contacts',
-            'trigger': '2인 이상이 5건+ 공통 통화 대상 공유',
-            'threshold': 5,
-            'confidence': 0.70,
-            'output_edge': 'accomplice_of',
-            'legal_basis': '형법 제30조 공동정범'
-        },
-        {
-            'name': 'BurnerAccount',
-            'pattern': 'high_frequency_transfer',
-            'trigger': '1시간 내 10건+ 이체 또는 3일 이내 개설·사용·해지',
-            'threshold': 10,
-            'confidence': 0.85,
-            'output_node_flag': 'vt_bacnt.is_burner = True',
-            'legal_basis': '전자금융거래법'
-        },
-        {
-            'name': 'BurnerPhone',
-            'pattern': 'prepaid_high_activity',
-            'trigger': '선불폰 (join_typ_cd=PREPAID) + 스팸신고 3건+',
-            'threshold': 3,
-            'confidence': 0.80,
-            'output_node_flag': 'vt_telno.is_burner = True',
-            'legal_basis': '전기통신사업법'
-        },
-        {
-            'name': 'EntityResolutionCandidate',
-            'pattern': 'shared_phone_and_account',
-            'trigger': '두 vt_psn이 동일 전화번호 + 계좌 1개 이상 공유',
-            'threshold': 1,
-            'confidence': 0.85,
-            'output_edge': 'sameAs',
-            'review_required': True,
-            'legal_basis': None
-        },
-        {
-            'name': 'CrossDomainHub',
-            'pattern': 'ip_account_phone_correlation',
-            'trigger': '동일 IP에서 다수 계좌+전화 접속',
-            'threshold': 2,
-            'confidence': 0.80,
-            'output_flag': 'hub_suspect',
-            'legal_basis': '정보통신망법'
-        },
-        {
-            'name': 'NightCrimePattern',
-            'pattern': 'night_time_activity',
-            'trigger': '00~06시 3건+ 이체/통화',
-            'threshold': 3,
-            'confidence': 0.65,
-            'output_flag': 'night_activity',
-            'legal_basis': '야간 범행 가중처벌'
-        },
-        {
-            'name': 'RecruitChainAccomplice',
-            'pattern': 'recruits_chain',
-            'trigger': '총책 → 조직원 → 말단 recruits 체인 2단계+',
-            'threshold': 2,
-            'confidence': 0.75,
-            'output_edge': 'accomplice_of',
-            'legal_basis': '형법 제30조 공동정범'
-        },
-        {
-            'name': 'RelayStationDetection',
-            'pattern': 'multi_phone_same_imei',
-            'trigger': '동일 IMEI(device_id)에 used_in_device 전화번호 3개+',
-            'threshold': 3,
-            'confidence': 0.90,
-            'output_node_flag': 'vt_dev.dev_type = relay_station',
-            'legal_basis': '전기통신사업법 제30조 (불법중계기 제조·사용 금지)'
-        },
-    ]
+    # 추론 규칙(INFERENCE_RULES)은 클래스 상단으로 통합 이동 (V4.2 정합화):
+    #   구 list 10종(탐지) + 구 INFERENCE_RULES_V37 4종(enrichment) → 단일 dict 13종
+    #   (RelayStationDetection 중복 병합). 상단의 INFERENCE_RULES 정의를 참조.
 
 
 class OntologyEnricher:
