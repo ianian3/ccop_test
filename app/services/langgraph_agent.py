@@ -215,6 +215,10 @@ class LangGraphAgent:
             "knows":         ("vt_psn",      "vt_psn"),
             "linked_id":     (None,          "vt_id"),      # 계좌/전화 → 계정 (다형 domain)
             "mentions_id":   ("vt_msg",      "vt_id"),
+            # V4.4 reification 참여 엣지
+            "access_via":         ("vt_access",   None),        # → telno/id/bacnt (다형 range)
+            "via_ip":             ("vt_transfer", "vt_ip"),
+            "mentions_location":  ("vt_msg",      "vt_loc"),
         },
     }
 

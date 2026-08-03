@@ -14,11 +14,13 @@ CCOP V4.1 온톨로지 — POLE 정렬 6레이어 아키텍처 (현행 SSOT)
           rule_type(detection/enrichment)으로 목적 구분, V37은 enrichment 하위호환 뷰.
   - V4.3 (2026-08-03): 시나리오 기반 직접 엣지 3종 추가(knows·linked_id·mentions_id) +
           sameAs range를 DigitalID까지 확장(유사 계정 해소). 엣지 60→63.
-노드: 25 | 엣지: 63 (의미=시각 일치) | 추론 규칙: 13종 통합 dict (탐지 9 + enrichment 4)
+  - V4.4 (2026-08-03): 시나리오 reification 확장 — 이벤트 참여 엣지 3종(access_via·via_ip·
+          mentions_location) + 금융/메시지 다형화(from/to_account·sent/received_msg·transferred_to). 엣지 63→66.
+노드: 25 | 엣지: 66 (의미=시각 일치) | 추론 규칙: 13종 통합 dict (탐지 9 + enrichment 4)
 """
 
 class KICSCrimeDomainOntology:
-    """KICS 기반 한국형 사이버 범죄 온톨로지 (V4.3 POLE 6레이어 · 63종 엣지 · 추론규칙 13종)"""
+    """KICS 기반 한국형 사이버 범죄 온톨로지 (V4.4 POLE 6레이어 · 66종 엣지 · 추론규칙 13종)"""
 
     # 엣지 공통 메타속성 스키마 (EDGE_META_SCHEMA)
     EDGE_META_SCHEMA = {
@@ -449,6 +451,10 @@ class KICSCrimeDomainOntology:
         'occurred_at':        {'color': '#A04000', 'width': 1, 'arrow': 'triangle', 'style': 'dotted'},
         'recorded_in':        {'color': '#7F8C8D', 'width': 1, 'arrow': 'triangle', 'style': 'dotted'},
         'performed_by':       {'color': '#3498DB', 'width': 1, 'arrow': 'triangle', 'style': 'dotted'},
+        # V4.4 reification 참여 엣지
+        'access_via':         {'color': '#D35400', 'width': 2, 'arrow': 'triangle', 'style': 'solid'},
+        'via_ip':             {'color': '#1ABC9C', 'width': 1, 'arrow': 'triangle', 'style': 'dotted'},
+        'mentions_location':  {'color': '#A04000', 'width': 2, 'arrow': 'triangle', 'style': 'dotted'},
         'linked_to':          {'color': '#BDC3C7', 'width': 1, 'arrow': 'triangle-tee', 'style': 'dashed'},
         'contacted':          {'color': '#E67E22', 'width': 1, 'arrow': 'triangle-tee', 'style': 'solid'},
         'impersonates':       {'color': '#CB4335', 'width': 2, 'arrow': 'triangle', 'style': 'dashed'},  # V3.3 read-only
@@ -1272,7 +1278,7 @@ class KICSCrimeDomainOntology:
         # ═══════════════════════════════════════════════════════════
         'transferred_to': {
             'domain': 'BankAccount',
-            'range': 'BankAccount',
+            'range': 'BankAccount|CryptoWallet',      # V4.4 다형화: 가상자산 세탁 경로 포함
             'source_types': [('from_account', 'to_account'), ('sender_account', 'receiver_account')],
             'semantic_relation': 'transferredFundsTo',
             'label_ko': '이체(다단계추론)',
@@ -1346,7 +1352,7 @@ class KICSCrimeDomainOntology:
         # [Layer 3 → Layer 4] Action → Evidence (행위가 사용한 증거)
         # ═══════════════════════════════════════════════════════════
         'from_account': {
-            'domain': 'BankAccount',
+            'domain': 'BankAccount|CryptoWallet|ATM',  # V4.4 다형화: 출금 주체 = 계좌/지갑/ATM
             'range': 'Transfer',
             'source_types': [('from_account', 'transfer'), ('출금계좌', '이체')],
             'semantic_relation': 'withdrawnFrom',
@@ -1356,7 +1362,7 @@ class KICSCrimeDomainOntology:
         },
         'to_account': {
             'domain': 'Transfer',
-            'range': 'BankAccount',
+            'range': 'BankAccount|CryptoWallet|ATM',   # V4.4 다형화: 입금 대상 = 계좌/지갑/ATM
             'source_types': [('transfer', 'to_account'), ('이체', '입금계좌')],
             'semantic_relation': 'depositedTo',
             'label_ko': '입금계좌',
@@ -1391,7 +1397,7 @@ class KICSCrimeDomainOntology:
             'legal_significance': '통신자료'
         },
         'sent_msg': {
-            'domain': 'Phone',
+            'domain': 'Phone|DigitalID',              # V4.4 다형화: 계정도 메시지 발신 주체
             'range': 'Message',
             'source_types': [('sender', 'message'), ('발신번호', '문자')],
             'semantic_relation': 'sentMessage',
@@ -1401,12 +1407,45 @@ class KICSCrimeDomainOntology:
         },
         'received_msg': {                # E-4: ETL 사용 엣지 — 미등재 보완
             'domain': 'Message',
-            'range': 'Phone',
+            'range': 'Phone|DigitalID',               # V4.4 다형화: 계정도 메시지 수신 주체
             'source_types': [('message', 'rcptn_telno'), ('메시지', '수신번호')],
             'semantic_relation': 'receivedByPhone',
             'label_ko': '수신번호',
             'meaning': '메시지 수신 전화번호 (received_by의 Phone 버전)',
             'legal_significance': '통신사실확인자료'
+        },
+        # ═══════════════════════════════════════════════════════════
+        # [V4.4] 시나리오 reification 확장 — 이벤트 참여 엣지 (2026-08-03)
+        # ═══════════════════════════════════════════════════════════
+        'access_via': {
+            'domain': 'Access',
+            'range': 'Phone|DigitalID|BankAccount',
+            'source_types': [('access', 'phone'), ('access', 'id'), ('access', 'account')],
+            'semantic_relation': 'accessedVia',
+            'label_ko': '접속수단',
+            'meaning': '접속 이벤트에 사용된 통신수단/계정/모바일뱅킹 (vt_access 주체 다형)',
+            'legal_significance': '통신자료',
+            'properties': ['valid_from', 'confidence', 'source_id', 'rec_created']
+        },
+        'via_ip': {
+            'domain': 'Transfer',
+            'range': 'NetworkTrace',
+            'source_types': [('transfer', 'ip')],
+            'semantic_relation': 'transferViaIP',
+            'label_ko': '이체접속IP',
+            'meaning': '이체 이벤트의 접속 IP (모바일뱅킹 등)',
+            'legal_significance': '통신자료',
+            'properties': ['source_id', 'rec_created']
+        },
+        'mentions_location': {
+            'domain': 'Message',
+            'range': 'Location',
+            'source_types': [('message', 'location')],
+            'semantic_relation': 'mentionsLocation',
+            'label_ko': '위치기재',
+            'meaning': '메시지/게시물에 언급된 장소 (거래 장소/은닉 좌표 등)',
+            'legal_significance': '증거물',
+            'properties': ['confidence', 'source_id', 'rec_created']
         },
         'sourced_from': {                # §4.7 Meta/Provenance (v3.6 확정)
             'domain': 'Any',
