@@ -32,6 +32,17 @@ def _load_examples() -> Dict:
 # ─── 카테고리 분류 (regex 기반, 약점 카테고리 우선) ───────────────────────
 # 순서 중요: 다홉(chain) > 위협(threat_filter) > Object↔Object > Event > Meta > Person
 _CATEGORY_PATTERNS = [
+    # reification: V4.4 이벤트 경유 2-hop — 고유 시그널이라 chain보다 먼저 체크
+    ("reification", re.compile(
+        r'(접속한?\s*(전화|번호|계정|아이디)|IP.*접속.*(전화|계정|번호)|포털.*역조회|'
+        r'이체.*접속\s*IP|이체.*IP|모바일뱅킹.*IP|'
+        r'언급된?\s*(장소|위치)|메시지.*(장소|위치)|기재된?\s*(장소|좌표)|'
+        r'가상자산.*(전송|세탁)|지갑.*전송|계좌.*가상자산|'
+        r'ATM.*인출|현금\s*인출|'
+        r'통화.*(발신\s*위치|발신위치|기지국)|발신\s*위치|'
+        r'계정\s*간|계정끼리|계정.*대화)',
+        re.IGNORECASE)),
+
     # chain: 다홉 — 명시적 다홉 시그널 (먼저 체크)
     ("chain", re.compile(
         r'(체인|chain|→\s*\w+\s*→|흐름|자금세탁|hop|다단계|'

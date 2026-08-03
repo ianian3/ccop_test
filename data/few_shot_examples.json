@@ -1,5 +1,5 @@
 {
-  "version": "v1.0",
+  "version": "v1.1",
   "description": "Few-shot dynamic prompting examples for T2C Cypher generation. Curated gold standards per weak category.",
   "categories": {
     "1hop_event": {
@@ -205,6 +205,47 @@
         {
           "question": "김민준이 법적으로 소유한 차량",
           "cypher": "MATCH (p:vt_psn {name: '김민준'})-[:owns_vehicle]->(c:vt_vhcl) RETURN p, c"
+        }
+      ]
+    },
+    "reification": {
+      "description": "V4.4 이벤트 reification 2-hop: access_via, via_ip, mentions_location, occurred_at 경유 위치, 금융/메시지 다형 노드(vt_crypto/vt_atm/vt_id)",
+      "examples": [
+        {
+          "question": "IP 203.0.113.5에 접속한 전화번호",
+          "cypher": "MATCH (ip:vt_ip {ip_addr: '203.0.113.5'})<-[:accessed_from]-(a:vt_access)-[:access_via]->(t:vt_telno) RETURN t, a"
+        },
+        {
+          "question": "특정 IP에서 접속한 계정 (포털 역조회)",
+          "cypher": "MATCH (ip:vt_ip)<-[:accessed_from]-(a:vt_access)-[:access_via]->(id:vt_id) RETURN id, a ORDER BY a.lgn_dt DESC"
+        },
+        {
+          "question": "계좌 1002-110-100001 이체의 접속 IP",
+          "cypher": "MATCH (b:vt_bacnt {account_no: '1002-110-100001'})-[:from_account]->(tr:vt_transfer)-[:via_ip]->(ip:vt_ip) RETURN tr, ip"
+        },
+        {
+          "question": "계좌에서 가상자산 지갑으로 전송한 이체",
+          "cypher": "MATCH (b:vt_bacnt)-[:from_account]->(tr:vt_transfer)-[:to_account]->(w:vt_crypto) RETURN b, tr, w"
+        },
+        {
+          "question": "ATM 현금 인출 이체 내역",
+          "cypher": "MATCH (b:vt_bacnt)-[:from_account]->(tr:vt_transfer)-[:to_account]->(atm:vt_atm) RETURN b, tr, atm"
+        },
+        {
+          "question": "메시지에 언급된 거래 장소",
+          "cypher": "MATCH (m:vt_msg)-[:mentions_location]->(l:vt_loc) RETURN m, l"
+        },
+        {
+          "question": "전화번호 010-1234-5678의 통화 발신 위치",
+          "cypher": "MATCH (t:vt_telno {telno: '010-1234-5678'})-[:caller]->(c:vt_call)-[:occurred_at]->(l:vt_loc) RETURN c, l"
+        },
+        {
+          "question": "두 계정 간 주고받은 메시지",
+          "cypher": "MATCH (id1:vt_id)-[:sent_msg]->(m:vt_msg)-[:received_msg]->(id2:vt_id) RETURN id1, m, id2"
+        },
+        {
+          "question": "계좌에서 가상자산으로 세탁된 자금",
+          "cypher": "MATCH (b:vt_bacnt)-[:transferred_to]->(w:vt_crypto) RETURN b, w"
         }
       ]
     }
