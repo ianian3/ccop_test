@@ -708,7 +708,22 @@ AS (p agtype);
                 # schema_fetching_node가 채운 state['schema_info']에는 질의 관련 라벨/엣지만 포함됨
                 schema_chunk = state.get('schema_info', '').strip()
                 schema_section = f"\n[관련 스키마]\n{schema_chunk}\n" if schema_chunk else ""
-                user_msg = f"{schema_section}[질문]\n{state['question']}{entity_context}{reflection_context}"
+                # V4.4: few-shot 동적 예시 주입 (native Cypher — sLLM 출력 형식과 일치)
+                # reification 등 학습 후 추가된 엣지를 in-context로 보강. use_few_shot=False로 A/B.
+                few_shot_section = ""
+                if state.get('config', {}).get('use_few_shot', True):
+                    from app.services import few_shot_router
+                    _cat = few_shot_router.classify_question(state['question'])
+                    if _cat:
+                        _exs = few_shot_router.retrieve_examples(_cat, state['question'], top_k=3)
+                        if _exs:
+                            _lines = [f"\n[유사 예시 — {_cat}]"]
+                            for _ex in _exs:
+                                _lines.append(f"질문: {_ex['question']}")
+                                _lines.append(f"Cypher: {_ex['cypher']}")
+                            few_shot_section = "\n".join(_lines) + "\n"
+                            logger.info(f"[FewShot] '{_cat}' 예시 {len(_exs)}개 주입")
+                user_msg = f"{schema_section}{few_shot_section}[질문]\n{state['question']}{entity_context}{reflection_context}"
                 try:
                     resp = client.chat.completions.create(
                         model=current_app.config.get('SLLM_MODEL_NAME', 'qwen25_t2c_v37_v2'),
