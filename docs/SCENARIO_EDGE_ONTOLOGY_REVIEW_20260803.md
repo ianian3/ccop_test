@@ -43,11 +43,12 @@
 
 ## 4. 적용 권고 (우선순위)
 
-**🟢 1순위 — 즉시 추가 가능 (직접 엣지, 저위험 · 5개)**
-패턴 C·D. 온톨로지 철학과 무충돌, ETL·Text2Cypher 영향 최소:
-- 계좌↔인증서ID, 전화↔계정, 계정→게시물 (식별자 연결)
-- `sameAs`를 vt_id로 확장 (계정 유사성)
-- `knows` 신규 (사회관계 — 지인)
+**✅ 1순위 — V4.3 반영 완료** (2026-08-03) · 직접 엣지, 저위험 · 5개
+패턴 C·D. 온톨로지 철학과 무충돌, `_POLE_SCHEMA` 1-hop 인식(few-shot 불필요). **엣지 60→63**:
+- 🆕 `linked_id` (Object→DigitalID, 다형): 계좌↔인증서ID(No.8) · 전화↔계정(No.20)
+- 🆕 `mentions_id` (Message→DigitalID): 게시물에 기재된 계정(No.14)
+- 🆕 `knows` (Person→Person): 사회관계 지인(No.15)
+- `sameAs` range를 **DigitalID까지 확장**: 계정 유사성 해소(No.12)
 
 **🟠 2순위 — 이벤트 reification 확장 (설계 검토 · 11개)**
 패턴 A·B·E. 정석이나 ETL 파이프라인·Text2Cypher 프롬프트 영향이 있어 별도 설계 필요:
@@ -115,6 +116,6 @@
 
 ## 부록 C — 착수 시 다음 단계 제안
 
-1. 🟢 5개(식별자망·사회관계·유사성)를 **V4.3 후보**로 온톨로지 반영 설계 (RELATIONSHIPS + EDGE_STYLE_V40 + 회귀 테스트)
+1. ✅ **완료 (V4.3, 2026-08-03)** — 🟢 5개를 신규 3엣지(`knows`·`linked_id`·`mentions_id`) + `sameAs` 확장으로 반영. 엣지 60→63, 회귀 테스트 통과(63/63, pytest 25).
 2. 🟠 11개는 **이벤트 reification 확장 설계 문서**를 별도로 — vt_access/vt_transfer 참여 엣지 스키마 + ETL 매핑 + Text2Cypher 프롬프트 영향 평가
 3. 데이터 근거 확인: IP·접속 로그 등 실데이터 소스 확보 여부를 엣지 추가 전에 검증

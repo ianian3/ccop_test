@@ -211,6 +211,10 @@ class LangGraphAgent:
             "belongs_to_cluster":  ("vt_petition", "pt_cluster"),
             "used_in_device":      ("vt_telno",    "vt_dev"),
             "belongs_to_campaign": ("vt_site",     "site_cluster"),
+            # V4.3 시나리오 직접 엣지 (속성적 연결)
+            "knows":         ("vt_psn",      "vt_psn"),
+            "linked_id":     (None,          "vt_id"),      # 계좌/전화 → 계정 (다형 domain)
+            "mentions_id":   ("vt_msg",      "vt_id"),
         },
     }
 

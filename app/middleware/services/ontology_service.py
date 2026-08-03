@@ -12,11 +12,13 @@ CCOP V4.1 온톨로지 — POLE 정렬 6레이어 아키텍처 (현행 SSOT)
   - V4.2 (2026-07-31 정합화): 추론 규칙 이원화 해소 — 구 INFERENCE_RULES(list 10)와
           INFERENCE_RULES_V37(dict 4)의 RelayStationDetection 중복을 단일 dict로 병합(13종).
           rule_type(detection/enrichment)으로 목적 구분, V37은 enrichment 하위호환 뷰.
-노드: 25 | 엣지: 60 (의미=시각 일치) | 추론 규칙: 13종 통합 dict (탐지 9 + enrichment 4)
+  - V4.3 (2026-08-03): 시나리오 기반 직접 엣지 3종 추가(knows·linked_id·mentions_id) +
+          sameAs range를 DigitalID까지 확장(유사 계정 해소). 엣지 60→63.
+노드: 25 | 엣지: 63 (의미=시각 일치) | 추론 규칙: 13종 통합 dict (탐지 9 + enrichment 4)
 """
 
 class KICSCrimeDomainOntology:
-    """KICS 기반 한국형 사이버 범죄 온톨로지 (V4.2 POLE 6레이어 · 60종 엣지 · 추론규칙 13종)"""
+    """KICS 기반 한국형 사이버 범죄 온톨로지 (V4.3 POLE 6레이어 · 63종 엣지 · 추론규칙 13종)"""
 
     # 엣지 공통 메타속성 스키마 (EDGE_META_SCHEMA)
     EDGE_META_SCHEMA = {
@@ -399,6 +401,10 @@ class KICSCrimeDomainOntology:
         'blackmails':         {'color': '#641E16', 'width': 3, 'arrow': 'triangle', 'style': 'solid'},
         'sameAs':             {'color': '#999999', 'width': 2, 'arrow': 'none',     'style': 'dashed'},
         'contradicts':        {'color': '#C0392B', 'width': 2, 'arrow': 'tee',      'style': 'dotted'},
+        # V4.3 시나리오 직접 엣지 (속성적 연결)
+        'knows':              {'color': '#7F8C8D', 'width': 2, 'arrow': 'none',     'style': 'solid'},
+        'linked_id':          {'color': '#5499C7', 'width': 2, 'arrow': 'triangle', 'style': 'solid'},
+        'mentions_id':        {'color': '#A569BD', 'width': 2, 'arrow': 'triangle', 'style': 'dotted'},
         # Event 흐름
         'from_account':       {'color': '#F39C12', 'width': 2, 'arrow': 'triangle', 'style': 'solid'},
         'to_account':         {'color': '#F39C12', 'width': 2, 'arrow': 'triangle', 'style': 'solid'},
@@ -1066,11 +1072,11 @@ class KICSCrimeDomainOntology:
         # ═══════════════════════════════════════════════════════════
         'sameAs': {
             'domain': 'Person',
-            'range': 'Person',
-            'source_types': [],
+            'range': 'Person|DigitalID',
+            'source_types': [('person', 'person'), ('user_id', 'user_id')],
             'semantic_relation': 'sameAs',
-            'label_ko': '동일인물',
-            'meaning': '두 vt_psn이 동일 인물로 해소됨 (엔티티 해소)',
+            'label_ko': '동일실체',
+            'meaning': '두 vt_psn 또는 vt_id가 동일 실체로 해소됨 (엔티티 해소; 유사 계정 pokpok1270↔pokpokpok1270 포함)',
             'legal_significance': '신원확인',
             'properties': ['match_score', 'match_basis', 'review_status', 'rec_created'],
             'inferred': True
@@ -1085,6 +1091,39 @@ class KICSCrimeDomainOntology:
             'legal_significance': '신원확인',
             'properties': ['conflict_field', 'conflict_detail', 'rec_created'],
             'inferred': True
+        },
+        # ═══════════════════════════════════════════════════════════
+        # [V4.3] 시나리오 기반 직접 엣지 (속성적 연결) — 2026-08-03
+        # ═══════════════════════════════════════════════════════════
+        'knows': {
+            'domain': 'Person',
+            'range': 'Person',
+            'source_types': [('person', 'person')],
+            'semantic_relation': 'knows',
+            'label_ko': '지인',
+            'meaning': '두 인물의 사회적 지인 관계 (고향친구/동창 등, 공범 미확정 — accomplice_of와 구분)',
+            'legal_significance': '관계정보',
+            'properties': ['relation_type', 'confidence', 'valid_from', 'source_id', 'rec_created']
+        },
+        'linked_id': {
+            'domain': 'Object',
+            'range': 'DigitalID',
+            'source_types': [('account', 'id'), ('phone', 'id')],
+            'semantic_relation': 'linkedToDigitalID',
+            'label_ko': '식별자연결',
+            'meaning': '계좌·전화 등 객체에 연결된 온라인 식별자 (공인인증서 발급 ID / 포털 역조회 계정)',
+            'legal_significance': '신원확인',
+            'properties': ['link_basis', 'confidence', 'valid_from', 'source_id', 'rec_created']
+        },
+        'mentions_id': {
+            'domain': 'Message',
+            'range': 'DigitalID',
+            'source_types': [('message', 'id')],
+            'semantic_relation': 'mentionsDigitalID',
+            'label_ko': '계정기재',
+            'meaning': '게시물/메시지에 기재된 온라인 계정 (광고글의 텔레그램 ID Zion7950 등)',
+            'legal_significance': '증거물',
+            'properties': ['confidence', 'source_id', 'rec_created']
         },
         # ═══════════════════════════════════════════════════════════
         # [PETITION] 진정서 관련 엣지
