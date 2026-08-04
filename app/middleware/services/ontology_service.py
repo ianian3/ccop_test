@@ -1303,19 +1303,7 @@ class KICSCrimeDomainOntology:
         # ═══════════════════════════════════════════════════════════
         # [주의] Person→Organization 소속은 member_of / works_at 으로 분리됨
         # belongs_to (Person→Org) 중복 키 제거 — 아래 belongs_to (Account→Org) 단일 유지
-        'controls': {
-            'domain': 'Person',
-            'range': 'BankAccount',
-            'source_types': [('controller', 'account'), ('실소유자', 'account')],
-            'semantic_relation': 'controlsAccount',
-            'label_ko': '실지배',
-            'meaning': '인물이 계좌를 실질적으로 지배함 (명의와 무관)',
-            'legal_significance': '금융거래정보',
-            # 추론 메타 속성
-            'transitive': True,  # A가 B를 지배, B가 C를 지배 → A가 C를 지배
-            'inverse': 'controlled_by',
-            'inference_confidence': 0.80
-        },
+        # controls 정의는 하단 [V4.0 정합화 C단계] 블록으로 단일화 (중복 제거)
         'accomplice_of': {
             'domain': 'Person',
             'range': 'Person',
@@ -1326,16 +1314,7 @@ class KICSCrimeDomainOntology:
             'legal_significance': '피의자정보',
             'inferred': True
         },
-        'owns_device': {
-            'domain': 'Person',
-            'range': 'Device',
-            'source_types': [('person', 'device'), ('user', 'device')],
-            'semantic_relation': 'ownsDevice',
-            'label_ko': '기기소유',
-            'meaning': '인물이 기기를 소유/사용함',
-            'legal_significance': '디지털증거',
-            'properties': ['valid_from', 'valid_to', 'source_id', 'rec_created']
-        },
+        # owns_device 정의는 하단 [V4.0 정합화 C단계] 블록으로 단일화 (deprecated·alias_of=uses_device)
         'member_of': {
             'domain': 'Person',
             'range': 'Organization',
@@ -1610,18 +1589,7 @@ class KICSCrimeDomainOntology:
             'legal_significance': '디지털증거',
             'properties': ['file_role', 'detected_at', 'source_id', 'rec_created']
         },
-        'located_at': {
-            'domain': 'Any',              # ATM·Device·Organization
-            'range': 'Location',
-            'source_types': [
-                ('atm', 'location'), ('device', 'location'), ('org', 'location'),
-            ],
-            'semantic_relation': 'locatedAt',
-            'label_ko': '위치',
-            'meaning': 'ATM·기기·조직의 고정 위치 (ATM 위치 추적 필수)',
-            'legal_significance': '위치정보',
-            'properties': ['verified', 'source_id', 'rec_created']
-        },
+        # located_at 정의는 하단 [V4.0 정합화 C단계] 블록으로 단일화 (occurred_at과 구별)
         'used_in_device': {
             'domain': 'Phone',
             'range': 'Device',

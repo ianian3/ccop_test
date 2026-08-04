@@ -65,3 +65,28 @@ def test_pole_schema_node_labels_subset_of_sot():
             labels.add(t)
     extra = labels - sot_nodes()
     assert not extra, f'POLE_SCHEMA에 SoT 밖 노드 라벨: {sorted(extra)}'
+
+
+# ── SoT 내부 위생: RELATIONSHIPS 중복 키 금지 ──
+
+def test_relationships_no_duplicate_keys():
+    """RELATIONSHIPS 소스에 중복 키가 없어야 함.
+
+    Python dict는 중복 키를 조용히 덮어써(마지막 정의 채택) 앞 정의가 손실된다.
+    controls/located_at/owns_device 중복(구버전이 최신 정합화 정의를 가리던 문제)의 재발 방지.
+    """
+    import ast
+    import app.middleware.services.ontology_service as ont
+    tree = ast.parse(open(ont.__file__).read())
+    dups = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign) and any(
+            isinstance(t, ast.Name) and t.id == 'RELATIONSHIPS' for t in node.targets
+        ) and isinstance(node.value, ast.Dict):
+            seen = set()
+            for k in node.value.keys:
+                if isinstance(k, ast.Constant) and isinstance(k.value, str):
+                    if k.value in seen:
+                        dups.append(k.value)
+                    seen.add(k.value)
+    assert not dups, f'RELATIONSHIPS 중복 키(앞 정의 손실): {sorted(set(dups))}'
