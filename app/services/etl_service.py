@@ -537,12 +537,24 @@ class ETLService:
                             
                             if result:
                                 src_id, tgt_id = result
-                                # MERGE로 멱등성 확보 (재실행 시 엣지 중복 방지)
+                                # V4.0 provenance 메타 주입 (source_domain/source_id/collected_at) — 엣지 출처 추적
+                                from app.services.rdb_to_graph_service import RdbToGraphService
+                                add_edge_props = RdbToGraphService.make_edge_props_v40(
+                                    add_edge_type, {},
+                                    source_domain=add_rel.get('source_domain', 'KICS'),
+                                    source_id=add_rel.get('source_id'),
+                                )
+                                add_props_list = [f"{k}: '{str(v).replace(chr(39), chr(39)+chr(39))}'"
+                                                  for k, v in add_edge_props.items()]
+                                add_props_str = ", ".join(add_props_list)
+                                # MERGE로 멱등성 확보 (재실행 시 중복 방지) + provenance는 SET으로 갱신
                                 create_edge_q = f"""
                                 MATCH (v1), (v2)
                                 WHERE id(v1) = '{src_id}' AND id(v2) = '{tgt_id}'
-                                MERGE (v1)-[:{add_edge_type}]->(v2)
+                                MERGE (v1)-[r:{add_edge_type}]->(v2)
                                 """
+                                if add_props_str:
+                                    create_edge_q += f"                                SET r += {{{add_props_str}}}\n"
                                 cur.execute(create_edge_q)
                                 additional_edges_count += 1
                         except Exception as e:

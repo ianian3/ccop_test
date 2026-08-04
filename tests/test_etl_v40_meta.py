@@ -77,12 +77,13 @@ def test_v37_new_nodes_meta():
 
 
 def test_etl_service_imports_helper():
-    """etl_service.py 가 RdbToGraphService.make_node_props_v40 을 실제로 import 하는지."""
+    """etl_service.py 가 RdbToGraphService.make_node_props_v40 을 실제로 import·사용하는지."""
     import app.services.etl_service as etl
     src = open(etl.__file__).read()
-    assert 'make_node_props_v40' in src, "etl_service.py 에 V4.0 헬퍼 호출 누락"
-    # 두 패치 지점(L362 메인 + L732 확장) 모두 적용되어야 → 최소 2회 등장
-    assert src.count('make_node_props_v40') >= 2, "두 패치 지점 중 일부 누락"
+    assert 'make_node_props_v40' in src, "etl_service.py 에 V4.0 노드 헬퍼 호출 누락"
+    # 노드 생성은 현재 단일 지점(CREATE (n:...))이며 provenance 적용됨.
+    # (과거 확장 노드 생성부는 리팩터로 제거 — 엣지와 달리 확장 노드 경로 없음)
+    assert src.count('make_node_props_v40') >= 1, "노드 provenance 헬퍼 누락"
 
 
 # =========================================================================

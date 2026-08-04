@@ -659,12 +659,16 @@ def ontology_wizard_run():
 
     def _run():
         try:
-            RdbToGraphService.transfer_v35(
-                graph_name, schema, layers,
-                log_cb=lambda msg: _wizard_jobs[job_id]["logs"].append(msg),
-                stats_ref=_wizard_jobs[job_id]["stats"]
-            )
-            _wizard_jobs[job_id]["status"] = "done"
+            # transfer_v35(미구현·정의된 적 없음)를 정식 메서드 transfer_data로 복구.
+            # transfer_data는 기본 스키마 전체 변환만 지원 → schema/layers 부분선택은 미지원(정직 로그).
+            _wizard_jobs[job_id]["logs"].append(
+                f"[안내] 스키마/레이어 부분선택은 현재 미지원 — 기본 스키마 전체 변환 수행 "
+                f"(요청 schema={schema}, layers={layers})")
+            _wizard_jobs[job_id]["logs"].append(f"[시작] '{graph_name}' 그래프로 RDB 변환")
+            success, stats = RdbToGraphService.transfer_data(graph_name)
+            _wizard_jobs[job_id]["stats"] = stats or {"nodes": 0, "edges": 0}
+            _wizard_jobs[job_id]["logs"].append(f"[완료] success={success}, {stats}")
+            _wizard_jobs[job_id]["status"] = "done" if success else "error"
         except Exception as ex:
             _wizard_jobs[job_id]["logs"].append(f"[ERROR] {ex}")
             _wizard_jobs[job_id]["status"] = "error"
