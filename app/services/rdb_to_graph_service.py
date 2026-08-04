@@ -569,8 +569,8 @@ class RdbToGraphService:
                                  f"result_cd: '{rslt}', service_nm: '{svc}', type: '접속'}}")
                     cur.execute(f"MERGE (a:vt_access {{access_id: 'lgn-{lgn_sn}'}}) SET a = {acc_props}")
                     stats["nodes"] += 1
-                    # accessed_from: vt_ip → vt_access
-                    cur.execute(f"MATCH (i:vt_ip {{ip_addr: '{ip}'}}), (a:vt_access {{access_id: 'lgn-{lgn_sn}'}}) MERGE (i)-[:accessed_from]->(a)")
+                    # accessed_from: vt_access → vt_ip (SoT domain=Access→range=NetworkTrace, POLE_SCHEMA·학습데이터 일치)
+                    cur.execute(f"MATCH (a:vt_access {{access_id: 'lgn-{lgn_sn}'}}), (i:vt_ip {{ip_addr: '{ip}'}}) MERGE (a)-[:accessed_from]->(i)")
                     stats["edges"] += 1
                 except Exception as _e:
                     logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
@@ -789,7 +789,7 @@ class RdbToGraphService:
             conn.commit()
 
             # 5-6. used_ip + performed_by (TB_SYS_LGN_EVT.USER_ID ↔ TB_PRSN 조인)
-            #      Person → vt_ip (used_ip), Person → vt_access (performed_by)
+            #      Person → vt_ip (used_ip), vt_access → Person (performed_by, SoT domain=Access→range=Person)
             try:
                 cur.execute("""
                     SELECT DISTINCT E.LGN_SN, E.CNNT_IP_ADDR, P.PRSN_ID
@@ -809,7 +809,7 @@ class RdbToGraphService:
                         cur.execute(f"MATCH (p:vt_psn {{id: '{pid}'}}), (i:vt_ip {{ip_addr: '{ip_addr}'}}) MERGE (p)-[:used_ip]->(i)")
                         stats["edges"] += 1; stats["relations"] += 1
                     if lgn_sn and pid:
-                        cur.execute(f"MATCH (p:vt_psn {{id: '{pid}'}}), (a:vt_access {{access_id: 'lgn-{lgn_sn}'}}) MERGE (p)-[:performed_by]->(a)")
+                        cur.execute(f"MATCH (a:vt_access {{access_id: 'lgn-{lgn_sn}'}}), (p:vt_psn {{id: '{pid}'}}) MERGE (a)-[:performed_by]->(p)")
                         stats["edges"] += 1
                 except Exception as _e:
                     logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
@@ -1371,9 +1371,12 @@ class RdbToGraphService:
                                  f"src_id: '{src_id}', type: '기기'}}")
                         cur.execute(f"MERGE (n:vt_dev {{device_id: '{dev_id}'}}) SET n = {props}")
                         stats["nodes"] += 1
-                        # MAC → IP 연결: vt_dev → vt_access (접속 기기 추론)
+                        # MAC → device↔access 연결: 보류(P2 설계 과제)
                         if mac:
-                            cur.execute(f"MATCH (d:vt_dev {{device_id: '{dev_id}'}}), (a:vt_access) WHERE a.mac_addr = '{mac}' MERGE (d)-[:performed_by]->(a)")
+                            # ⚠ 비활성: performed_by는 SoT range=Person(수행 주체=인물)이라 Device에 부적합(양끝 타입 위반).
+                            #    device↔access 전용 엣지가 SoT에 미설계 → 위반 엣지 생성을 막기 위해 보류.
+                            # cur.execute(f"MATCH (d:vt_dev {{device_id: '{dev_id}'}}), (a:vt_access) WHERE a.mac_addr = '{mac}' MERGE (d)-[:performed_by]->(a)")
+                            pass
                     except Exception as _e:
                         logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
                 conn.commit()
