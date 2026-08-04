@@ -2251,29 +2251,29 @@
                         }, 'text-wrap': 'wrap'
                     }
                 },
-                { selector: 'node[label="vt_org"]', style: { 'width': '75px', 'height': '75px', 'background-color': '#4a4a8a', 'border-color': '#a29bfe', 'border-width': 3, 'label': function (ele) { const p = ele.data('props') || {}; return '🏢 ' + (p.org_nm || p.name || '조직'); }, 'text-wrap': 'wrap' } },
+                { selector: 'node[label="vt_org"]', style: { 'width': '75px', 'height': '75px', 'background-color': '#4a4a8a', 'border-color': '#a29bfe', 'border-width': 3, 'label': function (ele) { const p = ele.data('props') || {}; return '🏢 ' + (p.org_name || p.org_nm || p.name || '조직'); }, 'text-wrap': 'wrap' } },
 
                 // ══ Layer 4 (Object) — 다양한 색 ══
                 {
                     selector: 'node[label="vt_bacnt"]', style: {
                         'background-image': '/static/images/account.png', 'background-fit': 'cover', 'border-color': '#f1c40f', 'border-width': 4, 'label': function (ele) {
                             const p = ele.data('props') || {};
-                            const bank = p.bnk_cd ? getCodeName('BANK', p.bnk_cd) : (p.bank_nm || p.bank || '');
-                            return (bank ? bank + '\n' : '') + (p.actno || '');
+                            const bank = p.bank_name || (p.bnk_cd ? getCodeName('BANK', p.bnk_cd) : (p.bank_nm || p.bank || ''));
+                            return (bank ? bank + '\n' : '') + (p.account_no || p.actno || '');
                         }, 'text-wrap': 'wrap'
                     }
                 },
                 { selector: 'node[label="vt_crypto"]', style: { 'width': '65px', 'height': '65px', 'background-color': '#253154', 'border-color': '#f9ca24', 'border-width': 3, 'label': function (ele) { const p = ele.data('props') || {}; return '₿ ' + (p.crypto_type || 'Crypto') + '\n' + (p.wallet_addr ? p.wallet_addr.slice(0, 8) + '…' : ''); }, 'text-wrap': 'wrap' } },
                 { selector: 'node[label="vt_ip"]', style: { 'background-image': '/static/images/ip.png', 'background-fit': 'cover', 'border-color': '#fd79a8', 'border-width': 3, 'label': function (ele) { const p = ele.data('props') || {}; return p.ip_addr || p.ip || 'IP'; } } },
                 { selector: 'node[label="vt_site"]', style: { 'background-image': '/static/images/site.png', 'background-fit': 'cover', 'border-color': '#00b894', 'border-width': 3, 'label': function (ele) { const p = ele.data('props') || {}; return p.domain || p.url_addr || p.url || 'Site'; } } },
-                { selector: 'node[label="vt_file"]', style: { 'background-image': '/static/images/person.png', 'background-fit': 'cover', 'border-color': '#a29bfe', 'border-width': 3, 'label': function (ele) { const p = ele.data('props') || {}; return '📄 ' + (p.file_nm || (p.hash_val ? p.hash_val.slice(0, 8) + '…' : 'File')); } } },
+                { selector: 'node[label="vt_file"]', style: { 'background-image': '/static/images/person.png', 'background-fit': 'cover', 'border-color': '#a29bfe', 'border-width': 3, 'label': function (ele) { const p = ele.data('props') || {}; return '📄 ' + (p.filename || p.file_nm || (p.hash ? p.hash.slice(0, 8) + '…' : (p.hash_val ? p.hash_val.slice(0, 8) + '…' : 'File'))); } } },
                 { selector: 'node[label="vt_id"]', style: { 'background-image': '/static/images/person.png', 'background-fit': 'cover', 'border-color': '#fab1a0', 'border-width': 3, 'label': function (ele) { const p = ele.data('props') || {}; return '🆔 ' + (p.id_val || 'ID'); } } },
                 { selector: 'node[label="vt_email"]', style: { 'width': '65px', 'height': '65px', 'background-color': '#1a6fa0', 'border-color': '#0984e3', 'border-width': 3, 'label': function (ele) { const p = ele.data('props') || {}; return '📧 ' + (p.email_addr || 'Email'); }, 'text-wrap': 'wrap' } },
                 {
                     selector: 'node[label="vt_telno"]', style: {
                         'background-image': '/static/images/phone.png', 'background-fit': 'cover', 'border-color': '#74b9ff', 'border-width': 3, 'label': function (ele) {
                             const p = ele.data('props') || {};
-                            const carrier = p.carr_cd ? getCodeName('CARRIER', p.carr_cd) : (p.carrier || '');
+                            const carrier = p.carrier_cd ? getCodeName('CARRIER', p.carrier_cd) : (p.carr_cd ? getCodeName('CARRIER', p.carr_cd) : (p.carrier || ''));
                             return (p.telno || '번호없음') + (carrier ? `\n[${carrier}]` : '');
                         }, 'text-wrap': 'wrap'
                     }
@@ -2288,9 +2288,9 @@
                 // ══ Layer 6 (Event) — 금색/청색 계열 ══
                 { selector: 'node[label="vt_transfer"]', style: { 'width': '70px', 'height': '70px', 'background-color': '#7d3c00', 'border-color': '#e17055', 'border-width': 3, 'label': function (ele) { const p = ele.data('props') || {}; return '💸 이체\n' + (p.amount ? Number(p.amount).toLocaleString() + '원' : ''); }, 'text-wrap': 'wrap' } },
                 { selector: 'node[label="vt_call"]', style: { 'width': '70px', 'height': '70px', 'background-color': '#1a4a80', 'border-color': '#0984e3', 'border-width': 3, 'label': function (ele) { const p = ele.data('props') || {}; return '📞 통화\n' + (p.duration ? p.duration + '초' : ''); }, 'text-wrap': 'wrap' } },
-                { selector: 'node[label="vt_access"]', style: { 'width': '65px', 'height': '65px', 'background-color': '#6d1a3c', 'border-color': '#fd79a8', 'border-width': 3, 'label': function (ele) { const p = ele.data('props') || {}; return '🔐 접속\n' + (p.src_ip || ''); }, 'text-wrap': 'wrap' } },
-                { selector: 'node[label="vt_msg"]', style: { 'width': '65px', 'height': '65px', 'background-color': '#005c4b', 'border-color': '#55efc4', 'border-width': 3, 'label': function (ele) { const p = ele.data('props') || {}; return '✉️ 메시지\n' + (p.platform || p.msg_type || ''); }, 'text-wrap': 'wrap' } },
-                { selector: 'node[label="vt_movement"]', style: { 'width': '65px', 'height': '65px', 'shape': 'hexagon', 'background-color': '#6b4f00', 'border-color': '#fdcb6e', 'border-width': 3, 'label': function (ele) { const p = ele.data('props') || {}; return '🚶 이동\n' + (p.from_loc || ''); }, 'text-wrap': 'wrap' } },
+                { selector: 'node[label="vt_access"]', style: { 'width': '65px', 'height': '65px', 'background-color': '#6d1a3c', 'border-color': '#fd79a8', 'border-width': 3, 'label': function (ele) { const p = ele.data('props') || {}; return '🔐 접속\n' + (p.timestamp || p.access_id || p.src_ip || ''); }, 'text-wrap': 'wrap' } },
+                { selector: 'node[label="vt_msg"]', style: { 'width': '65px', 'height': '65px', 'background-color': '#005c4b', 'border-color': '#55efc4', 'border-width': 3, 'label': function (ele) { const p = ele.data('props') || {}; return '✉️ 메시지\n' + (p.summary || p.event_type || p.platform || p.msg_type || ''); }, 'text-wrap': 'wrap' } },
+                { selector: 'node[label="vt_movement"]', style: { 'width': '65px', 'height': '65px', 'shape': 'hexagon', 'background-color': '#6b4f00', 'border-color': '#fdcb6e', 'border-width': 3, 'label': function (ele) { const p = ele.data('props') || {}; return '🚶 이동\n' + (p.evt_typ_nm || p.mov_type || p.from_loc || ''); }, 'text-wrap': 'wrap' } },
 
                 // ══ V3.2 엣지 스타일 ══
                 // [CASE 역할] Person → Case
