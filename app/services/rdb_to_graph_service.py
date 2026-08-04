@@ -211,7 +211,7 @@ class RdbToGraphService:
                 'sent_msg', 'received_msg', 'recorded_in',
                 # 소유/관계
                 'owns_vehicle', 'contains_file',
-                'related_case', 'belongs_to', 'resolved_to', 'works_at',
+                'related_case', 'belongs_to', 'works_at',
                 # 출처
                 'sourced_from',
                 # v3.0 신규: 인물 → 디지털 증거
