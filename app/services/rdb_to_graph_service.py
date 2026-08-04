@@ -29,6 +29,17 @@ def _norm_telno(v):
     return re.sub(r'[^0-9]', '', str(v or ''))
 
 
+def _norm_account(v):
+    """계좌번호 표준화(대시/공백 제거 — 매칭키). L2(rdb_service.norm_account)와 동일 규칙.
+    그래프 단계 L4 이중 방어 — 비정규 계좌값으로 이체 엣지 MATCH가 실패해 드롭되는 것 방지.
+    md5/sha256 해시(OSINT)는 소문자화만."""
+    import re
+    s = str(v or '').strip().lower()
+    if re.fullmatch(r'[0-9a-f]{32}', s) or re.fullmatch(r'[0-9a-f]{64}', s):
+        return s
+    return re.sub(r'[\s\-]', '', s)
+
+
 class RdbToGraphService:
     @staticmethod
     def get_db_connection():
@@ -599,7 +610,7 @@ class RdbToGraphService:
                         if is_atm:
                             cur.execute(f"MATCH (n:vt_transfer {{event_id: '{eid}'}}), (a:vt_atm {{atm_id: '{sender}'}}) MERGE (a)-[r:from_account]->(n) SET r.evid_grade = 'A', r.src_tier = 1")
                         else:
-                            cur.execute(f"MATCH (n:vt_transfer {{event_id: '{eid}'}}), (a:vt_bacnt {{account_no: '{sender}'}}) MERGE (a)-[r:from_account]->(n) SET r.evid_grade = 'A', r.src_tier = 1")
+                            cur.execute(f"MATCH (n:vt_transfer {{event_id: '{eid}'}}), (a:vt_bacnt {{account_no: '{_norm_account(sender)}'}}) MERGE (a)-[r:from_account]->(n) SET r.evid_grade = 'A', r.src_tier = 1")
                         stats["edges"] += 1
 
                     if receiver:
@@ -607,7 +618,7 @@ class RdbToGraphService:
                         if is_atm:
                             cur.execute(f"MATCH (n:vt_transfer {{event_id: '{eid}'}}), (a:vt_atm {{atm_id: '{receiver}'}}) MERGE (n)-[r:to_account]->(a) SET r.evid_grade = 'A', r.src_tier = 1")
                         else:
-                            cur.execute(f"MATCH (n:vt_transfer {{event_id: '{eid}'}}), (a:vt_bacnt {{account_no: '{receiver}'}}) MERGE (n)-[r:to_account]->(a) SET r.evid_grade = 'A', r.src_tier = 1")
+                            cur.execute(f"MATCH (n:vt_transfer {{event_id: '{eid}'}}), (a:vt_bacnt {{account_no: '{_norm_account(receiver)}'}}) MERGE (n)-[r:to_account]->(a) SET r.evid_grade = 'A', r.src_tier = 1")
                         stats["edges"] += 1
                 except Exception as _e:
                     logger.debug("행/항목 처리 실패(건너뜀): %s", _e)

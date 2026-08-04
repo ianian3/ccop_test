@@ -383,7 +383,7 @@ class KICSCrimeDomainOntology:
                                 'is_vpn':                              {'border_style': 'dotted'},
                                 'threat_score>=80':                    {'color': '#C0392B', 'border_width': 3},
                              }},
-        'vt_site':          {'color': '#9B59B6', 'shape': 'roundrectangle', 'icon': 'site.png',  'size': 35, 'label_property': 'url_addr',
+        'vt_site':          {'color': '#9B59B6', 'shape': 'round-rectangle', 'icon': 'site.png',  'size': 35, 'label_property': 'url_addr',
                              'style_modifier': {
                                 'is_malicious':                        {'color': '#8E44AD', 'border_color': '#C0392B', 'border_width': 3},
                              }},
