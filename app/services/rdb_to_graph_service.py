@@ -480,12 +480,13 @@ class RdbToGraphService:
             conn.commit()
 
             # 3-2. Person (TB_PRSN)
-            cur.execute("SELECT prsn_id, COALESCE(korn_flnm,''), COALESCE(role_cd,'') FROM tb_prsn")
+            cur.execute("SELECT prsn_id, COALESCE(korn_flnm,''), COALESCE(role_cd,''), COALESCE(source_id,'') FROM tb_prsn")
             rows = cur.fetchall()
             for r in rows:
                 try:
                     pid, name, nick = safe_str(r[0]), safe_str(r[1]), safe_str(r[2])
-                    props = f"{{id: '{pid}', name: '{name}', nickname: '{nick}', type: '인물'}}"
+                    sid = safe_str(r[3]) if len(r) > 3 else ''
+                    props = f"{{id: '{pid}', name: '{name}', nickname: '{nick}', source_id: '{sid}', type: '인물'}}"
                     cur.execute(f"MERGE (n:vt_psn {{id: '{pid}'}}) SET n = {props}")
                     stats["nodes"] += 1; stats["persons"] += 1
                 except Exception as _e:
@@ -494,11 +495,12 @@ class RdbToGraphService:
 
             # 3-3. Account (TB_FIN_BACNT) — ATM/현금인출은 vt_atm으로 분류
             from app.services.etl_service import StandardCodeMapper
-            cur.execute("SELECT bacnt_no, COALESCE(bnk_cd,''), COALESCE(bank_nm,'') FROM tb_fin_bacnt WHERE bacnt_no IS NOT NULL")
+            cur.execute("SELECT bacnt_no, COALESCE(bnk_cd,''), COALESCE(bank_nm,''), COALESCE(source_id,'') FROM tb_fin_bacnt WHERE bacnt_no IS NOT NULL")
             rows = cur.fetchall()
             for r in rows:
                 try:
                     actno, bcode, bname = safe_str(r[0]), safe_str(r[1]), safe_str(r[2])
+                    sid = safe_str(r[3]) if len(r) > 3 else ''
                     # StandardCodeMapper: 은행명/약어 → 금결원 표준코드
                     normalized_bcode = StandardCodeMapper.map_bank_code(bname) or \
                                        StandardCodeMapper.map_bank_code(bcode) or bcode
@@ -510,11 +512,11 @@ class RdbToGraphService:
                         atm_loc = loc_match.group() if loc_match else '미상'
                         atm_no = no_match.group() if no_match else ''
                         display_name = f"{atm_loc} ATM {atm_no}".strip() if actno != '현금인출' else '현금인출'
-                        props = f"{{atm_id: '{actno}', location: '{atm_loc}', atm_no: '{atm_no}', name: '{display_name}', type: 'ATM'}}"
+                        props = f"{{atm_id: '{actno}', location: '{atm_loc}', atm_no: '{atm_no}', name: '{display_name}', source_id: '{sid}', type: 'ATM'}}"
                         cur.execute(f"MERGE (n:vt_atm {{atm_id: '{actno}'}}) SET n = {props}")
                     else:
                         props = (f"{{account_no: '{actno}', bank_cd: '{normalized_bcode}', "
-                                 f"bank_name: '{bname}', type: '계좌'}}")
+                                 f"bank_name: '{bname}', source_id: '{sid}', type: '계좌'}}")
                         cur.execute(f"MERGE (n:vt_bacnt {{account_no: '{actno}'}}) SET n = {props}")
                     stats["nodes"] += 1; stats["accounts"] += 1
                 except Exception as _e:
@@ -523,7 +525,7 @@ class RdbToGraphService:
 
             # 3-4. Phone (TB_TELNO_MST) — 통신사 코드 정규화 포함
             try:
-                cur.execute("SELECT telno, COALESCE(holder_nm,''), COALESCE(carr_cd,'') FROM tb_telno_mst")
+                cur.execute("SELECT telno, COALESCE(holder_nm,''), COALESCE(carr_cd,''), COALESCE(source_id,'') FROM tb_telno_mst")
             except Exception:
                 conn.rollback()
                 cur.execute("SELECT telno FROM tb_telno_mst")
@@ -533,11 +535,12 @@ class RdbToGraphService:
                     telno = _norm_telno(safe_str(r[0]))
                     carrier_nm = safe_str(r[1]) if len(r) > 1 else ''
                     carrier_cd = safe_str(r[2]) if len(r) > 2 else ''
+                    sid = safe_str(r[3]) if len(r) > 3 else ''
                     # StandardCodeMapper: 통신사명/약어 → 표준코드
                     normalized_carrier = StandardCodeMapper.map_carrier_code(carrier_nm) or \
                                          StandardCodeMapper.map_carrier_code(carrier_cd) or carrier_cd
                     props = (f"{{telno: '{telno}', carrier_cd: '{normalized_carrier}', "
-                             f"carrier_name: '{carrier_nm}', type: '전화번호'}}")
+                             f"carrier_name: '{carrier_nm}', source_id: '{sid}', type: '전화번호'}}")
                     cur.execute(f"MERGE (n:vt_telno {{telno: '{telno}'}}) SET n = {props}")
                     stats["nodes"] += 1; stats["phones"] += 1
                 except Exception as _e:
@@ -579,12 +582,13 @@ class RdbToGraphService:
             logger.info(f"\n🔗 Phase 2: V2 액션/이벤트 및 엣지 변환")
             
             # 4-1. 이체 (TB_FIN_BACNT_DLNG) -> Action Node & Edges
-            cur.execute("SELECT dlng_id, COALESCE(src_bacnt_no,''), COALESCE(dlng_dt::text,''), COALESCE(amount::text,''), COALESCE(tgt_bacnt_no,''), CASE WHEN dlng_type='deposit' THEN '01' ELSE '02' END FROM tb_fin_bacnt_dlng")
+            cur.execute("SELECT dlng_id, COALESCE(src_bacnt_no,''), COALESCE(dlng_dt::text,''), COALESCE(amount::text,''), COALESCE(tgt_bacnt_no,''), CASE WHEN dlng_type='deposit' THEN '01' ELSE '02' END, COALESCE(source_id,'') FROM tb_fin_bacnt_dlng")
             rows = cur.fetchall()
             for r in rows:
                 try:
                     eid, src_act, dt, amt, tgt_act, se_cd = safe_str(r[0]), safe_str(r[1]), safe_str(r[2]), safe_str(r[3]), safe_str(r[4]), safe_str(r[5])
-                    props = f"{{event_id: '{eid}', event_type: 'transfer', amount: '{amt}', timestamp: '{dt}', type: '이체'}}"
+                    sid = safe_str(r[6]) if len(r) > 6 else ''
+                    props = f"{{event_id: '{eid}', event_type: 'transfer', amount: '{amt}', timestamp: '{dt}', source_id: '{sid}', type: '이체'}}"
                     cur.execute(f"MERGE (n:vt_transfer {{event_id: '{eid}'}}) SET n = {props}")
                     stats["nodes"] += 1; stats["transfers"] += 1
 
@@ -610,12 +614,13 @@ class RdbToGraphService:
             conn.commit()
 
             # 4-2. 통화 (TB_TELNO_CALL_DTL)
-            cur.execute("SELECT call_id, COALESCE(caller_telno,''), COALESCE(callee_telno,''), COALESCE(bgng_dt::text,''), COALESCE(duration::text,'0') FROM tb_telno_call_dtl")
+            cur.execute("SELECT call_id, COALESCE(caller_telno,''), COALESCE(callee_telno,''), COALESCE(bgng_dt::text,''), COALESCE(duration::text,'0'), COALESCE(source_id,'') FROM tb_telno_call_dtl")
             rows = cur.fetchall()
             for r in rows:
                 try:
                     eid, caller, callee, dt, dur = safe_str(r[0]), _norm_telno(safe_str(r[1])), _norm_telno(safe_str(r[2])), safe_str(r[3]), safe_str(r[4])
-                    props = f"{{event_id: '{eid}', event_type: 'call', duration: '{dur}', timestamp: '{dt}', type: '통화'}}"
+                    sid = safe_str(r[5]) if len(r) > 5 else ''
+                    props = f"{{event_id: '{eid}', event_type: 'call', duration: '{dur}', timestamp: '{dt}', source_id: '{sid}', type: '통화'}}"
                     cur.execute(f"MERGE (n:vt_call {{event_id: '{eid}'}}) SET n = {props}")
                     stats["nodes"] += 1; stats["calls"] += 1
                     
