@@ -32,6 +32,7 @@
 | vt_org | `TB_INST_M` | TB_INST | — | _M |
 | vt_bacnt | `TB_FNNC_BACNT_M` | TB_FIN_BACNT | tb_fin_bacnt | **FNNC/FIN** |
 | vt_telno | `TB_TELNO_M` | TB_TELNO_MST | tb_telno_mst | _M/_MST |
+| vt_ip | `TB_IP_ADDR_M` | ⚠ 부재(파생) | — | 적재 IP마스터 없음(접속/도메인서 파생) |
 | vt_site | `TB_WEB_DMN_M` | TB_WEB_DMN | — | _M |
 | vt_file | `TB_DGTL_FILE_LIST_M` | TB_DGTL_FILE_INVNT | — | LIST/INVNT |
 | vt_vhcl | `TB_VHCL_M` | TB_VHCL_MST | — | _M/_MST |

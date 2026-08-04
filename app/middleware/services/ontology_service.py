@@ -121,6 +121,42 @@ class KICSCrimeDomainOntology:
     }
 
     # ══════════════════════════════════════════════════════════════════════════
+    # 표준 DDL ↔ 적재 레거시 테이블 크로스워크 (마이그레이션 SoT) - STANDARD_TABLE_MAP
+    # ══════════════════════════════════════════════════════════════════════════
+    # CyberCOP V4.0 표준 DDL(DA팀 V3.7)과 적재코드 레거시 2종(public V2 대문자 /
+    # test_v40 소문자) 테이블명 매핑. 적재가 표준과 0% 정합이라, 마이그레이션 시
+    # 이 상수를 단일 참조원(SoT)으로 사용해 하드코딩 산재를 방지한다.
+    # 상세 크로스워크: docs/STANDARD_DDL_ALIGNMENT_REVIEW_20260804.md §1
+    # standard=None: 표준 마스터 부재 · 리스트: N:1(여러 표준 테이블 → 1 노드)
+    STANDARD_TABLE_MAP = {
+        'vt_src':          {'standard': 'TB_DATA_SOU_A',         'public_v2': 'TB_DATA_SRC',          'test_v40': None},
+        'vt_case':         {'standard': 'TB_INCDNT_M',           'public_v2': 'TB_INCDNT_MST',        'test_v40': 'tb_incdnt_mst'},
+        'vt_petition':     {'standard': 'TB_PETTN_M',            'public_v2': 'TB_PETTN_MST',         'test_v40': None},
+        'vt_psn':          {'standard': 'TB_PSN_M',              'public_v2': 'TB_PRSN',              'test_v40': 'tb_prsn'},
+        'vt_org':          {'standard': 'TB_INST_M',             'public_v2': 'TB_INST',              'test_v40': None},
+        'vt_bacnt':        {'standard': 'TB_FNNC_BACNT_M',       'public_v2': 'TB_FIN_BACNT',         'test_v40': 'tb_fin_bacnt'},
+        'vt_telno':        {'standard': 'TB_TELNO_M',            'public_v2': 'TB_TELNO_MST',         'test_v40': 'tb_telno_mst'},
+        'vt_ip':           {'standard': 'TB_IP_ADDR_M',          'public_v2': None,                   'test_v40': None},  # 적재는 IP 마스터 없이 접속/도메인에서 파생
+        'vt_site':         {'standard': 'TB_WEB_DMN_M',          'public_v2': 'TB_WEB_DMN',           'test_v40': None},
+        'vt_file':         {'standard': 'TB_DGTL_FILE_LIST_M',   'public_v2': 'TB_DGTL_FILE_INVNT',   'test_v40': None},
+        'vt_vhcl':         {'standard': 'TB_VHCL_M',             'public_v2': 'TB_VHCL_MST',          'test_v40': None},
+        'vt_id':           {'standard': 'TB_DGTL_ID_M',          'public_v2': 'TB_DGTL_ID_MST',       'test_v40': None},
+        'vt_email':        {'standard': 'TB_EML_ADDR_M',         'public_v2': 'TB_EMAIL_MST',         'test_v40': None},
+        'vt_crypto':       {'standard': None,                    'public_v2': 'TB_CRYPTO_WALLET_MST', 'test_v40': None},  # 표준 마스터 부재
+        'vt_dev':          {'standard': 'TB_ISTR_M',             'public_v2': 'TB_DEV_MST',           'test_v40': None},
+        'vt_atm':          {'standard': 'TB_ATM_M',              'public_v2': 'TB_ATM_MST',           'test_v40': None},
+        'vt_loc':          {'standard': 'TB_PSTN_M',             'public_v2': 'TB_LOC_MST',           'test_v40': None},
+        'vt_transfer':     {'standard': 'TB_FNNC_BACNT_DLNG_T',  'public_v2': 'TB_FIN_BACNT_DLNG',    'test_v40': 'tb_fin_bacnt_dlng'},
+        'vt_call':         {'standard': 'TB_TELNO_CALL_D',       'public_v2': 'TB_TELNO_CALL_DTL',    'test_v40': 'tb_telno_call_dtl'},
+        'vt_msg':          {'standard': ['TB_TELNO_SMS_MSG_T', 'TB_CTT_MSG_T'], 'public_v2': ['TB_TELNO_SMS_MSG', 'TB_CHAT_MSG'], 'test_v40': None},
+        'vt_access':       {'standard': 'TB_SYS_LGN_EVT_T',      'public_v2': 'TB_SYS_LGN_EVT',       'test_v40': None},
+        'vt_movement':     {'standard': ['TB_MOBL_PSTN_EVT_T', 'TB_TRFC_CARD_MVMN_T', 'TB_VHCL_NOPLT_RECG_EVT_T'], 'public_v2': ['TB_GEO_MBL_LOC_EVT', 'TB_VHCL_LPR_EVT'], 'test_v40': None},
+        'vt_impersonation':{'standard': 'TB_FAAS_EVT_T',         'public_v2': 'TB_IMPRSN_REL',        'test_v40': None},
+        'pt_cluster':      {'standard': 'TB_PETTN_CLSTR_T',      'public_v2': 'TB_PETTN_CLSTR',       'test_v40': None},
+        'site_cluster':    {'standard': 'TB_OSINT_SITE_CLSTR_M', 'public_v2': None,                   'test_v40': None},
+    }
+
+    # ══════════════════════════════════════════════════════════════════════════
     # 도메인 사용 매트릭스 (V3.7 통합 표준화) - DOMAIN_USAGE
     # ══════════════════════════════════════════════════════════════════════════
     # 동일 SSOT 카탈로그 위에서 도메인별 사용 가능성을 명시화.

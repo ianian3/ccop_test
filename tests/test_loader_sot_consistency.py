@@ -90,3 +90,27 @@ def test_relationships_no_duplicate_keys():
                         dups.append(k.value)
                     seen.add(k.value)
     assert not dups, f'RELATIONSHIPS 중복 키(앞 정의 손실): {sorted(set(dups))}'
+
+
+# ── 표준 DDL 크로스워크(STANDARD_TABLE_MAP) 무결성 ──
+
+def test_standard_table_map_covers_all_nodes():
+    """크로스워크가 온톨로지 25노드를 전부 커버."""
+    assert set(O.STANDARD_TABLE_MAP.keys()) == sot_nodes()
+
+
+def test_standard_table_map_public_v2_matches_loader():
+    """STANDARD_TABLE_MAP.public_v2가 적재 실매핑(rdb_to_graph tables 리스트)과 일치.
+
+    크로스워크 상수가 실제 적재코드와 어긋나면(드리프트) 실패 → 마이그레이션 SoT 신뢰성 보장.
+    """
+    loader_map = {}
+    for tbl, node in re.findall(r"\('(TB_\w+)',\s*'(vt_\w+)',", _SRC):
+        loader_map.setdefault(node, set()).add(tbl)
+    mismatches = []
+    for node, tables in loader_map.items():
+        pub = O.STANDARD_TABLE_MAP.get(node, {}).get('public_v2')
+        pub_set = set(pub) if isinstance(pub, list) else ({pub} if pub else set())
+        if tables != pub_set:
+            mismatches.append((node, sorted(tables), sorted(pub_set)))
+    assert not mismatches, f'STANDARD_TABLE_MAP.public_v2 ≠ 적재 실매핑: {mismatches}'
