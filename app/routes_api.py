@@ -1649,6 +1649,14 @@ def pipeline_csv_to_v40_graph():
                         source_domain=source_domain, source_id=source_id,
                     )
                 else:
+                    # P0-1(silent data loss 방지): 비-tbl_ 파일은 import_csv_to_rdb가 public 스키마에
+                    # 적재되어 test_v40 그래프 파이프라인(transfer_data)에 도달하지 않는다.
+                    # 조용히 사라지지 않도록 명시적 경고를 결과에 포함(사용자가 그래프 미변환을 인지).
+                    current_app.logger.warning(
+                        f"L2: '{fname}'은 tbl_* 고정스키마 형식이 아님 → public 적재(그래프 미변환)")
+                    layer_results['L2'].setdefault('warnings', []).append(
+                        f"'{fname}': tbl_* 형식이 아니어서 그래프에 반영되지 않습니다(public 적재만 됨). "
+                        f"그래프 변환은 tbl_ 접두 고정스키마 CSV를 사용하세요.")
                     success, result = RDBService.import_csv_to_rdb(
                         temp_path, clear_existing=clear_now,
                         source_domain=source_domain, source_id=source_id,
