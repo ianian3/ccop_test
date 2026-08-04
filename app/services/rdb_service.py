@@ -18,6 +18,19 @@ def norm_telno(v):
     return re.sub(r'[^0-9]', '', str(v or ''))
 
 
+def norm_account(v):
+    """계좌번호 표준화 — 온톨로지 SoT(vt_bacnt) 매칭키. 대시/공백 제거로 파편화 방지.
+
+    전화 norm_telno와 대칭인 L2 표준화 단일 지점. 대시 유무가 다른 동일 계좌가
+    별개 노드로 분기되던 문제를 막는다. md5/sha256 해시값(OSINT 더치트)은 소문자화만.
+    """
+    import re
+    s = str(v or '').strip().lower()
+    if re.fullmatch(r'[0-9a-f]{32}', s) or re.fullmatch(r'[0-9a-f]{64}', s):
+        return s                          # 해시 식별자는 원형 유지
+    return re.sub(r'[\s\-]', '', s)       # 평문 계좌: 대시/공백 제거
+
+
 class RDBService:
     @staticmethod
     def get_db_connection():
@@ -113,7 +126,7 @@ class RDBService:
 
             elif 'tbl_vt_bacnt' in fname:
                 for _, row in df.iterrows():
-                    actno = str(row.get('actno', '')).strip()
+                    actno = norm_account(row.get('actno', ''))
                     dpstr = str(row.get('dpstr', '')).strip()
                     bank = str(row.get('bank', '')).strip()
                     if actno:
@@ -158,10 +171,10 @@ class RDBService:
                     se = str(row.get('se', '')).strip()
                     dpstr = str(row.get('dpstr', '')).strip()
                     bank = str(row.get('bank', '')).strip()
-                    actno = str(row.get('actno', '')).strip()
+                    actno = norm_account(row.get('actno', ''))
                     rlt_bank = str(row.get('rlt_bank', '')).strip()
                     rlt_dpstr = str(row.get('rlt_dpstr', '')).strip()
-                    rlt_actno = str(row.get('rlt_actno', '')).strip()
+                    rlt_actno = norm_account(row.get('rlt_actno', ''))
                     date_val = str(row.get('rmt_ymdhm', '')).strip()
                     try:
                         dpst_amt = int(float(str(row.get('dpst_amt', '0')).replace(',', '') or '0'))
@@ -202,7 +215,7 @@ class RDBService:
             elif 'tbl_eg_bactno_poss' in fname:
                 for _, row in df.iterrows():
                     flnm = str(row.get('flnm', '')).strip()
-                    actno = str(row.get('actno', '')).strip()
+                    actno = norm_account(row.get('actno', ''))
                     if flnm and actno:
                         cur.execute("""
                             INSERT INTO tb_prsn (prsn_id, korn_flnm, prsn_se_cd, source_domain, source_id, reliability_tier)
@@ -482,6 +495,7 @@ class RDBService:
 
                 # 3. 금융 계좌 (TB_FIN_BACNT) — DDL 6컬럼 (DPSTR_NM 추가)
                 def insert_account(actno, holder_name=''):
+                    actno = norm_account(actno)
                     if not actno: return
                     cur.execute("""
                         INSERT INTO TB_FIN_BACNT (BACNT_NO, BANK_CD, BANK_NM, DPSTR_NM) 

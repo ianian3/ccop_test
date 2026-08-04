@@ -164,8 +164,11 @@ class RdbToGraphService:
         }
 
         def safe_str(val):
+            # Cypher 작은따옴표 문자열 리터럴용 이스케이프 — 값 삭제 금지(O'Brien·주소 보존).
+            # 순서 중요: 백슬래시 먼저 → 작은따옴표. 개행/제어문자는 공백화.
             if val is None: return ''
-            return str(val).replace("'", "").replace("\\", "").replace('"', '').strip()
+            s = str(val).replace("\\", "\\\\").replace("'", "\\'")
+            return s.replace("\n", " ").replace("\r", " ").replace("\t", " ").strip()
 
         try:
             # --- 1. 그래프 설정 ---

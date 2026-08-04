@@ -478,11 +478,14 @@ class ETLService:
                     tgt_id = str(tgt_result[0])
                     
                     # 3. Cypher로 엣지 생성 (ID 사용)
+                    # MERGE로 멱등성 확보 (재실행 시 엣지 중복 방지) + 속성은 SET으로 갱신
                     edge_create_query = f"""
                     MATCH (v1), (v2)
                     WHERE id(v1) = '{src_id}' AND id(v2) = '{tgt_id}'
-                    CREATE (v1)-[r:{edge_type} {{{edge_props_str}}}]->(v2)
+                    MERGE (v1)-[r:{edge_type}]->(v2)
                     """
+                    if edge_props_str:
+                        edge_create_query += f"                    SET r += {{{edge_props_str}}}\n"
                     cur.execute(edge_create_query)
                     edges_created_count += 1
                 except Exception as e:
@@ -534,10 +537,11 @@ class ETLService:
                             
                             if result:
                                 src_id, tgt_id = result
+                                # MERGE로 멱등성 확보 (재실행 시 엣지 중복 방지)
                                 create_edge_q = f"""
                                 MATCH (v1), (v2)
                                 WHERE id(v1) = '{src_id}' AND id(v2) = '{tgt_id}'
-                                CREATE (v1)-[:{add_edge_type}]->(v2)
+                                MERGE (v1)-[:{add_edge_type}]->(v2)
                                 """
                                 cur.execute(create_edge_q)
                                 additional_edges_count += 1

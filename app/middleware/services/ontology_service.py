@@ -50,8 +50,8 @@ class KICSCrimeDomainOntology:
         'vt_bacnt': {
             'canonical_field':  'account_no',
             'id_formats':       ['plain_dash', 'md5', 'sha256'],
-            'default_format':   'plain_dash',  # '110-2222-3333'
-            'normalization':    'strip_whitespace + lowercase',
+            'default_format':   'plain_dash',  # '110-2222-3333' (표시형)
+            'normalization':    'strip_whitespace/dash + lowercase',  # 매칭키는 no-dash (norm_account)
         },
         'vt_telno': {
             'canonical_field':  'telno',
