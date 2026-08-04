@@ -66,7 +66,10 @@ class RDBService:
         
         try:
             conn = psycopg2.connect(**db_config)
-            conn.autocommit = True
+            # 트랜잭션 원자성: 파일 단위 all-or-nothing (부분 적재 방지).
+            # 중간 행 실패 시 전체 롤백 → RDB에 어중간한 부분 데이터가 남지 않음.
+            # (TRUNCATE 루프는 savepoint로 statement 격리 — autocommit 없이도 미존재 테이블 계속 진행)
+            conn.autocommit = False
             cur = conn.cursor()
 
             # V4.0 격리 스키마로 search_path 설정 — INSERT/TRUNCATE 가 target_schema 로 향함
@@ -86,11 +89,14 @@ class RDBService:
                     'TB_INST', 'TB_PRSN', 'TB_INCDNT_MST'
                 ]
                 for table in tables_to_clear:
-                    # 개별 try — target_schema 에 없는 테이블에서 예외 나도 나머지(tb_telno_mst 등)까지 진행.
-                    # (autocommit 모드라 statement 단위 독립 — 이전엔 첫 미존재 테이블에서 루프 중단됐음)
+                    # 개별 savepoint — target_schema 에 없는 테이블에서 예외 나도 나머지(tb_telno_mst 등)까지 진행.
+                    # (트랜잭션 모드에서 statement 격리 — 미존재 테이블 오류가 전체 트랜잭션을 abort시키지 않음)
                     try:
+                        cur.execute("SAVEPOINT sp_trunc")
                         cur.execute(f"TRUNCATE TABLE {table} CASCADE;")
+                        cur.execute("RELEASE SAVEPOINT sp_trunc")
                     except Exception as _te:
+                        cur.execute("ROLLBACK TO SAVEPOINT sp_trunc")
                         logger.debug(f"   TRUNCATE 건너뜀({table}): {_te}")
                 logger.info("   [DB] 초기화 완료.")
             
