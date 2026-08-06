@@ -1880,6 +1880,31 @@ class RdbToGraphService:
             logger.warning(f"    6V-4 V4.0 메타 보정 실패: {e}")
             conn.rollback()
 
+        # 6V-5 (V4.0): provenance 정규화 — source_id 속성 → vt_src 노드 + sourced_from 엣지.
+        # SoT: 노드→Source 방향(range=Source). 출처 마스터(TB_DATA_SOU_A) 부재 시
+        # source_id 값으로 vt_src 최소 생성(하이브리드: inline source_id 유지 + vt_src 정규화).
+        try:
+            safe_set_graph_path(cur, graph_name)
+            # ⚠ AgensGraph: 라벨 없는 MATCH (n)은 MATCH는 되나 후속 MERGE가 미동작(write 불가).
+            #   → source_id를 보유하는 라벨(P1-1 전파 대상)별로 순회해야 vt_src/sourced_from이 생성됨.
+            _prov_labels = ['vt_psn', 'vt_bacnt', 'vt_atm', 'vt_telno', 'vt_transfer', 'vt_call']
+            _linked = 0
+            for _lbl in _prov_labels:
+                try:
+                    cur.execute(f"MATCH (n:{_lbl}) WHERE n.source_id IS NOT NULL AND n.source_id <> '' "
+                                f"MERGE (s:vt_src {{src_id: n.source_id}}) "
+                                f"ON CREATE SET s.type = '출처', s.src_domain = 'investigation' "
+                                f"MERGE (n)-[:sourced_from]->(s) RETURN count(*)")
+                    _r = cur.fetchone()
+                    _linked += int(_r[0]) if _r and _r[0] is not None else 0
+                except Exception as _le:
+                    logger.debug(f"    6V-5 {_lbl} skip: {_le}")
+            out["sourced_from_linked"] = _linked
+            conn.commit()
+        except Exception as e:
+            logger.warning(f"    6V-5 provenance 정규화 실패: {e}")
+            conn.rollback()
+
         return out
 
     @staticmethod
