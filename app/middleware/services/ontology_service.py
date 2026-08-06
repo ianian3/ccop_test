@@ -18,7 +18,9 @@ CCOP V4.1 온톨로지 — POLE 정렬 6레이어 아키텍처 (현행 SSOT)
           mentions_location) + 금융/메시지 다형화(from/to_account·sent/received_msg·transferred_to). 엣지 63→66.
   - V4.5 (2026-08-06): ccop-analysis 번들(2차년도 실적재 검증) 대조 — 신규 엣지 5종
           (sent_from_ip·exchanged_to·linked_petition·eg_used_id·eg_used_email) + 확장 5종
-          (accessed_to·used_ip·performed_by·linked_id·sameAs domain/range). 엣지 66→71. (노드속성 G9/G12/R6~R8 별도)
+          (accessed_to·used_ip·performed_by·linked_id·sameAs domain/range). 엣지 66→71.
+          + 노드속성: edge_id(R7, EDGE_META) · 파생속성 등록부(R6, DERIVED_PROPERTY_REGISTRY —
+          ip_role G12·aggregation_level G9 등 9종). R8(vt_access 서브타입)은 검토 보류.
 노드: 25 | 엣지: 71 (의미=시각 일치) | 추론 규칙: 13종 통합 dict (탐지 9 + enrichment 4)
 """
 
@@ -28,6 +30,7 @@ class KICSCrimeDomainOntology:
     # 엣지 공통 메타속성 스키마 (EDGE_META_SCHEMA)
     EDGE_META_SCHEMA = {
         # ══ 필수 (모든 엣지) ══════════════════════════════════════
+        'edge_id':         str,    # 전 엣지 공통 안정 ID — evidence_edge_ids 가 참조 (V4.5 R7)
         'source_id':       str,    # vt_src.src_id 참조 (MANDATORY)
         'rec_created':     str,    # ISO8601 — DB 기록 시점 (MANDATORY)
         'creation_method': str,    # 'manual' | 'etl' | 'ocr_ner' | 'osint' | 'inference'
@@ -157,6 +160,41 @@ class KICSCrimeDomainOntology:
         'vt_impersonation':{'standard': 'TB_FAAS_EVT_T',         'public_v2': 'TB_IMPRSN_REL',        'test_v40': None},
         'pt_cluster':      {'standard': 'TB_PETTN_CLSTR_T',      'public_v2': 'TB_PETTN_CLSTR',       'test_v40': None},
         'site_cluster':    {'standard': 'TB_OSINT_SITE_CLSTR_M', 'public_v2': None,                   'test_v40': None},
+    }
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # 파생속성 등록부 (V4.5 R6) - DERIVED_PROPERTY_REGISTRY
+    # ══════════════════════════════════════════════════════════════════════════
+    # 파생값(계산 속성)의 입력·규칙·재계산 시점을 일원화. 파생 순서가 결론을 바꾸는
+    # 사례(ip_role: subject 기준 'shared' vs entity 기준 'single' — HANDOFF G12) 때문에
+    # 재계산 시점을 규칙으로 고정. G9(집계)·G12(IP역할) 파생 + 6V 후처리 파생 포함.
+    # (edge_id 는 파생 아닌 공통 식별자 — EDGE_META_SCHEMA 참조, V4.5 R7)
+    DERIVED_PROPERTY_REGISTRY = {
+        'ip_role': {                                    # V4.5 G12
+            'node': 'vt_ip',
+            'inputs': ['linked_subject_cnt', 'linked_entity_cnt'],
+            'rule': ("linked_entity_cnt==1 → single_user · 착신전용 패턴 → call_center · "
+                     "linked_subject_cnt>=임계 → shared_small · else shared"),
+            'recompute': 'sameAs 해소 후(entity 기준). subject 기준 선계산은 오분류(HANDOFF G12)',
+            'stage_field': 'role_resolution_stage',
+        },
+        'linked_subject_cnt': {'node': 'vt_ip', 'inputs': ['used_ip(역방향)'],
+                               'rule': '이 IP에 붙는 식별자 수(해소 전)', 'recompute': 'used_ip 적재 후'},
+        'linked_entity_cnt':  {'node': 'vt_ip', 'inputs': ['linked_subject_cnt', 'sameAs'],
+                               'rule': 'sameAs 해소 후 고유 실체 수', 'recompute': 'sameAs 해소 후'},
+        'role_resolution_stage': {'node': 'vt_ip', 'inputs': ['ip_role'],
+                                  'rule': "ip_role 산출 단계('subject'|'entity')", 'recompute': 'ip_role과 동시'},
+        'aggregation_level': {                          # V4.5 G9
+            'node': 'vt_access|vt_msg', 'inputs': ['event_count'],
+            'rule': '집계 레벨(raw|hourly|daily) — 지연 확장 3조건 충족 시 원본 이벤트로 확장',
+            'recompute': '적재 시',
+        },
+        'event_count':      {'node': 'vt_access|vt_msg', 'rule': '집계된 원본 이벤트 수', 'recompute': '적재 시'},
+        'sample_event_ids': {'node': 'vt_access|vt_msg', 'rule': '집계 노드의 대표 원본 이벤트 ID 표본', 'recompute': '적재 시'},
+        'is_anonymous':     {'node': 'vt_psn', 'inputs': ['name', 'korn_flnm'],
+                             'rule': 'name·korn_flnm 모두 공란 → true', 'recompute': '적재 후처리(6V-3)'},
+        'reliability_tier': {'node': '*', 'inputs': ['source_domain'],
+                             'rule': 'domain→tier(investigation 1·partner 2·inference 3·osint 4)', 'recompute': '적재(_postprocess_v40_meta)'},
     }
 
     # ══════════════════════════════════════════════════════════════════════════
