@@ -16,11 +16,14 @@ CCOP V4.1 온톨로지 — POLE 정렬 6레이어 아키텍처 (현행 SSOT)
           sameAs range를 DigitalID까지 확장(유사 계정 해소). 엣지 60→63.
   - V4.4 (2026-08-03): 시나리오 reification 확장 — 이벤트 참여 엣지 3종(access_via·via_ip·
           mentions_location) + 금융/메시지 다형화(from/to_account·sent/received_msg·transferred_to). 엣지 63→66.
-노드: 25 | 엣지: 66 (의미=시각 일치) | 추론 규칙: 13종 통합 dict (탐지 9 + enrichment 4)
+  - V4.5 (2026-08-06): ccop-analysis 번들(2차년도 실적재 검증) 대조 — 신규 엣지 5종
+          (sent_from_ip·exchanged_to·linked_petition·eg_used_id·eg_used_email) + 확장 5종
+          (accessed_to·used_ip·performed_by·linked_id·sameAs domain/range). 엣지 66→71. (노드속성 G9/G12/R6~R8 별도)
+노드: 25 | 엣지: 71 (의미=시각 일치) | 추론 규칙: 13종 통합 dict (탐지 9 + enrichment 4)
 """
 
 class KICSCrimeDomainOntology:
-    """KICS 기반 한국형 사이버 범죄 온톨로지 (V4.4 POLE 6레이어 · 66종 엣지 · 추론규칙 13종)"""
+    """KICS 기반 한국형 사이버 범죄 온톨로지 (V4.5 POLE 6레이어 · 71종 엣지 · 추론규칙 13종)"""
 
     # 엣지 공통 메타속성 스키마 (EDGE_META_SCHEMA)
     EDGE_META_SCHEMA = {
@@ -1113,8 +1116,8 @@ class KICSCrimeDomainOntology:
         # [ENTITY RESOLUTION] 동일인물/모순 엣지
         # ═══════════════════════════════════════════════════════════
         'sameAs': {
-            'domain': 'Person',
-            'range': 'Person|DigitalID',
+            'domain': 'Person|DigitalID|Phone',  # V4.5 R5: 전화번호도 동일실체 해소 대상
+            'range': 'Person|DigitalID|Phone',
             'source_types': [('person', 'person'), ('user_id', 'user_id')],
             'semantic_relation': 'sameAs',
             'label_ko': '동일실체',
@@ -1148,7 +1151,7 @@ class KICSCrimeDomainOntology:
             'properties': ['relation_type', 'confidence', 'valid_from', 'source_id', 'rec_created']
         },
         'linked_id': {
-            'domain': 'Object',
+            'domain': 'Object|NetworkTrace',  # V4.5 G4: 역조회 입력이 IP인 경우
             'range': 'DigitalID',
             'source_types': [('account', 'id'), ('phone', 'id')],
             'semantic_relation': 'linkedToDigitalID',
@@ -1287,7 +1290,7 @@ class KICSCrimeDomainOntology:
             'legal_significance': '금융거래정보'
         },
         'used_ip': {
-            'domain': 'Person',
+            'domain': 'Person|Phone|DigitalID|Device',  # V4.5 G3/G10: 전화·계정·기기도 IP 사용 주체(고립 IP 방지)
             'range': 'NetworkTrace',
             'source_types': [('person', 'ip'), ('user_id', 'ip')],
             'semantic_relation': 'usedIPAddress',
@@ -1688,7 +1691,7 @@ class KICSCrimeDomainOntology:
         # ═══════════════════════════════════════════════════════════
         'accessed_to': {
             'domain': 'Access',
-            'range': 'WebTrace',
+            'range': 'WebTrace|BankAccount|DigitalID',  # V4.5 G8: 인터넷뱅킹 접속(계좌)·계정 접속 정식 표현
             'source_types': [('access', 'site'), ('접속', '사이트')],
             'semantic_relation': 'accessedTo',
             'label_ko': '목적지',
@@ -1752,7 +1755,7 @@ class KICSCrimeDomainOntology:
         },
         'performed_by': {
             'domain': 'Any',  # Access or Movement
-            'range': 'Person',
+            'range': 'Person|Phone|DigitalID|Device',  # V4.5 G1: 수행주체 확장(actor_type로 구분, 미해소 식별자 허용)
             'source_types': [],
             'semantic_relation': 'performedBy',
             'label_ko': '수행주체',
@@ -1811,6 +1814,59 @@ class KICSCrimeDomainOntology:
             'legal_significance': '디지털증거',
             'deprecated': True,
             'alias_of': 'uses_device',
+            'properties': ['source_id', 'rec_created']
+        },
+        # ══════════════════════════════════════════════════════════════════════
+        # V4.5 반영 (ccop-analysis 번들 대조 — 2차년도 실적재 검증에서 발견한 신규 엣지)
+        # ══════════════════════════════════════════════════════════════════════
+        'sent_from_ip': {
+            'domain': 'Message',
+            'range': 'NetworkTrace',
+            'source_types': [],
+            'semantic_relation': 'sentFromIp',
+            'label_ko': '발신IP',
+            'meaning': '메시지가 특정 IP에서 발신됨 — 착발신내역이 메시지+접속을 한 레코드로 제공(V4.5 G2)',
+            'legal_significance': '통신사실확인자료',
+            'properties': ['sent_at', 'source_id', 'rec_created']
+        },
+        'exchanged_to': {
+            'domain': 'BankAccount',
+            'range': 'CryptoWallet',
+            'source_types': [],
+            'semantic_relation': 'exchangedTo',
+            'label_ko': '환전',
+            'meaning': '계좌 자금이 가상자산 지갑으로 환전됨 — 자금 종단 브리지(V4.5 G6)',
+            'legal_significance': '자금추적',
+            'properties': ['amount', 'exchanged_at', 'source_id', 'rec_created']
+        },
+        'linked_petition': {
+            'domain': 'Petition',
+            'range': 'Case',
+            'source_types': [],
+            'semantic_relation': 'linkedPetition',
+            'label_ko': '진정연계',
+            'meaning': '진정서가 사건에 연계됨 — 기존 linked_to(Petition→Case) 대체(V4.5 R2)',
+            'legal_significance': '사건관리',
+            'properties': ['source_id', 'rec_created']
+        },
+        'eg_used_id': {
+            'domain': 'Case',
+            'range': 'DigitalID',
+            'source_types': [],
+            'semantic_relation': 'egUsedId',
+            'label_ko': '사건사용ID',
+            'meaning': '사건에서 사용·언급된 디지털ID(V4.5 R3 신설)',
+            'legal_significance': '수사대상',
+            'properties': ['source_id', 'rec_created']
+        },
+        'eg_used_email': {
+            'domain': 'Case',
+            'range': 'Email',
+            'source_types': [],
+            'semantic_relation': 'egUsedEmail',
+            'label_ko': '사건사용이메일',
+            'meaning': '사건에서 사용·언급된 이메일(V4.5 R3 신설)',
+            'legal_significance': '수사대상',
             'properties': ['source_id', 'rec_created']
         },
     }
