@@ -174,9 +174,14 @@ class KICSCrimeDomainOntology:
             'node': 'vt_ip',
             'inputs': ['linked_subject_cnt', 'linked_entity_cnt'],
             'rule': ("linked_entity_cnt==1 → single_user · 착신전용 패턴 → call_center · "
-                     "linked_subject_cnt>=임계 → shared_small · else shared"),
+                     "다수 연결 → shared_small/shared. call_center 경계는 고정 임계(5)가 아닌 "
+                     "분포 기반 이상치로 산출 — 이 데이터는 5↑ 32개·10↑ 12개로 뚜렷한 골이 없어 고정값 근거 약함"),
             'recompute': 'sameAs 해소 후(entity 기준). subject 기준 선계산은 오분류(HANDOFF G12)',
             'stage_field': 'role_resolution_stage',
+            'known_limitation': ("⚠ 시간축 무시(전 기간 통합) — G5(계좌·070 valid_from/to)와 충돌. "
+                                 "특정 IP가 특정 기간만 유효(예 27.193.61.154: 2017-02-27~04-25)한데 "
+                                 "전 기간 단일 판정이라 '3월 공유→4월 단독' 같은 변화를 못 본다. "
+                                 "→ v4.6: used_ip valid_from/to 기반 구간별 ip_role(bitemporal) 설계 필요"),
         },
         'linked_subject_cnt': {'node': 'vt_ip', 'inputs': ['used_ip(역방향)'],
                                'rule': '이 IP에 붙는 식별자 수(해소 전)', 'recompute': 'used_ip 적재 후'},
@@ -186,11 +191,19 @@ class KICSCrimeDomainOntology:
                                   'rule': "ip_role 산출 단계('subject'|'entity')", 'recompute': 'ip_role과 동시'},
         'aggregation_level': {                          # V4.5 G9
             'node': 'vt_access|vt_msg', 'inputs': ['event_count'],
-            'rule': '집계 레벨(raw|hourly|daily) — 지연 확장 3조건 충족 시 원본 이벤트로 확장',
+            'rule': '집계 레벨(raw|hourly|daily). 지연 확장 3조건 충족 시 원본 이벤트로 확장',
             'recompute': '적재 시',
+            'known_limitation': ('⚠ 지연 확장 미구현 — sample_event_ids가 가리킬 원본 이벤트 저장소가 '
+                                 '미정의라 현재 event_count 표시만 가능(원본 409,941건 펼침 경로 없음)'),
         },
         'event_count':      {'node': 'vt_access|vt_msg', 'rule': '집계된 원본 이벤트 수', 'recompute': '적재 시'},
-        'sample_event_ids': {'node': 'vt_access|vt_msg', 'rule': '집계 노드의 대표 원본 이벤트 ID 표본', 'recompute': '적재 시'},
+        'sample_event_ids': {
+            'node': 'vt_access|vt_msg',
+            'rule': '집계 노드의 대표 원본 이벤트 ID 표본 — 지연 확장의 참조 키',
+            'source_store': ('⚠ 정의 필요 — RDB 원본 이벤트 테이블(TB_SYS_LGN_EVT 등)의 행 ID를 가리켜야 함. '
+                             '저장소·조회 경로 확정 전까지 지연 확장 불가(v4.6)'),
+            'recompute': '적재 시',
+        },
         'is_anonymous':     {'node': 'vt_psn', 'inputs': ['name', 'korn_flnm'],
                              'rule': 'name·korn_flnm 모두 공란 → true', 'recompute': '적재 후처리(6V-3)'},
         'reliability_tier': {'node': '*', 'inputs': ['source_domain'],
