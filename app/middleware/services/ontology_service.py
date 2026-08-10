@@ -170,25 +170,40 @@ class KICSCrimeDomainOntology:
     # 재계산 시점을 규칙으로 고정. G9(집계)·G12(IP역할) 파생 + 6V 후처리 파생 포함.
     # (edge_id 는 파생 아닌 공통 식별자 — EDGE_META_SCHEMA 참조, V4.5 R7)
     DERIVED_PROPERTY_REGISTRY = {
-        'ip_role': {                                    # V4.5 G12
+        'ip_role': {                                    # V4.5 G12 → V4.6 bitemporal 재설계
             'node': 'vt_ip',
-            'inputs': ['linked_subject_cnt', 'linked_entity_cnt'],
+            'inputs': ['linked_subject_cnt', 'linked_entity_cnt', 'used_ip.valid_from/to'],
             'rule': ("linked_entity_cnt==1 → single_user · 착신전용 패턴 → call_center · "
                      "다수 연결 → shared_small/shared. call_center 경계는 고정 임계(5)가 아닌 "
                      "분포 기반 이상치로 산출 — 이 데이터는 5↑ 32개·10↑ 12개로 뚜렷한 골이 없어 고정값 근거 약함"),
-            'recompute': 'sameAs 해소 후(entity 기준). subject 기준 선계산은 오분류(HANDOFF G12)',
+            'temporal_rule': ("V4.6: used_ip valid_from/to 경계로 시간구간 분할 → 구간별(sameAs 해소 후) "
+                              "entity_cnt로 role 판정 → 인접 동일구간 coalesce. 산출은 ip_role_timeline(구간 list)과 "
+                              "ip_role_current(최신 구간). 설계: docs/ONTOLOGY_V46_IP_ROLE_BITEMPORAL_DESIGN.md"),
+            'recompute': 'sameAs 해소 후(entity 기준). 구간 단위도 동일 순서(HANDOFF G12)',
             'stage_field': 'role_resolution_stage',
-            'known_limitation': ("⚠ 시간축 무시(전 기간 통합) — G5(계좌·070 valid_from/to)와 충돌. "
-                                 "특정 IP가 특정 기간만 유효(예 27.193.61.154: 2017-02-27~04-25)한데 "
-                                 "전 기간 단일 판정이라 '3월 공유→4월 단독' 같은 변화를 못 본다. "
-                                 "→ v4.6: used_ip valid_from/to 기반 구간별 ip_role(bitemporal) 설계 필요"),
+            'outputs': ['ip_role_current', 'ip_role_timeline'],
+            'implementation_status': 'S1 스키마 등록 완료(used_ip 시간속성+파생 2종) / S3 구간계산 미구현(설계서 §4.2)',
+        },
+        'ip_role_current': {                            # V4.6 S1 (기존 단일 ip_role 대체·하위호환)
+            'node': 'vt_ip',
+            'inputs': ['ip_role_timeline'],
+            'rule': "ip_role_timeline 최신 구간(마지막 valid_to)의 role. 무시간 쿼리/시각화는 이 값으로 그대로 동작(alias)",
+            'recompute': 'ip_role_timeline 산출과 동시',
+            'implementation_status': 'S1 등록 / S3 계산 미구현',
+        },
+        'ip_role_timeline': {                           # V4.6 S1
+            'node': 'vt_ip',
+            'inputs': ['used_ip.valid_from/to', 'linked_entity_cnt'],
+            'rule': "used_ip 시간구간별 role 판정 list: [{from,to,role,entity_cnt,subject_cnt}] (인접 동일구간 coalesce)",
+            'recompute': 'sameAs 해소 후',
+            'implementation_status': 'S1 등록 / S3 계산 미구현',
         },
         'linked_subject_cnt': {'node': 'vt_ip', 'inputs': ['used_ip(역방향)'],
                                'rule': '이 IP에 붙는 식별자 수(해소 전)', 'recompute': 'used_ip 적재 후'},
         'linked_entity_cnt':  {'node': 'vt_ip', 'inputs': ['linked_subject_cnt', 'sameAs'],
                                'rule': 'sameAs 해소 후 고유 실체 수', 'recompute': 'sameAs 해소 후'},
         'role_resolution_stage': {'node': 'vt_ip', 'inputs': ['ip_role'],
-                                  'rule': "ip_role 산출 단계('subject'|'entity')", 'recompute': 'ip_role과 동시'},
+                                  'rule': "ip_role 산출 단계('subject'|'entity'|'period') — 'period'=V4.6 구간별 판정", 'recompute': 'ip_role과 동시'},
         'aggregation_level': {                          # V4.5 G9
             'node': 'vt_access|vt_msg', 'inputs': ['event_count'],
             'rule': '집계 레벨(raw|hourly|daily). 지연 확장 3조건 충족 시 원본 이벤트로 확장',
@@ -1353,7 +1368,8 @@ class KICSCrimeDomainOntology:
             'semantic_relation': 'usedIPAddress',
             'label_ko': 'IP사용',
             'meaning': '닉네임/인물이 IP 주소를 사용함',
-            'legal_significance': '디지털증거'
+            'legal_significance': '디지털증거',
+            'properties': ['valid_from', 'valid_to', 'confidence', 'source_id', 'rec_created']  # V4.6 S1: ip_role bitemporal 전제(시간축). 타입은 EDGE_META_SCHEMA 공통정의
         },
         
         # ═══════════════════════════════════════════════════════════
