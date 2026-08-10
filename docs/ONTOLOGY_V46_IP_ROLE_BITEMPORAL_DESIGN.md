@@ -104,13 +104,14 @@ IP 27.193.61.154  (HANDOFF G12 실례)
 ### 4.3 role 분류 규칙 (구간 내)
 
 ```
-is_hosting(호스팅 대역/PTR)          → infra          # 최우선: 사용자수 무관 인프라
+is_hosting(호스팅 대역/PTR)          → infra            # 최우선: 사용자수 무관 인프라
 entity_cnt == 1                      → single_user
-착신전용 패턴(분포 이상치, #3 과제)   → call_center
-2 ≤ entity_cnt < θ_shared            → shared_small
-entity_cnt ≥ θ_shared                → shared
+2 ≤ entity_cnt < θ_call_center       → shared_small
+entity_cnt ≥ θ_call_center           → call_center      # 다수 실체 공유 = 콜센터 인프라
 ```
-> 우선순위 확정(구현 반영): hosting > single > call_center > shared_small > shared. 호스팅 대역은 사용자 수로 덮어써선 안 되므로 최우선. `ip_role_temporal.classify_role()`.
+> 우선순위(구현): hosting > single_user > shared_small > call_center. `ip_role_temporal.classify_role()`.
+> **정의 근거**(번들 CLAUDE.md 실측): single_user 11,575 · shared_small 1,457 · call_center 32 · infra 29. call_center 는 "착신전용"이 아니라 **entity_cnt 상위 구간**(다수 실체 공유) — 초기 설계의 pred 모델을 실측에 맞춰 정정.
+> **θ_call_center(#3)**: 고정 5(임의값)를 `call_center_threshold()` 분포기반 이상치로 대체 — 골 없는 편중 분포라 percentile/MAD.
 θ_shared, call_center 경계는 **고정값이 아닌 분포 기반**(v4.6 #3과 공유) — 구간별 활성 주체 분포에서 산출.
 
 ### 4.4 Cypher 예시 (시점 쿼리 — 신규로 가능해지는 것)
@@ -169,6 +170,8 @@ RETURN ip.addr, ip.ip_role_timeline
 - [ ] **S6. Text2Cypher** — 시점/전환 few-shot 보강, pruning 동반속성
 
 > **선행 의존**: S3의 role 분류(§4.3)는 v4.6 #3(call_center 분포임계)과 규칙을 공유 — 함께 확정하면 중복 없음.
+>
+> **#3 call_center 분포임계 — 함께 구현됨** ✅: `call_center_threshold()`(percentile/MAD)로 고정 5 대체. call_center 정의를 번들 실측(entity_cnt 상위 구간)에 맞춰 정정. 단위테스트 **11 passed**. 남은 것은 운영 분포로 θ 실산출(S4 연동 시).
 
 ---
 

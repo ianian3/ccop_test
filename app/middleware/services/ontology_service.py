@@ -173,9 +173,10 @@ class KICSCrimeDomainOntology:
         'ip_role': {                                    # V4.5 G12 → V4.6 bitemporal 재설계
             'node': 'vt_ip',
             'inputs': ['linked_subject_cnt', 'linked_entity_cnt', 'used_ip.valid_from/to'],
-            'rule': ("linked_entity_cnt==1 → single_user · 착신전용 패턴 → call_center · "
-                     "다수 연결 → shared_small/shared. call_center 경계는 고정 임계(5)가 아닌 "
-                     "분포 기반 이상치로 산출 — 이 데이터는 5↑ 32개·10↑ 12개로 뚜렷한 골이 없어 고정값 근거 약함"),
+            'rule': ("linked_entity_cnt==1 → single_user · 2..θ-1 → shared_small · θ 이상 → "
+                     "call_center(다수 실체 공유) · hosting → infra. θ(call_center 경계)는 고정 5가 "
+                     "아닌 분포기반 이상치(5↑ 32개·10↑ 12개, 골 없음) — 구현: "
+                     "ip_role_temporal.call_center_threshold(percentile/MAD)"),
             'temporal_rule': ("V4.6: used_ip valid_from/to 경계로 시간구간 분할 → 구간별(sameAs 해소 후) "
                               "entity_cnt로 role 판정 → 인접 동일구간 coalesce. 산출은 ip_role_timeline(구간 list)과 "
                               "ip_role_current(최신 구간). 설계: docs/ONTOLOGY_V46_IP_ROLE_BITEMPORAL_DESIGN.md"),
