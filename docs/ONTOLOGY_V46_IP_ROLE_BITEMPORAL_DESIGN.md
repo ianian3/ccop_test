@@ -104,12 +104,13 @@ IP 27.193.61.154  (HANDOFF G12 실례)
 ### 4.3 role 분류 규칙 (구간 내)
 
 ```
+is_hosting(호스팅 대역/PTR)          → infra          # 최우선: 사용자수 무관 인프라
 entity_cnt == 1                      → single_user
 착신전용 패턴(분포 이상치, #3 과제)   → call_center
-is_hosting(호스팅 대역/PTR)          → infra
 2 ≤ entity_cnt < θ_shared            → shared_small
 entity_cnt ≥ θ_shared                → shared
 ```
+> 우선순위 확정(구현 반영): hosting > single > call_center > shared_small > shared. 호스팅 대역은 사용자 수로 덮어써선 안 되므로 최우선. `ip_role_temporal.classify_role()`.
 θ_shared, call_center 경계는 **고정값이 아닌 분포 기반**(v4.6 #3과 공유) — 구간별 활성 주체 분포에서 산출.
 
 ### 4.4 Cypher 예시 (시점 쿼리 — 신규로 가능해지는 것)
@@ -162,7 +163,7 @@ RETURN ip.addr, ip.ip_role_timeline
 
 - [x] **S1. 스키마 반영** — `used_ip` properties(valid_from/to) + `vt_ip` 파생 2종(ip_role_current/timeline) + 등록부 갱신 (`ontology_service.py`) ✅ 2026-08-10, 테스트 18 passed
 - [ ] **S2. 백필 규칙** — 원본 이벤트 → `used_ip.valid_from/to` window 규칙 확정·검증
-- [ ] **S3. 계산 구현** — 구간분할·coalesce·role분류 (`rdb_to_graph_service.py` 신규 함수)
+- [x] **S3. 계산 구현** — **순수 모듈** `app/services/ip_role_temporal.py`(구간분할·coalesce·role분류, DB 의존 0) + 단위테스트 `tests/test_ip_role_temporal.py` **7 passed**(전환/G12 sameAs 순서/coalesce/hosting/open-ended/thresholds). 연동 호출은 S4. ✅ 2026-08-10
 - [ ] **S4. 재계산 실행** — sameAs 후 timeline/current 산출
 - [ ] **S5. 검증** — 27.193.61.154 등 전환 IP로 3월 shared / 4월 single 재현 확인
 - [ ] **S6. Text2Cypher** — 시점/전환 few-shot 보강, pruning 동반속성
