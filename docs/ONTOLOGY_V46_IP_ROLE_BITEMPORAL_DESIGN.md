@@ -132,9 +132,10 @@ RETURN ip.addr, ip.ip_role_timeline
 
 ## 5. 마이그레이션 / 백필
 
-1. **`used_ip` valid_from/to 백필**: 원본 접속·로그인 이벤트(`TB_SYS_LGN_EVT` 등)의 시각에서 유도.
-   - point-in-time 로그면 구간화 규칙: `valid_from = min(관측)`, `valid_to = max(관측) + window(기본 1d)`.
-   - 원본 이벤트 실제 시각은 기록축(`rec_created`)에 보존(별도 관측축 신설 안 함).
+1. **`used_ip` valid_from/to 백필** ✅ *S2 반영* — `ip_role_temporal.derive_valid_interval()`: (주체,IP)별 접속시각(`LGN_DT`/표준 `CNTN_DT`) min/max → 구간.
+   - 규칙: `valid_from = min(관측)`, `valid_to = max(관측)`. point-in-time(min==max)이면 `+window(기본 1d)`로 0폭 방지.
+   - **해상도 = 일(day) 단위**: 하루 내 짧은 중복은 노이즈로 보고 일 단위 역할변화만 전환으로 포착. 실데이터 시뮬(graph45) 결과 **127개 전환 IP**(시각단위 138 중 하루내 중복 11 제외 = 노이즈 제거). 시각 해상도는 v4.7 정밀화 여지.
+   - 적재 연동: `rdb_to_graph_service` used_ip 생성을 `LGN_DT` 집계 방식으로 수정, MERGE 시 SET(운영 DB 실행 시 반영). 원본 시각은 기록축(`rec_created`)에 보존.
 2. **ip_role 재계산**: sameAs 해소 완료 후 §4.2 실행 → timeline·current 채움.
 3. 기존 단일 `ip_role` 값 → `ip_role_current`로 이관(alias), timeline은 신규 생성.
 
@@ -163,7 +164,7 @@ RETURN ip.addr, ip.ip_role_timeline
 ## 8. 단계별 실행 계획
 
 - [x] **S1. 스키마 반영** — `used_ip` properties(valid_from/to) + `vt_ip` 파생 2종(ip_role_current/timeline) + 등록부 갱신 (`ontology_service.py`) ✅ 2026-08-10, 테스트 18 passed
-- [ ] **S2. 백필 규칙** — 원본 이벤트 → `used_ip.valid_from/to` window 규칙 확정·검증
+- [x] **S2. 백필 규칙** — `derive_valid_interval()`(min/max→구간, point-in-time window) + `rdb_to_graph_service` used_ip 생성 연동(`LGN_DT` 집계). 일 단위 해상도. 테스트 5종, 실데이터 시뮬 **127 전환 IP** 재현. ✅ 2026-08-10 (값 실적재는 운영 DB 실행 시)
 - [x] **S3. 계산 구현** — **순수 모듈** `app/services/ip_role_temporal.py`(구간분할·coalesce·role분류, DB 의존 0) + 단위테스트 `tests/test_ip_role_temporal.py` **7 passed**(전환/G12 sameAs 순서/coalesce/hosting/open-ended/thresholds). 연동 호출은 S4. ✅ 2026-08-10
 - [ ] **S4. 재계산 실행** — sameAs 후 timeline/current 산출
 - [ ] **S5. 검증** — 27.193.61.154 등 전환 IP로 3월 shared / 4월 single 재현 확인

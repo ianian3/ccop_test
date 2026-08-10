@@ -6,7 +6,7 @@
 """
 from app.services.ip_role_temporal import (
     compute_ip_role_timeline, classify_role, ip_role_current,
-    call_center_threshold,
+    call_center_threshold, derive_valid_interval,
 )
 
 
@@ -111,3 +111,36 @@ def test_call_center_threshold_mad_robust():
 def test_call_center_threshold_empty():
     assert call_center_threshold([], floor=2) == 3     # floor+1 fallback
     assert call_center_threshold([1, 1, 1], floor=2) == 3  # 공유 없음
+
+
+# ── S2 백필 규칙 (접속시각 → valid_from/to) ─────────────────────────
+
+def test_derive_interval_range():
+    assert derive_valid_interval('2017-03-01 10:00:00', '2017-04-01 12:00:00') \
+        == ('2017-03-01', '2017-04-01')
+
+
+def test_derive_interval_point_in_time():
+    """단일 관측(min==max) → window(기본 1d)로 0폭 구간 방지. graph45 usage_count=1 케이스."""
+    assert derive_valid_interval('2017-04-01 21:43:11', '2017-04-01 21:43:11') \
+        == ('2017-04-01', '2017-04-02')
+
+
+def test_derive_interval_window():
+    assert derive_valid_interval('2017-04-01', '2017-04-01', window_days=7) \
+        == ('2017-04-01', '2017-04-08')
+
+
+def test_derive_interval_none():
+    assert derive_valid_interval(None, None) == (None, None)
+
+
+def test_backfill_to_timeline_e2e():
+    """S2→S3 파이프라인: 접속시각 백필 → 구간계산 → 전환 재현."""
+    a = derive_valid_interval('2017-03-01', '2017-04-25')   # A: 3~4월
+    b = derive_valid_interval('2017-03-01', '2017-03-20')   # B: 3월만
+    edges = [{'subject': 'A', 'valid_from': a[0], 'valid_to': a[1]},
+             {'subject': 'B', 'valid_from': b[0], 'valid_to': b[1]}]
+    tl = compute_ip_role_timeline(edges, theta_call_center=5)
+    roles = [s['role'] for s in tl]
+    assert 'shared_small' in roles and 'single_user' in roles  # 공유→단독 전환

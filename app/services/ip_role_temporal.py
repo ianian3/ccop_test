@@ -15,6 +15,7 @@ rdb_to_graph_service 가 재계산(S4) 시 이 함수들을 호출한다.
 """
 from __future__ import annotations
 import math
+from datetime import datetime, timedelta
 
 # valid_from/to 미상 처리용 sentinel (ISO 문자열은 사전순 == 시간순)
 _NEG = '0000-01-01'   # valid_from 미상 → 최소
@@ -145,3 +146,29 @@ def _coalesce(timeline):
 def ip_role_current(timeline):
     """timeline 최신 구간(마지막)의 role — vt_ip.ip_role_current 값."""
     return timeline[-1]['role'] if timeline else None
+
+
+# ── S2 백필 규칙 ─────────────────────────────────────────────────────
+
+def _add_days(date_str, days):
+    d = datetime.strptime(str(date_str)[:10], '%Y-%m-%d')
+    return (d + timedelta(days=days)).strftime('%Y-%m-%d')
+
+
+def derive_valid_interval(min_ts, max_ts, *, window_days=1):
+    """접속 시각 min/max → used_ip 의 (valid_from, valid_to) 백필값 (V4.6 S2).
+
+    원천: 접속 이벤트(TB_SYS_LGN_EVT.LGN_DT / 표준 CNTN_DT)를 (주체,IP)별 집계한 min/max.
+      - valid_from = 최초 관측일(날짜부)
+      - valid_to   = 최종 관측일(날짜부). point-in-time(min==max 또는 max 없음)이면
+                     valid_from + window_days — 단일 관측을 0폭 구간으로 두지 않기 위함.
+    반환: ('YYYY-MM-DD', 'YYYY-MM-DD'); 원천 없으면 (None, None).
+    구간계산(compute_ip_role_timeline)의 입력 valid_from/to 로 그대로 투입 가능.
+    """
+    vf = str(min_ts)[:10] if min_ts else None
+    if not vf:
+        return (None, None)
+    vt = str(max_ts)[:10] if max_ts else None
+    if not vt or vt <= vf:
+        vt = _add_days(vf, window_days)
+    return (vf, vt)

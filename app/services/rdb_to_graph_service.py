@@ -18,6 +18,7 @@ import logging
 from flask import current_app
 from app.database import safe_set_graph_path
 from app.services.ontology_service import KICSCrimeDomainOntology, OntologyEnricher
+from app.services.ip_role_temporal import derive_valid_interval  # V4.6 S2: used_ip valid_from/to 백필 규칙
 
 logger = logging.getLogger(__name__)
 
@@ -807,8 +808,9 @@ class RdbToGraphService:
             # 5-6. used_ip + performed_by (TB_SYS_LGN_EVT.USER_ID ↔ TB_PRSN 조인)
             #      Person → vt_ip (used_ip), vt_access → Person (performed_by, SoT domain=Access→range=Person)
             try:
+                # V4.6 S2: LGN_DT(접속일시) 포함 — (주체,IP)별 min/max 로 used_ip.valid_from/to 백필
                 cur.execute("""
-                    SELECT DISTINCT E.LGN_SN, E.CNNT_IP_ADDR, P.PRSN_ID
+                    SELECT E.LGN_SN, E.CNNT_IP_ADDR, P.PRSN_ID, E.LGN_DT
                     FROM TB_SYS_LGN_EVT E
                     JOIN TB_PRSN P ON P.KORN_FLNM = E.USER_ID
                     WHERE E.CNNT_IP_ADDR IS NOT NULL AND E.CNNT_IP_ADDR != ''
@@ -818,17 +820,31 @@ class RdbToGraphService:
                 conn.rollback(); rows = []
                 try: cur.execute(f'SET search_path = "{source_schema}", public;'); conn.commit()
                 except Exception: conn.rollback()
+            # performed_by 는 lgn_sn 행 단위, used_ip 는 (pid,ip)별 접속시각 집계 후 생성
+            from collections import defaultdict
+            uip_times = defaultdict(list)
+            pb_seen = set()
             for r in rows:
                 try:
-                    lgn_sn, ip_addr, pid = safe_str(r[0]), safe_str(r[1]), safe_str(r[2])
+                    lgn_sn, ip_addr, pid, lgn_dt = safe_str(r[0]), safe_str(r[1]), safe_str(r[2]), safe_str(r[3])
                     if ip_addr and pid:
-                        cur.execute(f"MATCH (p:vt_psn {{id: '{pid}'}}), (i:vt_ip {{ip_addr: '{ip_addr}'}}) MERGE (p)-[:used_ip]->(i)")
-                        stats["edges"] += 1; stats["relations"] += 1
-                    if lgn_sn and pid:
+                        uip_times[(pid, ip_addr)].append(lgn_dt)
+                    if lgn_sn and pid and (lgn_sn, pid) not in pb_seen:
+                        pb_seen.add((lgn_sn, pid))
                         cur.execute(f"MATCH (a:vt_access {{access_id: 'lgn-{lgn_sn}'}}), (p:vt_psn {{id: '{pid}'}}) MERGE (a)-[:performed_by]->(p)")
                         stats["edges"] += 1
                 except Exception as _e:
                     logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
+            # used_ip: (pid,ip)별 접속시각 min/max → valid_from/to (V4.6 S2 백필)
+            for (pid, ip_addr), times in uip_times.items():
+                try:
+                    ts = sorted(t for t in times if t)
+                    vf, vt = derive_valid_interval(ts[0] if ts else None, ts[-1] if ts else None)
+                    setp = f" SET r.valid_from = '{vf}', r.valid_to = '{vt}'" if (vf and vt) else ""
+                    cur.execute(f"MATCH (p:vt_psn {{id: '{pid}'}}), (i:vt_ip {{ip_addr: '{ip_addr}'}}) MERGE (p)-[r:used_ip]->(i){setp}")
+                    stats["edges"] += 1; stats["relations"] += 1
+                except Exception as _e:
+                    logger.debug("used_ip 백필 실패(건너뜀): %s", _e)
             conn.commit()
 
             # ─── P2 확장: Phase 4 ───────────────────────────────
