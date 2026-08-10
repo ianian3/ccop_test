@@ -21,11 +21,11 @@ CCOP V4.1 온톨로지 — POLE 정렬 6레이어 아키텍처 (현행 SSOT)
           (accessed_to·used_ip·performed_by·linked_id·sameAs domain/range). 엣지 66→71.
           + 노드속성: edge_id(R7, EDGE_META) · 파생속성 등록부(R6, DERIVED_PROPERTY_REGISTRY —
           ip_role G12·aggregation_level G9 등 9종). R8(vt_access 서브타입)은 검토 보류.
-노드: 25 | 엣지: 71 (의미=시각 일치) | 추론 규칙: 13종 통합 dict (탐지 9 + enrichment 4)
+노드: 25 | 엣지: 71 (활성 69 + deprecated 2: clusters_with·owns_device) | 추론 규칙: 13종 통합 dict (탐지 9 + enrichment 4)
 """
 
 class KICSCrimeDomainOntology:
-    """KICS 기반 한국형 사이버 범죄 온톨로지 (V4.5 POLE 6레이어 · 71종 엣지 · 추론규칙 13종)"""
+    """KICS 기반 한국형 사이버 범죄 온톨로지 (V4.5 POLE 6레이어 · 71종 엣지[활성 69] · 추론규칙 13종)"""
 
     # 엣지 공통 메타속성 스키마 (EDGE_META_SCHEMA)
     EDGE_META_SCHEMA = {
@@ -596,6 +596,11 @@ class KICSCrimeDomainOntology:
         'cross_graph_sameAs':     {'start': 'vt_bacnt (CCOP)', 'hops': [('sameAs', '<->')], 'end': 'vt_bacnt (OSINT)',
                                    'description': '도메인 간 동일 자산 매칭'},
     }
+
+    @classmethod
+    def active_relationships(cls):
+        """deprecated 제외 활성 엣지만 반환 (신규 생성·Text2Cypher 대상 스키마). 현재 활성 69/71."""
+        return {e: d for e, d in cls.RELATIONSHIPS.items() if not d.get('deprecated')}
 
     @classmethod
     def get_visual_style(cls, label: str) -> dict:
@@ -1245,6 +1250,7 @@ class KICSCrimeDomainOntology:
             'properties': ['sim_score', 'cluster_id', 'rec_created'],
             'inferred': True,
             'deprecated': True,            # v3.7: 신규 생성 금지, 레거시 조회용만 유지
+            'replaced_by': 'belongs_to_cluster',
         },
         'belongs_to_cluster': {
             'domain': 'Petition',
