@@ -15,7 +15,7 @@
 | `ip_role` **계산 구현** | ❌ **미구현** (전 코드베이스 0건) | `grep -rn ip_role app/services` → 0 |
 | `linked_subject_cnt`/`linked_entity_cnt` 계산 | ❌ 미구현 (규칙만) | 동일 |
 | `used_ip` 시간속성 | ❌ `valid_from/to` **정의 없음** | `ontology_service.py:1349-1357` (meaning/label_ko만) |
-| G5 유효구간 | ⚠ **설계만** — 등록부·엑셀엔 "유효구간"이나 `eg_used_*`·`registered_to` **properties에도 `valid_from/to` 미반영** | `eg_used_account.properties=['source_id','rec_created']` (S1에서 재확인된 별도 갭) |
+| G5 유효구간 | ✅ **해소**(2026-08-10) — `eg_used_account`·`eg_used_phone`·`registered_to` properties에 valid_from/to 추가(used_ip와 정합). 값 백필은 후속(DB) | `eg_used_ip`는 제외(IP 시간성은 used_ip) |
 
 > **핵심**: ip_role은 "규칙은 있으나 아무것도 계산하지 않는" 상태. 따라서 이 설계는 *리팩터링*이 아니라 **시간축을 처음부터 넣은 최초 구현 설계**다. 되레 기회 — 잘못된 전 기간 계산을 만들었다가 고치는 부채가 없다.
 

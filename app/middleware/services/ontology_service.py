@@ -939,11 +939,17 @@ class KICSCrimeDomainOntology:
             'label_ko': '접속',
             'properties': ['access_id'],         # PK: 'lgn-{lgn_sn}' 형식
             'attributes': ['lgn_sn', 'user_id', 'result_cd', 'service_nm',
-                           'access_dt', 'action', 'user_agent',
-                           'status_code', 'bytes_sent', 'bytes_recv',
+                           'access_dt', 'access_type',   # V4.6 R8: web|comm|banking 서브타입 구분
+                           # web 전용 5속성 (comm/banking 에선 의도적 공란 — 결함 아님):
+                           'action', 'user_agent', 'status_code', 'bytes_sent', 'bytes_recv',
                            'source_id', 'rec_created', 'verified', 'confidence'],
+            'access_subtypes': {                  # V4.6 R8: 서브타입별 유효 속성 매트릭스
+                'web':     ['action', 'user_agent', 'status_code', 'bytes_sent', 'bytes_recv'],
+                'comm':    [],   # 통신 접속 — web 5속성 미해당(공란 정상)
+                'banking': [],   # 뱅킹 로그 — web 5속성 미해당(공란 정상)
+            },
             'legal_category': '통신자료',
-            'description': '웹/네트워크 접속 행위 (Bridge Key: lgn_sn → TB_SYS_LGN_EVT)'
+            'description': '웹/네트워크 접속 행위 web/comm/banking (Bridge Key: lgn_sn → TB_SYS_LGN_EVT). R8: 노드분할 대신 access_type 속성으로 서브타입 표현(재학습 회피)'
         },
         'Message': {
             'layer': 'Event',
@@ -1409,7 +1415,8 @@ class KICSCrimeDomainOntology:
             'semantic_relation': 'registeredOwner',
             'label_ko': '명의자',
             'meaning': '전화번호의 등록 명의자',
-            'legal_significance': '통신사실확인자료'
+            'legal_significance': '통신사실확인자료',
+            'properties': ['valid_from', 'valid_to', 'source_id', 'rec_created']  # V4.6 G5: 명의 등록 유효구간(값 백필은 후속)
         },
         # ═══════════════════════════════════════════════════════════
         # [Layer 2 → Layer 2] Actor 간 관계 (KICS 확장)
@@ -1736,7 +1743,7 @@ class KICSCrimeDomainOntology:
             'label_ko': '피해금 수령 계좌',
             'meaning': '사건에서 증거로 사용된 계좌 (피해금 수령·이체 경로)',
             'legal_significance': '금융거래정보',
-            'properties': ['source_id', 'rec_created']
+            'properties': ['valid_from', 'valid_to', 'source_id', 'rec_created']  # V4.6 G5: 계좌 유효구간(값 백필은 후속)
         },
         'eg_used_phone': {
             'domain': 'Case',
@@ -1746,7 +1753,7 @@ class KICSCrimeDomainOntology:
             'label_ko': '범죄 사용 전화번호',
             'meaning': '사건에서 증거로 사용된 전화번호 (보이스피싱·연락 수단)',
             'legal_significance': '통신사실확인자료',
-            'properties': ['source_id', 'rec_created']
+            'properties': ['valid_from', 'valid_to', 'source_id', 'rec_created']  # V4.6 G5: 전화 유효구간(값 백필은 후속)
         },
         'eg_used_ip': {
             'domain': 'Case',
