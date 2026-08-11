@@ -92,8 +92,8 @@ def build_expansion(label, pks):
 
 ## 4. 구현 단계
 
-- [ ] **E1. 명세 반영** — 등록부 `sample_event_ids`에 "원본 PK(lgn_sn/msg_sn), 상한 N" 명시 + `aggregation_key` 정의 (`ontology_service.py`)
-- [ ] **E2. 순수 로직** — `should_expand`·`build_expansion`(Bridge Key 매핑) + 단위테스트 (신규 모듈 `app/services/lazy_expansion.py`)
+- [x] **E1. 명세 반영** — 등록부 `sample_event_ids`(원본 PK·상한 20)·`aggregation_key`·`source_store`(Bridge Key) 갱신, `aggregation_level` known_limitation 제거. ✅ 2026-08-12
+- [x] **E2. 순수 로직** — `app/services/lazy_expansion.py`(`should_expand`·`build_expansion`·`sample_ids`) + 테스트 **7 passed**, 회귀 30. ✅ 2026-08-12
 - [ ] **E3. 조회 어댑터** — 그래프 조회 → 확장 판정 → RDB SELECT (운영 DB 실행 시)
 - [ ] **E4. 적재 연동** — 집약 시 `sample_event_ids`에 원본 PK 표본 기록 (`rdb_to_graph_service`)
 

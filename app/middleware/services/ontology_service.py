@@ -205,19 +205,23 @@ class KICSCrimeDomainOntology:
                                'rule': 'sameAs 해소 후 고유 실체 수', 'recompute': 'sameAs 해소 후'},
         'role_resolution_stage': {'node': 'vt_ip', 'inputs': ['ip_role'],
                                   'rule': "ip_role 산출 단계('subject'|'entity'|'period') — 'period'=V4.6 구간별 판정", 'recompute': 'ip_role과 동시'},
-        'aggregation_level': {                          # V4.5 G9
+        'aggregation_level': {                          # V4.5 G9 → V4.6 #2 지연확장 설계
             'node': 'vt_access|vt_msg', 'inputs': ['event_count'],
             'rule': '집계 레벨(raw|hourly|daily). 지연 확장 3조건 충족 시 원본 이벤트로 확장',
+            'aggregation_key': '(subject_id, bucket(시각, level), event_type) — 동일 key 원본이 1 집약노드로 접힘',
             'recompute': '적재 시',
-            'known_limitation': ('⚠ 지연 확장 미구현 — sample_event_ids가 가리킬 원본 이벤트 저장소가 '
-                                 '미정의라 현재 event_count 표시만 가능(원본 409,941건 펼침 경로 없음)'),
+            'implementation_status': ('#2 설계 완료(docs/ONTOLOGY_V46_LAZY_EXPANSION_DESIGN.md): 저장소는 '
+                                      '원본 RDB 재사용(Bridge Key), E2 순수로직 lazy_expansion.should_expand/build_expansion. '
+                                      'E3·E4(조회 어댑터·적재) 운영 DB 의존'),
         },
         'event_count':      {'node': 'vt_access|vt_msg', 'rule': '집계된 원본 이벤트 수', 'recompute': '적재 시'},
         'sample_event_ids': {
             'node': 'vt_access|vt_msg',
-            'rule': '집계 노드의 대표 원본 이벤트 ID 표본 — 지연 확장의 참조 키',
-            'source_store': ('⚠ 정의 필요 — RDB 원본 이벤트 테이블(TB_SYS_LGN_EVT 등)의 행 ID를 가리켜야 함. '
-                             '저장소·조회 경로 확정 전까지 지연 확장 불가(v4.6)'),
+            'rule': '집계 노드의 대표 원본 이벤트 PK 표본(상한 N=20) — 지연 확장의 참조 키',
+            'source_store': ('원본 RDB(Bridge Key) 재사용 — 신규 저장소 불필요(#2 설계). '
+                             'vt_access→lgn_sn→TB_SYS_LGN_EVT · vt_msg→msg_sn→TB_TELNO_SMS_MSG/TB_CHAT_MSG. '
+                             '조회: lazy_expansion.build_expansion(label, pks)'),
+            'sample_cap': 20,
             'recompute': '적재 시',
         },
         'is_anonymous':     {'node': 'vt_psn', 'inputs': ['name', 'korn_flnm'],
