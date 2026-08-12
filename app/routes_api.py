@@ -55,9 +55,13 @@ def text_to_cypher():
         if data.get("schema") and "graph_path" in data.get("schema"):
             graph_path = data["schema"]["graph_path"]
 
+        # 시간순 연속성 flag (Q3 — 푸터 [시간순 연속성 적용] 체크박스)
+        temporal_continuity = bool(data.get('temporal_continuity', False))
         # LangGraph 에이전트 실행 (Reflection 루프, Vector RAG, Schema Fetching 포함)
         agent = LangGraphAgent()
-        result = agent.run(question, graph_path)
+        _cfg = {"use_router": True, "use_dynamic_schema": True, "use_relation_fix": True,
+                "use_reflection": True, "max_retries": 2, "temporal_continuity": temporal_continuity}
+        result = agent.run(question, graph_path, config=_cfg)
 
         response_time = (time.time() - start_time) * 1000  # ms
 
@@ -73,6 +77,7 @@ def text_to_cypher():
             "intent": result.get("intent", "UNKNOWN"),
             "elements": result.get("elements", []),
             "results_count": result.get("results_count", 0),
+            "warnings": result.get("warnings", []),   # Q3 — 시간순 연속성 N형 구간 안내
             "partner": request.partner,
             "response_time_ms": round(response_time, 2)
         }), 200

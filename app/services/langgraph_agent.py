@@ -1245,7 +1245,10 @@ AS (p agtype);
         }
         
         result = self.app.invoke(initial_state)
-        return result.get("final_response", {"status": "error", "message": "에이전트 응답 생성 실패"})
+        fr = result.get("final_response", {"status": "error", "message": "에이전트 응답 생성 실패"})
+        if isinstance(fr, dict) and result.get("tc_warnings"):
+            fr["warnings"] = result["tc_warnings"]  # 시간순 연속성 N형 안내 (Q2/Q3 전파)
+        return fr
 
 
 class InvestigationSession:
