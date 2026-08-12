@@ -1361,7 +1361,8 @@ class KICSCrimeDomainOntology:
             'semantic_relation': 'ownsPhone',
             'label_ko': '전화소유',
             'meaning': '닉네임/인물이 전화번호를 소유함',
-            'legal_significance': '통신사실확인자료'
+            'legal_significance': '통신사실확인자료',
+            'properties': ['valid_from', 'valid_to', 'source_id', 'rec_created']  # V4.6 시간순: 전화 소유/개통 유효구간(E형). 값 백필은 적재 시
         },
         'has_account': {
             'domain': 'Person',
@@ -1370,7 +1371,8 @@ class KICSCrimeDomainOntology:
             'semantic_relation': 'ownsFinancialResource',
             'label_ko': '계좌소유',
             'meaning': '닉네임/인물이 계좌를 소유함',
-            'legal_significance': '금융거래정보'
+            'legal_significance': '금융거래정보',
+            'properties': ['valid_from', 'valid_to', 'source_id', 'rec_created']  # V4.6 시간순: 계좌 소유/개설 유효구간(E형). 값 백필은 적재 시
         },
         'used_ip': {
             'domain': 'Person|Phone|DigitalID|Device',  # V4.5 G3/G10: 전화·계정·기기도 IP 사용 주체(고립 IP 방지)
@@ -1767,7 +1769,7 @@ class KICSCrimeDomainOntology:
             'label_ko': '범죄 사용 IP',
             'meaning': '사건에서 증거로 사용된 IP 주소 (접속·공격 출발지)',
             'legal_significance': '통신자료',
-            'properties': ['source_id', 'rec_created']
+            'properties': ['valid_from', 'valid_to', 'source_id', 'rec_created']  # V4.6 시간순: eg_used_account/phone 일관성(E형)
         },
 
         # ═══════════════════════════════════════════════════════════
@@ -1836,7 +1838,7 @@ class KICSCrimeDomainOntology:
             'label_ko': '지갑소유',
             'meaning': '인물이 가상자산 지갑을 소유',
             'legal_significance': '재산관계',
-            'properties': ['source_id', 'rec_created']
+            'properties': ['valid_from', 'valid_to', 'source_id', 'rec_created']  # V4.6 시간순: 지갑 소유/최초확인 유효구간(E형)
         },
         'performed_by': {
             'domain': 'Any',  # Access or Movement
