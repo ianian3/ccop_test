@@ -110,3 +110,4 @@ node_modules/
 # 테스트가 생성하는 파일 락 아티팩트
 data/*.lock
 app/.DS_Store
+docker-compose.override.yml

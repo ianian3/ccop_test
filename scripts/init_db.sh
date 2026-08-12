@@ -11,11 +11,10 @@ until pg_isready -U ${POSTGRES_USER}; do
   sleep 2
 done
 
-# Create graph extension
+# Create graph (bitnine AgensGraph 네이티브 — age extension 불필요)
 psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
-    CREATE EXTENSION IF NOT EXISTS age;
-    LOAD 'age';
-    SET search_path = ag_catalog, "$user", public;
+    CREATE GRAPH IF NOT EXISTS tccop_graph_v6;
+    SET graph_path = tccop_graph_v6;
 EOSQL
 
 echo "AgensGraph initialization complete!"
