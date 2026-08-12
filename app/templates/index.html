@@ -1318,6 +1318,9 @@
                 <div class="search-bar" style="position: relative;">
                     <input type="text" id="aiInput" placeholder="자연어로 질문하세요..." style="width: 260px;">
                     <button class="btn-ai" onclick="askAI()"><i class="fas fa-robot"></i> 쿼리생성</button>
+                    <label style="font-size:11px;color:#b2bec3;margin-left:8px;display:inline-flex;align-items:center;gap:4px;cursor:pointer;white-space:nowrap;" title="경로의 이벤트 시간 선후관계 T(e1)≤T(e2)를 쿼리에 반영">
+                        <input type="checkbox" id="temporalContinuity" style="accent-color:#00cec9;"> 시간순 연속성
+                    </label>
                     <button onclick="toggleExampleQueries()"
                         style="background:#2d3436; border:1px solid #444; color:#fdcb6e; padding:6px 10px; font-size:11px;" title="예시 질문">
                         <i class="fas fa-lightbulb"></i>
@@ -3415,14 +3418,18 @@
 
             showToast("그래프 조회 중...", "info");
 
+            const _tc = document.getElementById('temporalContinuity');
             fetch(`${API_URL}/query/ai`, {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ question: q, graph_path: graphName, session_id: _investSessionId })
+                body: JSON.stringify({ question: q, graph_path: graphName, session_id: _investSessionId, temporal_continuity: !!(_tc && _tc.checked) })
             })
                 .then(r => r.json()).then(d => {
                     if (d.error) {
                         showToast("AI 분석 실패: " + d.error, "error");
                         return;
+                    }
+                    if (d.warnings && d.warnings.length) {
+                        showToast("⏱ 시간순: " + d.warnings.length + "개 구간 시간기준 없음(N형)", "warning");
                     }
 
                     // V4.0 — scalar 결과 별도 패널 렌더 (cy.add 안 가는 경로)

@@ -1080,7 +1080,8 @@ def query_ai():
 
     try:
         sess = _get_or_create_session(session_id, graph_path)
-        agent_res = sess.ask(question)
+        temporal_continuity = bool(data.get('temporal_continuity', False))  # Q3 [시간순 연속성 적용]
+        agent_res = sess.ask(question, temporal_continuity=temporal_continuity)
         _save_session_db(session_id, sess, question)
 
         if agent_res.get("status") == "error":
@@ -1091,6 +1092,7 @@ def query_ai():
             "cypher": agent_res.get("cypher", ""),
             "intent": agent_res.get("intent", "QUERY"),
             "hints": agent_res.get("hints", []),
+            "warnings": agent_res.get("warnings", []),   # Q3 시간순 연속성 N형 구간 안내
             "session_id": session_id,
             "entity_count": len(sess.entity_context)
         })

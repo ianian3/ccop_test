@@ -1267,11 +1267,11 @@ class InvestigationSession:
         self.entity_context: List[Dict[str, Any]] = []  # 누적 엔티티 (노드 props)
         self._agent = LangGraphAgent()
 
-    def ask(self, question: str) -> Dict:
+    def ask(self, question: str, temporal_continuity: bool = None) -> Dict:
         """질문을 실행하고 결과 엔티티를 컨텍스트에 누적한다."""
         # 이전 세션의 엔티티를 initial_state entities로 주입
         # run()은 entities를 지원하지 않으므로 여기서 초기 상태를 수동 구성
-        config = self.config or {}
+        config = dict(self.config or {})
         if not config:
             config = {
                 "use_router": True,
@@ -1280,6 +1280,8 @@ class InvestigationSession:
                 "use_reflection": True,
                 "max_retries": 2
             }
+        if temporal_continuity is not None:
+            config = {**config, "temporal_continuity": bool(temporal_continuity)}  # Q3 체크박스
 
         initial_state: AgentState = {
             "question": question,
@@ -1303,6 +1305,8 @@ class InvestigationSession:
 
         result_state = self._agent.app.invoke(initial_state)
         final = result_state.get("final_response", {"status": "error", "message": "에이전트 응답 생성 실패"})
+        if isinstance(final, dict) and result_state.get("tc_warnings"):
+            final["warnings"] = result_state["tc_warnings"]  # 시간순 연속성 N형 안내 (Q3)
 
         # 새 결과 엔티티를 누적 컨텍스트에 추가 (중복 제거)
         new_elements = final.get("elements", []) if isinstance(final, dict) else []
