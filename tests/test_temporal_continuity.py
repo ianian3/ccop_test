@@ -91,3 +91,23 @@ def test_inject_single_edge_noop():
     cy = "MATCH (ip:vt_ip)-[e:used_ip]-(p) RETURN ip"
     out, w = inject(cy)
     assert out == cy and w == []
+
+
+def test_inject_same_event_node_skips():
+    """단일 이체: from_account·to_account 가 같은 vt_transfer(t) 경유 → 자명 T<=T 생략.
+
+    (Q2 실동작 검증에서 발견한 self-compare 케이스)
+    """
+    cy = ("MATCH (b1:vt_bacnt)-[:from_account]->(t:vt_transfer)-[:to_account]->(b2:vt_bacnt) "
+          "RETURN b1, b2")
+    out, w = inject(cy)
+    assert "<=" not in out            # 같은 t.dlng_dt 끼리 비교 → 생략
+    assert w == []
+
+
+def test_inject_multi_transfer_chain():
+    """다중 이체 체인: 서로 다른 이벤트 t1,t2 → 유효 조건 생성."""
+    cy = ("MATCH (b1)-[:from_account]->(t1:vt_transfer)-[:to_account]->(b2)"
+          "-[:from_account]->(t2:vt_transfer)-[:to_account]->(b3) RETURN b1")
+    out, w = inject(cy)
+    assert "date(t1.dlng_dt) <= date(t2.dlng_dt)" in out

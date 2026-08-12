@@ -118,6 +118,8 @@ def inject(cypher):
     conds, warnings = [], []
     for i in range(len(T) - 1):
         if T[i] and T[i + 1]:
+            if T[i] == T[i + 1]:
+                continue  # 동일 이벤트/시각 경유(예: 한 이체의 from/to) → 자명(T<=T), 생략
             conds.append(f"{T[i]} <= {T[i + 1]}")
         else:
             missing = labels[i] if not T[i] else labels[i + 1]

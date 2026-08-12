@@ -43,6 +43,7 @@ class AgentState(TypedDict):
     final_response: Any
     config: Dict[str, Any]
     metrics: Dict[str, float]
+    tc_warnings: List[str]  # 시간순 연속성 N형 구간 안내 (Q2, config.temporal_continuity)
 
 # 노드 레이블 → RDB 브리지 키 매핑 (label: (table, pk_col, props_key))
 _BRIDGE_KEY_MAP: Dict[str, tuple] = {
@@ -849,8 +850,20 @@ AS (p agtype);
             metrics = {**metrics, f"execution_node_attempt_{state['error_count'] + 1}": time.time() - start_time}
             return {"execution_result": [], "metrics": metrics}
 
+        # 시간순 연속성 주입 (Q2 — config.temporal_continuity=True 시, 실행 직전)
+        cypher_to_run = state['cypher_query']
+        tc_warnings = []
+        if state.get('config', {}).get('temporal_continuity'):
+            try:
+                from app.services.temporal_continuity import inject as _tc_inject
+                cypher_to_run, tc_warnings = _tc_inject(cypher_to_run)
+                if tc_warnings:
+                    logger.info(f"[시간순 연속성] N형 구간 {len(tc_warnings)}개: {tc_warnings}")
+            except Exception as _e:
+                logger.warning(f"시간순 주입 실패(원쿼리 유지): {_e}")
+
         # GraphService.execute_cypher 재사용 (Cytoscape 포맷 파싱 포함)
-        success, result = GraphService.execute_cypher(state['cypher_query'], state['graph_path'])
+        success, result = GraphService.execute_cypher(cypher_to_run, state['graph_path'])
 
         if success:
             # [개선] 결과가 0건일 때 -> 성찰 유도 (Phase 3-B: 엔티티 없어도 첫 시도면 재시도)
@@ -883,7 +896,8 @@ AS (p agtype);
             return {
                 "execution_result": result, # elements list
                 "error_message": None,
-                "metrics": metrics
+                "metrics": metrics,
+                "tc_warnings": tc_warnings,  # 시간순 연속성 N형 구간 안내 (Q2)
             }
         else:
             logger.warning(f"Query Execution Failed: {result}")
