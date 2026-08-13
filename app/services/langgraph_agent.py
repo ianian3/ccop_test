@@ -15,9 +15,10 @@ from app.services.ontology_service import KICSCrimeDomainOntology
 
 logger = logging.getLogger(__name__)
 
-_T2C_V37_SYSTEM_PROMPT_PATH = os.path.join(
-    os.path.dirname(__file__), "prompts", "t2c_v37_system.txt"
-)
+_prompt_dir = os.path.join(os.path.dirname(__file__), "prompts")
+_v47_path = os.path.join(_prompt_dir, "t2c_v47_system.txt")
+# v47(Qwen2.5-Coder, v4.6 실스키마) 프롬프트가 있으면 우선 — 학습 system과 일치해야 회귀 방지
+_T2C_V37_SYSTEM_PROMPT_PATH = _v47_path if os.path.exists(_v47_path) else os.path.join(_prompt_dir, "t2c_v37_system.txt")
 try:
     with open(_T2C_V37_SYSTEM_PROMPT_PATH, "r", encoding="utf-8") as _f:
         T2C_V37_SYSTEM_PROMPT = _f.read()
@@ -724,7 +725,14 @@ AS (p agtype);
                                 _lines.append(f"Cypher: {_ex['cypher']}")
                             few_shot_section = "\n".join(_lines) + "\n"
                             logger.info(f"[FewShot] '{_cat}' 예시 {len(_exs)}개 주입")
-                user_msg = f"{schema_section}{few_shot_section}[질문]\n{state['question']}{entity_context}{reflection_context}"
+                _mdl = current_app.config.get('SLLM_MODEL_NAME', '')
+                if 'v47' in _mdl or 'coder' in _mdl:
+                    # v47(Qwen2.5-Coder, v4.6 실스키마)은 system에 실제 26경로 완비 + 실행검증 학습 →
+                    # 동적 schema chunk/few-shot이 미존재 경로(vt_access·access_via 등)를 주입해 회귀 유발.
+                    # infer 검증과 동일하게 질문만 전달.
+                    user_msg = f"{state['question']}{entity_context}{reflection_context}"
+                else:
+                    user_msg = f"{schema_section}{few_shot_section}[질문]\n{state['question']}{entity_context}{reflection_context}"
                 try:
                     resp = client.chat.completions.create(
                         model=current_app.config.get('SLLM_MODEL_NAME', 'qwen25_t2c_v37_v2'),
