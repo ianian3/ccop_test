@@ -3,7 +3,9 @@
 > **작성일**: 2026-08-12
 > **대상**: `수사단서 연관관계분석 스키마_20260810.pptx`
 > **선행 문서**: `docs/INVESTIGATION_CLUE_SCHEMA_ALIGNMENT_20260810.md`(정합 검토), `docs/DA_DDL_변경요청_수사단서스키마_20260811.md`(DDL 요청)
-> **결론 한 줄**: 원본 스키마는 CCOP와 충돌 없이 매핑되며, 표준 DDL이 대부분 이미 반영하고 있어 **적용은 기존 파이프라인 재사용으로 저비용·무재학습**이다. 남은 실작업은 DDL 2건(DA)과 매핑 확정뿐이다.
+> **결론 한 줄**: 원본 스키마는 CCOP와 충돌 없이 매핑되며, 표준 DDL이 대부분 이미 반영하고 있어 **적용은 기존 파이프라인 재사용으로 저비용·무재학습**이다.
+> **✅ 2026-08-13 완료**: DA 확정 DDL(`CYBERCOP_STANDARD_TABLE_DDL_20260812.sql`)로 신설 확인 — 법인대표 **`TB_INST_RPRSV_REL_T`**(RPRS**V**, 유효구간 `VLD_BGNG_DT`/`VLD_END_DT`)·직업 **`TB_PSN_M.CR_NM`**(직업명). → **온톨로지 v4.6 반영 완료**(`represents` 엣지 vt_psn→vt_org + `vt_psn.occp_nm`, 표준 매핑 `std_columns`로 정합). **5건 전건 적용 완료.**
+> ※ DA 표준 확정: `VALID_FROM/TO → VLD_BGNG_DT/VLD_END_DT`(표준사전 부합, DDL 12곳). 명세서·신규 용어사전 최신본은 수령 후 컬럼 최종 대조 예정.
 
 ---
 

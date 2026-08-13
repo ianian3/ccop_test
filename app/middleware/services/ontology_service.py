@@ -1,7 +1,7 @@
 """
 온톨로지 기반 그래프 분석 서비스
 
-CCOP V4.1 온톨로지 — POLE 정렬 6레이어 아키텍처 (현행 SSOT)
+CCOP V4.7 온톨로지 — POLE 정렬 6레이어 아키텍처 (현행 SSOT)
 현행 설계 기준: docs/CCOP_ONTOLOGY_V4.1.md (+ 상세: ONTOLOGY_FINAL_ARCHITECTURE_v3.7.md)
 버전 이력:
   - v3.7: pt_cluster/site_cluster 노드(군집 허브 패턴), is_anonymous, used_in_device,
@@ -21,11 +21,17 @@ CCOP V4.1 온톨로지 — POLE 정렬 6레이어 아키텍처 (현행 SSOT)
           (accessed_to·used_ip·performed_by·linked_id·sameAs domain/range). 엣지 66→71.
           + 노드속성: edge_id(R7, EDGE_META) · 파생속성 등록부(R6, DERIVED_PROPERTY_REGISTRY —
           ip_role G12·aggregation_level G9 등 9종). R8(vt_access 서브타입)은 검토 보류.
-노드: 25 | 엣지: 71 (활성 69 + deprecated 2: clusters_with·owns_device) | 추론 규칙: 13종 통합 dict (탐지 9 + enrichment 4)
+  - V4.6 (2026-08-13): 시간축 bitemporal 정착 — used_ip/has_account/owns_phone valid_from·valid_to(E형),
+          ip_role bitemporal 재설계(ip_role_current/timeline S1), 지연확장(aggregation_level #2),
+          R8 vt_access 서브타입(access_type web|comm|banking) 확정, transferred_to 이체시각 기간집계.
+  - V4.7 (2026-08-13): 수사단서 스키마 + 표준 DDL 정합 — represents 엣지(vt_psn→vt_org 법인대표,
+          TB_INST_RPRSV_REL_T) + vt_psn.occp_nm(직업, TB_PSN_M.CR_NM) 신설. 표준 컬럼매핑 std_columns
+          정착(RPRSV·CR_NM·CALL_HR 시분초변환·VLD_BGNG_DT/VLD_END_DT). 엣지 71→72.
+노드: 25 | 엣지: 72 (활성 70 + deprecated 2: clusters_with·owns_device) | 추론 규칙: 13종 통합 dict (탐지 9 + enrichment 4)
 """
 
 class KICSCrimeDomainOntology:
-    """KICS 기반 한국형 사이버 범죄 온톨로지 (V4.5 POLE 6레이어 · 71종 엣지[활성 69] · 추론규칙 13종)"""
+    """KICS 기반 한국형 사이버 범죄 온톨로지 (V4.7 POLE 6레이어 · 72종 엣지[활성 70] · 추론규칙 13종)"""
 
     # 엣지 공통 메타속성 스키마 (EDGE_META_SCHEMA)
     EDGE_META_SCHEMA = {
@@ -138,7 +144,8 @@ class KICSCrimeDomainOntology:
         'vt_src':          {'standard': 'TB_DATA_SOU_A',         'public_v2': 'TB_DATA_SRC',          'test_v40': None},
         'vt_case':         {'standard': 'TB_INCDNT_M',           'public_v2': 'TB_INCDNT_MST',        'test_v40': 'tb_incdnt_mst'},
         'vt_petition':     {'standard': 'TB_PETTN_M',            'public_v2': 'TB_PETTN_MST',         'test_v40': None},
-        'vt_psn':          {'standard': 'TB_PSN_M',              'public_v2': 'TB_PRSN',              'test_v40': 'tb_prsn'},
+        'vt_psn':          {'standard': 'TB_PSN_M',              'public_v2': 'TB_PRSN',              'test_v40': 'tb_prsn',
+                            'std_columns': {'occp_nm': 'CR_NM'}},  # 직업: 온톨로지 occp_nm ↔ 표준 CR_NM(직업명, DA 확정 DDL 8/12)
         'vt_org':          {'standard': 'TB_INST_M',             'public_v2': 'TB_INST',              'test_v40': None},
         'vt_bacnt':        {'standard': 'TB_FNNC_BACNT_M',       'public_v2': 'TB_FIN_BACNT',         'test_v40': 'tb_fin_bacnt'},
         'vt_telno':        {'standard': 'TB_TELNO_M',            'public_v2': 'TB_TELNO_MST',         'test_v40': 'tb_telno_mst'},
@@ -153,9 +160,14 @@ class KICSCrimeDomainOntology:
         'vt_atm':          {'standard': 'TB_ATM_M',              'public_v2': 'TB_ATM_MST',           'test_v40': None},
         'vt_loc':          {'standard': 'TB_PSTN_M',             'public_v2': 'TB_LOC_MST',           'test_v40': None},
         'vt_transfer':     {'standard': 'TB_FNNC_BACNT_DLNG_T',  'public_v2': 'TB_FIN_BACNT_DLNG',    'test_v40': 'tb_fin_bacnt_dlng'},
-        'vt_call':         {'standard': 'TB_TELNO_CALL_D',       'public_v2': 'TB_TELNO_CALL_DTL',    'test_v40': 'tb_telno_call_dtl'},
+        'vt_call':         {'standard': 'TB_TELNO_CALL_D',       'public_v2': 'TB_TELNO_CALL_DTL',    'test_v40': 'tb_telno_call_dtl',
+                            # 컬럼 매핑(온톨로지 속성 ↔ 표준 DDL): 시간 조회 시 참조. 시각은 이름 일치, 통화시간만 상이(의미 동일).
+                            # call_strt_dt↔CALL_STRT_DT(동일). ⚠️ CALL_HR=character(6) HHMMSS(시분초) → call_dur_sec=초 변환 필요: HH*3600+MM*60+SS
+                            'std_columns': {'call_strt_dt': 'CALL_STRT_DT', 'call_dur_sec': 'CALL_HR'}},
         'vt_msg':          {'standard': ['TB_TELNO_SMS_MSG_T', 'TB_CTT_MSG_T'], 'public_v2': ['TB_TELNO_SMS_MSG', 'TB_CHAT_MSG'], 'test_v40': None},
-        'vt_access':       {'standard': 'TB_SYS_LGN_EVT_T',      'public_v2': 'TB_SYS_LGN_EVT',       'test_v40': None},
+        'vt_access':       {'standard': 'TB_SYS_LGN_EVT_T',      'public_v2': 'TB_SYS_LGN_EVT',       'test_v40': None,
+                            # 시간축: access_dt↔CNTN_DT(접속일시 timestamp w/tz, E형). access_type↔CNTN_TYP_CD(접속타입코드 char(3), DA 신설 20260813 — 표준어 확정 ACCS_TYP_CD→CNTN_TYP_CD; web/comm/banking 코드값은 공통코드 별도)
+                            'std_columns': {'access_dt': 'CNTN_DT', 'access_type': 'CNTN_TYP_CD'}},
         'vt_movement':     {'standard': ['TB_MOBL_PSTN_EVT_T', 'TB_TRFC_CARD_MVMN_T', 'TB_VHCL_NOPLT_RECG_EVT_T'], 'public_v2': ['TB_GEO_MBL_LOC_EVT', 'TB_VHCL_LPR_EVT'], 'test_v40': None},
         'vt_impersonation':{'standard': 'TB_FAAS_EVT_T',         'public_v2': 'TB_IMPRSN_REL',        'test_v40': None},
         'pt_cluster':      {'standard': 'TB_PETTN_CLSTR_T',      'public_v2': 'TB_PETTN_CLSTR',       'test_v40': None},
@@ -731,6 +743,7 @@ class KICSCrimeDomainOntology:
                            'dob', 'gender', 'nationality',
                            'rrno_hash', 'passport_no', 'contact',
                            'aliases', 'risk_level',
+                           'occp_nm',            # 직업 (수사단서 5건 보완 — TB_PSN_M.OCCP_NM 신설 반영)
                            'is_anonymous',       # True=성명불상 (v3.7 신규)
                            'source_id', 'rec_created', 'verified', 'confidence'],
             # ⚠️ role 속성 없음 — 엣지로 표현 (suspect_in / victim_in / witness_in)
@@ -1409,7 +1422,11 @@ class KICSCrimeDomainOntology:
             'label_ko': '이체(다단계추론)',
             'meaning': '다단계 자금 세탁 추론 엣지 — 직접 생성 금지, from/to_account Fan-out 이후 추론으로만 생성',
             'legal_significance': '금융거래정보',
-            'properties': ['amount', 'transfer_date', 'hop_level'],
+            'properties': ['hop_level', 'first_dlng_dt', 'last_dlng_dt', 'txn_count', 'total_amount', 'time_basis',
+                           'amount', 'transfer_date'],
+            # V4.6: 추론경로(다단계)라 개별 amount/transfer_date보다 출발계좌 거래활동 기간집계가 적합 →
+            #   first_dlng_dt·last_dlng_dt(거래기간)·txn_count·total_amount·time_basis 추가.
+            #   개별 이체시각은 vt_transfer 이벤트 노드 소관(amount/transfer_date 하위호환 유지).
             'inferred': True,            # 추론 전용 (ETL 직접 생성 금지)
             'transitive': True,          # A→B→C 이면 A→C 추론 가능
             'inference_confidence': 0.85
@@ -1606,6 +1623,18 @@ class KICSCrimeDomainOntology:
             'label_ko': '소속',
             'meaning': '인물의 소속 조직',
             'legal_significance': '내부자 식별'
+        },
+        'represents': {                             # 수사단서 스키마 5건 보완 — DDL 신설 반영(TB_INST_RPRS_REL_T)
+            'domain': 'Person',
+            'range': 'Organization',
+            'source_types': [('representative', 'organization'), ('대표', '법인')],  # PSN_ID → INST_ID
+            'semantic_relation': 'represents',
+            'label_ko': '대표',
+            'meaning': '인물이 법인의 대표(대표이사/사내이사 등). 같은 대표의 다수 법인 탐지에 활용',
+            'legal_significance': '법인등기',
+            'properties': ['rprs_se_cd', 'valid_from', 'valid_to', 'source_id'],  # 대표구분·재임 유효구간
+            'std_source': 'TB_INST_RPRSV_REL_T',    # 엣지 소스(기관대표자관계) — DA 확정 DDL 8/12 (RPRSV)
+            'std_columns': {'rprs_se_cd': 'RPRS_SE_CD', 'valid_from': 'VLD_BGNG_DT', 'valid_to': 'VLD_END_DT', 'source_id': 'SRC_ID'}
         },
         'resolves_to': {
             'domain': 'WebTrace',        # 수정: DNS 표준 방향 — 도메인 → IP
@@ -2426,6 +2455,7 @@ class OntologyEnricher:
             'sameAs':         {'semantic_relation': 'sameAs',            'domain_meaning': '동일인물 해소',            'legal_significance': '신원확인'},
             'contradicts':    {'semantic_relation': 'contradicts',       'domain_meaning': '모순 정보',                'legal_significance': '신원확인'},
             'impersonates':   {'semantic_relation': 'impersonates',      'domain_meaning': '사칭 대상(구)',            'legal_significance': '사기범죄'},
+            'represents':     {'semantic_relation': 'represents',        'domain_meaning': '법인 대표',                'legal_significance': '법인등기'},
             # V3.3 사칭 노드 패턴
             'used_for':       {'semantic_relation': 'usedForImpersonation','domain_meaning': '사칭 수단',              'legal_significance': '전기통신금융사기법 제3조'},
             'targets':        {'semantic_relation': 'targetsOrganization', 'domain_meaning': '사칭 대상 기관',         'legal_significance': '전기통신금융사기법 제3조'},
