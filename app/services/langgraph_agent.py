@@ -521,11 +521,22 @@ class LangGraphAgent:
         if invalid_labels or invalid_edges:
             msgs = []
             if invalid_labels:
-                msgs.append(f"존재하지 않는 라벨: {sorted(invalid_labels)}. 유효 라벨에서 선택하세요.")
+                msgs.append(f"존재하지 않는 라벨: {LangGraphAgent._suggest_corrections(invalid_labels, valid_labels)}")
             if invalid_edges:
-                msgs.append(f"존재하지 않는 엣지: {sorted(invalid_edges)}. 유효 엣지에서 선택하세요.")
+                msgs.append(f"존재하지 않는 엣지: {LangGraphAgent._suggest_corrections(invalid_edges, valid_edges)}")
             return False, " / ".join(msgs)
         return True, ""
+
+    @staticmethod
+    def _suggest_corrections(invalid: set, valid: set) -> str:
+        """P1-②: 무효 라벨/엣지를 유효 목록에서 근사 매칭(difflib)해 자동 교정 제안.
+        오타·유사어 환각(예: 'involes'→'involves')을 reflection 피드백에서 바로잡아 재생성 정확도↑."""
+        import difflib
+        parts = []
+        for term in sorted(invalid):
+            near = difflib.get_close_matches(term, list(valid), n=1, cutoff=0.6)
+            parts.append(f"'{term}'→'{near[0]}'로 교정 권장" if near else f"'{term}'(유사한 유효값 없음)")
+        return ", ".join(parts) + ". 반드시 유효한 것에서만 선택하세요."
 
     @staticmethod
     def _rewrite_order_by_dot_access(cypher: str) -> str:
@@ -796,7 +807,7 @@ AS (p agtype);
 
             # --- 2b. Phase 3-A: Schema 사전 검증 (라벨/엣지 화이트리스트) ---
             #   AgensGraph 실행 전 무효 라벨/엣지를 잡아 reflection 피드백 유도.
-            if state['error_count'] < 1:  # 첫 시도에서만 강제 — 무한 루프 방지
+            if state['error_count'] < state.get('config', {}).get('max_retries', 1):  # P1-③: 재시도 예산 설정화(config.max_retries, 기본 1)
                 is_valid, validation_err = LangGraphAgent._validate_cypher_schema(cypher)
                 if not is_valid:
                     logger.warning(f"[Schema Validation] {validation_err}")
@@ -877,7 +888,7 @@ AS (p agtype);
             # [개선] 결과가 0건일 때 -> 성찰 유도 (Phase 3-B: 엔티티 없어도 첫 시도면 재시도)
             # Sprint 1 — 단순 SELECT (WHERE 절 없음 + entity 컨텍스트 없음) 0건은
             # 진짜 데이터 부재로 판정해 reflection 건너뜀 (-3초)
-            if not result and state['error_count'] < 1:
+            if not result and state['error_count'] < state.get('config', {}).get('max_retries', 1):  # P1-③: 재시도 예산 설정화
                 if self._is_data_absence_likely(state.get('cypher_query', ''),
                                                 state.get('entities')):
                     logger.info("▶ 결과 0건 + 단순 쿼리 + entity 없음 → 데이터 부재로 판정 (reflection skip)")
