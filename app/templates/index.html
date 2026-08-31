@@ -2967,7 +2967,7 @@ function showTruncateBanner(metas){
             const kpi=(v,u,l,c)=>`<div style="background:#16203a;border:1px solid #2a3a5e;border-top:3px solid ${c};border-radius:10px;padding:12px 14px"><div style="font-size:22px;font-weight:800;font-family:monospace;color:#e8eefb">${v}<span style="font-size:11px;color:#6f80a6">${u}</span></div><div style="font-size:12px;color:#a9b8d6;margin-top:3px">${l}</div></div>`;
             const hubRows=(D.hubs||[]).map(h=>`<tr style="border-bottom:1px solid #22314f"><td style="padding:7px 6px"><a onclick="briefingFocus('${h.ip}')" style="color:#f87171;font-family:monospace;font-weight:600;cursor:pointer" title="이 거점 그래프로 펼치기">${h.ip} ↗</a></td><td style="padding:7px 6px;color:#a9b8d6">${h.ep_count}개EP</td><td style="padding:7px 6px;font-size:12px"><span style="color:#c084fc">070·${h.telno}</span> <span style="color:#fbbf24">계정 ${h.accounts}</span></td></tr>`).join('')||'<tr><td style="padding:8px;color:#6f80a6">교차 거점 없음(단일 EP 그래프)</td></tr>';
             const fmax=(D.fund_top&&D.fund_top[0]?D.fund_top[0].amt:1)||1;
-            const fundRows=(D.fund_top||[]).map(f=>`<div style="display:grid;grid-template-columns:auto 1fr auto;gap:8px;align-items:center;padding:4px 0;font-size:12px"><span style="color:#a9b8d6;white-space:nowrap">${f.from} → ${f.to}</span><span style="height:14px;border-radius:4px;background:linear-gradient(90deg,#fbbf24,#f97316);width:${Math.round(f.amt/fmax*100)}%"></span><span style="font-family:monospace;font-weight:700;color:#e8eefb">${_eok(f.amt)}억</span></div>`).join('')||'<div style="color:#6f80a6;font-size:12px">자금흐름 없음</div>';
+            const fundRows=(D.fund_top||[]).map(f=>{const clk=f.from_acct?`onclick="fundFocus('${f.from_acct}')" title="이 계좌 자금흐름 펼치기"`:'';return `<div ${clk} style="display:grid;grid-template-columns:auto 1fr auto;gap:8px;align-items:center;padding:4px 0;font-size:12px${f.from_acct?';cursor:pointer':''}"><span style="color:#a9b8d6;white-space:nowrap">${f.from} → ${f.to}${f.from_acct?' <span style="color:#f97316">↗</span>':''}</span><span style="height:14px;border-radius:4px;background:linear-gradient(90deg,#fbbf24,#f97316);width:${Math.round(f.amt/fmax*100)}%"></span><span style="font-family:monospace;font-weight:700;color:#e8eefb">${_eok(f.amt)}억</span></div>`;}).join('')||'<div style="color:#6f80a6;font-size:12px">자금흐름 없음</div>';
             const saRows=(D.sameas||[]).map(s=>`<span style="display:inline-block;font-size:12px;padding:3px 9px;border-radius:6px;background:#1d2a48;border:1px solid #2a3a5e;color:#a9b8d6;margin:2px">${s.a} ↔ ${s.b}</span>`).join('')||'<span style="color:#6f80a6;font-size:12px">후보 없음</span>';
             const prcard=(t,arr,col)=>`<div style="background:#16203a;border:1px solid #2a3a5e;border-radius:10px;padding:12px"><div style="color:${col};font-size:11px;font-weight:700;margin-bottom:6px">${t}</div>${(arr||[]).map((x,i)=>`<div style="display:flex;justify-content:space-between;font-size:12px;padding:2px 0;color:#a9b8d6"><span>${i+1}. ${x.k}</span><span style="font-family:monospace;color:#e8eefb">${x.pr}</span></div>`).join('')||'<span style="color:#6f80a6;font-size:12px">— (graph_analytics 미실행)</span>'}</div>`;
             const inf=D.influence||{};
@@ -3015,6 +3015,20 @@ function showTruncateBanner(metas){
                     if(typeof showToast==='function')showToast(`거점 ${ip} 펼침 (${data.length}요소)`,'success');
                 }
               }).catch(e=>console.error('briefingFocus:',e));
+        }
+        function fundFocus(acct){
+            closeBriefing();
+            const g=(document.getElementById('targetGraphInfo')||{}).value||'';
+            switchTab('graph');
+            fetch(`/api/graph/load?graph_path=${encodeURIComponent(g)}&account=${encodeURIComponent(acct)}&limit=300`)
+              .then(r=>r.json()).then(data=>{
+                if(typeof cy!=='undefined'&&data&&data.length){
+                    cy.elements().remove(); const added=cy.add(data);
+                    if(typeof afterElementsAdded==='function')afterElementsAdded(added);
+                    cy.layout({name:'dagre',rankDir:'LR',nodeSep:40,rankSep:90,animate:true}).run();  // 자금망은 흐름 방향
+                    if(typeof showToast==='function')showToast(`자금흐름 ${acct} 펼침 (${data.length}요소)`,'success');
+                }
+              }).catch(e=>console.error('fundFocus:',e));
         }
 
 

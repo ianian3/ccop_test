@@ -315,6 +315,17 @@ def load_graph_data():
             """
             truncated_meta = None
             logger.info(f"▶ [GraphLoad] graph={graph_path} focus_ip={focus_ip}")
+        elif request.args.get('account', '').strip() and re.match(r'^[0-9\-]{6,25}$', request.args.get('account', '').strip()):
+            # 딥링크 focus: 특정 계좌의 자금흐름 서브그래프(자금흐름·명의·집금) — 브리핑 자금흐름 클릭 진입용
+            focus_acct = request.args.get('account', '').strip()
+            cypher_query = f"""
+                MATCH (n)-[r]->(m)
+                WHERE n.account_no = '{focus_acct}' OR m.account_no = '{focus_acct}'
+                RETURN id(n), labels(n), properties(n), id(r), type(r), id(m), labels(m), properties(m)
+                LIMIT {limit}
+            """
+            truncated_meta = None
+            logger.info(f"▶ [GraphLoad] graph={graph_path} focus_account={focus_acct}")
         else:
             cypher_query = f"""
                 MATCH (n)-[r]->(m)
@@ -435,9 +446,11 @@ def graph_briefing():
             pass
         D['hubs'] = sorted(hubs, key=lambda x: -x['ep_count'])[:8]
         ft = []
-        for row in q("MATCH (x:vt_bacnt)-[e:transferred_to]->(y:vt_bacnt) WHERE e.total_amount IS NOT NULL RETURN x.dpstr, y.dpstr, e.total_amount"):
+        for row in q("MATCH (x:vt_bacnt)-[e:transferred_to]->(y:vt_bacnt) WHERE e.total_amount IS NOT NULL "
+                     "RETURN x.dpstr, y.dpstr, e.total_amount, x.account_no, y.account_no"):
             if row[2] is not None and str(row[2]).isdigit():
-                ft.append({'from': row[0] or '?', 'to': row[1] or '?', 'amt': int(row[2])})
+                ft.append({'from': row[0] or '?', 'to': row[1] or '?', 'amt': int(row[2]),
+                           'from_acct': row[3] or '', 'to_acct': row[4] or ''})
         D['fund_top'] = sorted(ft, key=lambda x: -x['amt'])[:6]
         try:
             D['sameas'] = [{'a': r[0], 'b': r[1], 'm': r[2]}
