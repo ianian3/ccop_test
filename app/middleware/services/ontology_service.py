@@ -985,7 +985,7 @@ class KICSCrimeDomainOntology:
             'label': 'vt_movement',
             'label_ko': '이동이벤트',
             'properties': ['mov_id'],
-            'attributes': ['mov_type',  # lpr | cell_tower | transit_card
+            'attributes': ['mov_type',  # lpr | cell_tower | transit_card | immigration
                            'timestamp', 'loc_id',
                            # lpr
                            'vhclno', 'cctv_id', 'rcgn_sn',
@@ -993,9 +993,14 @@ class KICSCrimeDomainOntology:
                            'telno', 'evt_typ_nm', 'loc_evt_sn',
                            # transit_card
                            'card_no', 'tk_pnm', 'gf_pnm', 'vhcl_no', 'mv_sn',
+                           # immigration (V4.7+ 2026-08-25: 2차년도 EP8 시나리오 요구 — 출입국 회신.
+                           #   출입국일시→timestamp, 구분(출국/입국)→imgr_se_cd, 항공편→flight_no,
+                           #   출입국항→port_nm(+occurred_at→vt_loc), 원본키→imgr_sn(Bridge Key).
+                           #   ⚠️ 표준 DDL에 출입국 테이블 미보유 — 실데이터 확보/DA 협의 시 std_columns 확정)
+                           'imgr_se_cd', 'flight_no', 'port_nm', 'imgr_sn',
                            'source_id', 'rec_created', 'verified', 'confidence'],
             'legal_category': '위치정보',
-            'description': 'LPR·기지국·교통카드 이동이벤트 통합 노드 (vt_lpr_evt + vt_loc_evt 대체)'
+            'description': 'LPR·기지국·교통카드·출입국 이동이벤트 통합 노드 (vt_lpr_evt + vt_loc_evt 대체)'
         },
 
         # ─────────────── V3.3 신설 ───────────────────────────────────

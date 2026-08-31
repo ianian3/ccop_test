@@ -583,6 +583,46 @@ class LangGraphAgent:
         return cypher[:m.start()] + f"{ret_kw}{new_ret_clause}{ob_kw}{new_ob_clause}" + cypher[m.end():]
 
     @staticmethod
+    def _rewrite_scalar_dotaccess_to_node(cypher: str) -> str:
+        """집계/조회 RETURN의 단순 노드 속성 접근(p.name)을 노드 변수(p)로 승격 → 그래프 시각화.
+
+        예: `... WITH p, count(t) AS c RETURN p.name, c ORDER BY c DESC`
+            → `... RETURN p, c ORDER BY c DESC`  (p 가 노드로 반환되어 Cytoscape 렌더)
+        규칙: RETURN 절에서 alias 없고 함수 호출이 아닌 단순 `<var>.<prop>` 항목만 `<var>`로 치환(중복 제거).
+              집계(count/sum…)·alias 항목(정렬용 파생 포함)·이미 단일 변수는 보존.
+              노드 변수가 하나도 없는 순수 집계(RETURN count(*))는 변경 없음(스칼라 유지).
+        """
+        m = re.search(r"(\bRETURN\b\s+)(.+?)(\s+\b(?:ORDER|LIMIT|SKIP|UNION)\b|;|$)",
+                      cypher, re.IGNORECASE | re.DOTALL)
+        if not m:
+            return cypher
+        head, ret_clause = m.group(1), m.group(2).strip()
+        items = [it.strip() for it in re.split(r",(?![^()\[\]{}]*[)\]}])", ret_clause)]
+        new_items, seen_vars, changed = [], set(), False
+        for it in items:
+            # alias 항목(... AS x)·함수 호출 항목은 그대로 보존
+            if re.search(r"\bAS\s+[A-Za-z_]", it, re.IGNORECASE) or '(' in it:
+                new_items.append(it)
+                continue
+            dm = re.match(r"^([A-Za-z_]\w*)\.[A-Za-z_]\w*$", it)   # 단순 p.prop
+            if dm:
+                changed = True
+                var = dm.group(1)
+                if var not in seen_vars:
+                    seen_vars.add(var)
+                    new_items.append(var)
+                continue
+            sm = re.match(r"^([A-Za-z_]\w*)$", it)                # 이미 단일 변수
+            if sm:
+                if sm.group(1) in seen_vars:
+                    continue
+                seen_vars.add(sm.group(1))
+            new_items.append(it)
+        if not changed:
+            return cypher
+        return cypher[:m.start(1)] + head + ", ".join(new_items) + cypher[m.start(3):]
+
+    @staticmethod
     def _wrap_native_cypher(native: str, graph_path: str) -> str:
         """Native Cypher (MATCH ... RETURN ...) → AgensGraph SQL Wrapper.
 
@@ -596,6 +636,7 @@ class LangGraphAgent:
         if re.match(r"^\s*SELECT\s", s, re.IGNORECASE):
             return s + ";"
         s = LangGraphAgent._rewrite_order_by_dot_access(s)
+        s = LangGraphAgent._rewrite_scalar_dotaccess_to_node(s)   # 집계/조회 RETURN → 노드 승격(시각화)
         m = re.search(r"\bRETURN\b\s+(.+?)(?:\s+\b(ORDER|LIMIT|SKIP|UNION)\b|$)", s, re.IGNORECASE | re.DOTALL)
         if not m:
             return s + ";"

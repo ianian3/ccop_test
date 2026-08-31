@@ -478,9 +478,13 @@ class GraphService:
         try:
             safe_set_graph_path(cur, graph_path)
 
-            # 1. 전체 속성에서 키워드 검색 (모든 라벨) — 기존 SQL "properties::text LIKE '%kw%'" 등가
+            # 1. 키워드 검색 — AgensGraph 는 properties(n)::text 캐스트가 "not scalar" 오류.
+            #    주요 식별 속성을 개별 CONTAINS 로 OR (없는 속성은 null 반환이라 안전).
+            _search_props = ['name', 'korn_flnm', 'dpstr', 'telno', 'account_no', 'ip_addr',
+                             'id_val', 'flnm', 'url_addr', 'email_addr', 'src_name', 'org_name', 'val']
+            _where = " OR ".join(f"n.{p} CONTAINS '{kw}'" for p in _search_props)
             cur.execute(
-                f"MATCH (n) WHERE properties(n)::text CONTAINS '{kw}' "
+                f"MATCH (n) WHERE {_where} "
                 f"RETURN id(n), labels(n), properties(n) LIMIT 50"
             )
             for r in cur.fetchall():
@@ -549,10 +553,20 @@ class GraphService:
             conn.close()
 
     @staticmethod
-    def expand_node(node_id, graph_path):
-        """노드 확장 (Cypher 기반 — outgoing/incoming 양방향 MATCH 조회)"""
+    def expand_node(node_id, graph_path, cap=200):
+        """노드 확장 (Cypher 기반 — outgoing/incoming 양방향 MATCH 조회)
+
+        cap: 방향별 이웃 상한(기본 200). 고차수 허브(콜센터 IP 등)에서 화면 폭증을 막는다.
+        상한 초과 시 결과 맨 앞에 _truncated 메타 노드를 넣어 "N개 더 있음"을 프론트가 표시.
+        """
         conn, cur = GraphService.get_db_connection()
         if not conn: return []
+
+        # 화이트리스트로 검증된 graph_path 만 f-string 삽입(안전). cap 은 int 강제.
+        try:
+            cap = max(1, min(int(cap), 2000))
+        except (TypeError, ValueError):
+            cap = 200
 
         elements = []
         added_edge_ids = set()
@@ -560,14 +574,21 @@ class GraphService:
         try:
             safe_set_graph_path(cur, graph_path)
 
+            # 실제 총 차수 파악(상한 초과 여부 판정용) — cap+1 이상이면 잘림
+            try:
+                cur.execute(f"MATCH (n)-[r]-(m) WHERE id(n) = '{node_id}' RETURN count(r)")
+                total_degree = int(cur.fetchone()[0])
+            except Exception:
+                total_degree = 0
+
             # 통일 RETURN 컬럼: id(r), type(r), properties(r), source_id, target_id, 이웃id, 이웃labels, 이웃props
             queries = [
                 # outgoing: (현재노드 n)-[r]->(이웃 m)
                 f"MATCH (n)-[r]->(m) WHERE id(n) = '{node_id}' "
-                f"RETURN id(r), type(r), properties(r), id(n), id(m), id(m), labels(m), properties(m) LIMIT 200",
+                f"RETURN id(r), type(r), properties(r), id(n), id(m), id(m), labels(m), properties(m) LIMIT {cap}",
                 # incoming: (이웃 m)-[r]->(현재노드 n)
                 f"MATCH (n)<-[r]-(m) WHERE id(n) = '{node_id}' "
-                f"RETURN id(r), type(r), properties(r), id(m), id(n), id(m), labels(m), properties(m) LIMIT 200",
+                f"RETURN id(r), type(r), properties(r), id(m), id(n), id(m), labels(m), properties(m) LIMIT {cap}",
             ]
 
             for q in queries:
@@ -619,6 +640,14 @@ class GraphService:
                         }
                     })
 
+            # 상한 초과 시 잘림 신호(프론트가 "N개 더 있음/필터 좁히기" 안내) — 표시된 이웃 수 기준
+            shown = len(added_node_ids)
+            if total_degree > shown:
+                elements.insert(0, {
+                    "group": "meta",
+                    "data": {"kind": "truncated", "shown": shown,
+                             "total": total_degree, "node_id": str(node_id)}
+                })
             return elements
         except Exception as e:
             logger.error(f"Expand Error: {e}")
@@ -1142,10 +1171,56 @@ class GraphService:
                                     })
                             except: pass
 
+            # 집계 배지: RETURN 컬럼 별칭 + 스칼라 판별 (RETURN p, count(t) AS c → 노드 p 에 c 를 배지로)
+            try:
+                _col_names = [d[0] for d in cur.description] if cur.description else []
+            except Exception:
+                _col_names = []
+
+            def _is_scalar_val(v):
+                if isinstance(v, (int, float)):
+                    return True
+                if isinstance(v, str):
+                    if node_pattern.match(v) or edge_pattern.match(v):
+                        return False
+                    if '[' in v and ']' in v and '{' in v:
+                        return False   # vertex/edge raw
+                    return True
+                return False   # dict/list/객체 = 비스칼라(노드/엣지)
+
+            def _num(v):
+                if isinstance(v, (int, float)):
+                    return v
+                if isinstance(v, str):
+                    t = v.strip().strip('"')
+                    if re.fullmatch(r'-?\d+', t):
+                        return int(t)
+                    if re.fullmatch(r'-?\d+\.\d+', t):
+                        return float(t)
+                    return t
+                return v
+
             for r in rows:
+                _before = len(elements)
                 for item in r:
                     parse_item(item)
-                            
+
+                # 이 row 에서 만들어진 노드에 같은 row 의 스칼라 컬럼(집계값 등)을 배지로 병합
+                _new_nodes = [el for el in elements[_before:] if el.get('group') == 'nodes']
+                if _new_nodes:
+                    _scalars = {}
+                    for i, v in enumerate(r):
+                        if _is_scalar_val(v):
+                            cname = _col_names[i] if i < len(_col_names) else f'col{i}'
+                            _scalars[cname] = _num(v)
+                    if _scalars:
+                        _badge_k = next((k for k, vv in _scalars.items() if isinstance(vv, (int, float))), None)
+                        for el in _new_nodes:
+                            el['data'].setdefault('props', {}).update(_scalars)
+                            if _badge_k is not None:
+                                el['data']['badge'] = _scalars[_badge_k]
+                                el['data']['badge_label'] = _badge_k
+
                 # 3. 폴백 (Tuples/Lists) 또는 연속된 원시 타입 시퀀스 (id, label, props)
                 try:
                     if len(r) >= 3:
