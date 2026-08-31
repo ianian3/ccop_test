@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="390" viewBox="0 0 720 390" role="img" aria-label="GraphRAG-Bench 평균 생성 정확도 점 도표, 무증강 기준선 70.68% 대비 기법별 위치">
+  <style>
+    text { font-family: system-ui, -apple-system, 'Segoe UI', 'Apple SD Gothic Neo', sans-serif; }
+    .val { font-variant-numeric: tabular-nums; }
+  </style>
+  <rect x="0.5" y="0.5" width="719" height="389" rx="8" fill="#fcfcfb" stroke="rgba(11,11,11,0.10)"/>
+
+  <text x="20" y="30" font-size="15" font-weight="600" fill="#0b0b0b">GraphRAG-Bench 평균 생성 정확도 (%)</text>
+  <text x="20" y="50" font-size="12" fill="#52514e">1,018문항 · GPT-4o-mini 백본 · 상·하위 기법 발췌</text>
+
+  <!-- legend -->
+  <circle cx="26" cy="66" r="5" fill="#2a78d6"/>
+  <text x="36" y="70" font-size="11" fill="#52514e">GraphRAG 계열</text>
+  <circle cx="146" cy="66" r="5" fill="#898781"/>
+  <text x="156" y="70" font-size="11" fill="#52514e">전통 희소 검색</text>
+  <line x1="260" y1="66" x2="284" y2="66" stroke="#c3c2b7" stroke-width="1.5" stroke-dasharray="4 3"/>
+  <text x="290" y="70" font-size="11" fill="#52514e">무증강 GPT-4o-mini (70.68)</text>
+
+  <!-- gridlines 66..76 -->
+  <line x1="180" y1="88" x2="180" y2="320" stroke="#e1e0d9"/>
+  <line x1="276" y1="88" x2="276" y2="320" stroke="#e1e0d9"/>
+  <line x1="372" y1="88" x2="372" y2="320" stroke="#e1e0d9"/>
+  <line x1="468" y1="88" x2="468" y2="320" stroke="#e1e0d9"/>
+  <line x1="564" y1="88" x2="564" y2="320" stroke="#e1e0d9"/>
+  <line x1="660" y1="88" x2="660" y2="320" stroke="#e1e0d9"/>
+
+  <!-- baseline 70.68 -->
+  <line x1="404.6" y1="88" x2="404.6" y2="320" stroke="#c3c2b7" stroke-width="1.5" stroke-dasharray="4 3"/>
+
+  <!-- rows -->
+  <text x="20" y="104" font-size="13" fill="#0b0b0b">RAPTOR</text>
+  <circle cx="543.8" cy="100" r="6" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/>
+  <text class="val" x="557.8" y="104" font-size="12" fill="#52514e">73.58</text>
+
+  <text x="20" y="138" font-size="13" fill="#0b0b0b">HippoRAG</text>
+  <circle cx="498.7" cy="134" r="6" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/>
+  <text class="val" x="512.7" y="138" font-size="12" fill="#52514e">72.64</text>
+
+  <text x="20" y="172" font-size="13" fill="#0b0b0b">MS GraphRAG</text>
+  <circle cx="492.0" cy="168" r="6" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/>
+  <text class="val" x="506.0" y="172" font-size="12" fill="#52514e">72.50</text>
+
+  <text x="20" y="206" font-size="13" fill="#0b0b0b">TF-IDF</text>
+  <circle cx="454.1" cy="202" r="6" fill="#898781" stroke="#fcfcfb" stroke-width="2"/>
+  <text class="val" x="468.1" y="206" font-size="12" fill="#52514e">71.71</text>
+
+  <text x="20" y="240" font-size="13" fill="#0b0b0b">BM25</text>
+  <circle cx="451.7" cy="236" r="6" fill="#898781" stroke="#fcfcfb" stroke-width="2"/>
+  <text class="val" x="465.7" y="240" font-size="12" fill="#52514e">71.66</text>
+
+  <text x="20" y="274" font-size="13" fill="#0b0b0b">G-Retriever</text>
+  <circle cx="364.3" cy="270" r="6" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/>
+  <text class="val" x="378.3" y="274" font-size="12" fill="#52514e">69.84</text>
+
+  <text x="20" y="308" font-size="13" fill="#0b0b0b">DALK</text>
+  <circle cx="338.4" cy="304" r="6" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/>
+  <text class="val" x="352.4" y="308" font-size="12" fill="#52514e">69.30</text>
+
+  <!-- axis -->
+  <line x1="180" y1="320" x2="660" y2="320" stroke="#c3c2b7"/>
+  <text class="val" x="180" y="340" font-size="11" fill="#898781" text-anchor="middle">66</text>
+  <text class="val" x="276" y="340" font-size="11" fill="#898781" text-anchor="middle">68</text>
+  <text class="val" x="372" y="340" font-size="11" fill="#898781" text-anchor="middle">70</text>
+  <text class="val" x="468" y="340" font-size="11" fill="#898781" text-anchor="middle">72</text>
+  <text class="val" x="564" y="340" font-size="11" fill="#898781" text-anchor="middle">74</text>
+  <text class="val" x="660" y="340" font-size="11" fill="#898781" text-anchor="middle">76</text>
+
+  <text x="20" y="368" font-size="11" fill="#898781">일부 GraphRAG 기법(G-Retriever·DALK)은 무증강 LLM보다 낮고, TF-IDF·BM25가 여러 그래프 기법을 앞선다</text>
+</svg>

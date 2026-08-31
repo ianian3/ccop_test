@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CCOP 온톨로지 설계·개발 — V4.7</title>
+<style>
+  :root {
+    --page: #f9f9f7; --surface: #fcfcfb;
+    --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781;
+    --grid: #e1e0d9; --line: #c3c2b7;
+    --blue: #2a78d6; --blue-deep: #1c5cab;
+    --good: #0ca30c; --bad: #d03b3b; --warn: #eb6834;
+    /* 레이어 색 = 제품 시각화 SSOT(VISUAL_STYLE_V40)와 동일 */
+    --l-source: #95A5A6; --l-case: #E74C3C; --l-person: #3498DB;
+    --l-object: #4ECDC4; --l-loc: #A04000; --l-event: #F39C12;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    font-family: system-ui, -apple-system, "Apple SD Gothic Neo", "Segoe UI", sans-serif;
+    background: var(--page); color: var(--ink);
+    overflow: hidden;
+  }
+  .slide {
+    display: none; width: 100vw; height: 100vh;
+    padding: 4.5vh 6vw; flex-direction: column; justify-content: center;
+  }
+  .slide.active { display: flex; }
+  .kicker { font-size: clamp(13px, 1.3vw, 17px); font-weight: 700; color: var(--blue); letter-spacing: .08em; margin-bottom: 14px; }
+  h1 { font-size: clamp(30px, 4.2vw, 56px); line-height: 1.22; font-weight: 800; }
+  h2 { font-size: clamp(24px, 3vw, 40px); line-height: 1.25; font-weight: 800; margin-bottom: 3.2vh; }
+  h2 .sub { display:block; font-size: .48em; font-weight: 500; color: var(--ink-2); margin-top: 8px; }
+  p, li { font-size: clamp(15px, 1.55vw, 21px); line-height: 1.6; color: var(--ink-2); }
+  strong { color: var(--ink); }
+  .accent { color: var(--blue); }
+
+  ul.points { list-style: none; display: flex; flex-direction: column; gap: 1.6vh; }
+  ul.points li { padding-left: 34px; position: relative; }
+  ul.points li::before { content: ""; position: absolute; left: 8px; top: .62em; width: 9px; height: 9px; border-radius: 50%; background: var(--blue); }
+  ul.points.pro li::before { background: var(--good); }
+  ul.points.con li::before { background: var(--bad); }
+
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 2.4vw; align-items: stretch; }
+  .card { background: var(--surface); border: 1px solid rgba(11,11,11,.10); border-radius: 14px; padding: 2.4vh 1.8vw; }
+  .card h3 { font-size: clamp(16px, 1.7vw, 23px); margin-bottom: 1.4vh; }
+  .card h3.good { color: var(--good); } .card h3.bad { color: var(--bad); }
+  .card p, .card li { font-size: clamp(13px, 1.35vw, 18px); }
+
+  table { width: 100%; border-collapse: collapse; background: var(--surface); border-radius: 12px; overflow: hidden; }
+  th, td { padding: 1.1vh 1vw; text-align: left; font-size: clamp(12px, 1.25vw, 17px); border-bottom: 1px solid var(--grid); }
+  th { background: #f0efec; color: var(--ink); font-weight: 700; }
+  td { color: var(--ink-2); } td b { color: var(--ink); }
+  tr:last-child td { border-bottom: none; }
+  td code, li code, p code { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: .92em; background: #f0efec; border-radius: 5px; padding: 1px 6px; color: var(--ink); }
+
+  .tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.6vw; }
+  .tiles.four { grid-template-columns: repeat(4, 1fr); }
+  .tile { background: var(--surface); border: 1px solid rgba(11,11,11,.10); border-radius: 14px; padding: 2.6vh 1.4vw; text-align: center; }
+  .tile .big { font-size: clamp(30px, 3.6vw, 52px); font-weight: 800; color: var(--blue-deep); }
+  .tile .big.risk { color: var(--bad); }
+  .tile .lbl { font-size: clamp(12px, 1.2vw, 16px); color: var(--ink-2); margin-top: 6px; line-height: 1.4; }
+
+  .diagram { background: var(--surface); border: 1px solid rgba(11,11,11,.10); border-radius: 14px; padding: 2vh 1.4vw; }
+  .note { font-size: clamp(12px, 1.2vw, 16px); color: var(--muted); margin-top: 2vh; }
+  .verdict { border-left: 6px solid var(--blue); background: var(--surface); border-radius: 0 12px 12px 0; padding: 2vh 1.6vw; margin-top: 2.4vh; }
+  .verdict p { color: var(--ink); font-weight: 600; }
+
+  /* 레이어 스택 */
+  .layers { display: flex; flex-direction: column; gap: 1.1vh; }
+  .layer { display: grid; grid-template-columns: 190px 1fr auto; gap: 1.2vw; align-items: center;
+           background: var(--surface); border: 1px solid rgba(11,11,11,.10); border-left-width: 8px;
+           border-radius: 10px; padding: 1.3vh 1.4vw; }
+  .layer .lname { font-weight: 800; color: var(--ink); font-size: clamp(14px, 1.5vw, 20px); }
+  .layer .lnodes { color: var(--ink-2); font-size: clamp(12px, 1.3vw, 17px); }
+  .layer .lcnt { font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; font-size: clamp(14px, 1.5vw, 20px); white-space: nowrap; }
+
+  /* 그래프 플로 다이어그램 */
+  .flow { display: flex; align-items: center; justify-content: center; gap: .8vw; flex-wrap: wrap; }
+  .gnode { border: 2.5px solid var(--ink-2); border-radius: 999px; padding: 1vh 1.3vw; font-weight: 700;
+           font-size: clamp(13px, 1.4vw, 18px); background: var(--surface); color: var(--ink); white-space: nowrap; }
+  .gnode.ev { border-style: dashed; border-color: var(--l-event); border-radius: 12px; }
+  .gnode.obj { border-color: var(--l-object); }
+  .gedge { display: flex; flex-direction: column; align-items: center; color: var(--muted); font-size: clamp(11px, 1.1vw, 15px); }
+  .gedge .arrow { font-size: clamp(18px, 2vw, 26px); color: var(--ink-2); line-height: 1; }
+  .gedge .ename { font-family: ui-monospace, Menlo, monospace; color: var(--blue-deep); font-weight: 600; }
+
+  /* 타임라인 */
+  .timeline { display: grid; grid-template-columns: repeat(5, 1fr); gap: 1vw; }
+  .tstep { background: var(--surface); border: 1px solid rgba(11,11,11,.10); border-top: 5px solid var(--blue); border-radius: 10px; padding: 1.6vh 1vw; }
+  .tstep .tver { font-weight: 800; color: var(--blue-deep); font-size: clamp(15px, 1.6vw, 21px); }
+  .tstep .tdate { color: var(--muted); font-size: clamp(11px, 1.05vw, 14px); margin: 2px 0 8px; }
+  .tstep p { font-size: clamp(12px, 1.2vw, 16px); line-height: 1.5; }
+
+  .badge { display: inline-block; border-radius: 999px; padding: 2px 12px; font-size: clamp(11px, 1.1vw, 15px);
+           font-weight: 700; color: var(--ink); background: #f0efec; border: 1px solid var(--grid); margin-right: 6px; }
+  .badge.dot::before { content: "●"; margin-right: 6px; }
+
+  .hud { position: fixed; bottom: 18px; right: 22px; display: flex; gap: 10px; align-items: center; color: var(--muted); font-size: 13px; user-select: none; }
+  .hud button { border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 6px 12px; font-size: 14px; cursor: pointer; color: var(--ink-2); }
+  .hud button:hover { border-color: var(--blue); color: var(--blue); }
+  .brand { position: fixed; bottom: 18px; left: 22px; color: var(--muted); font-size: 13px; }
+
+  @media print {
+    body { overflow: visible; }
+    .slide { display: flex !important; height: 100vh; page-break-after: always; }
+    .hud, .brand { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<!-- 1. 타이틀 -->
+<section class="slide active">
+  <div class="kicker">CCOP v1.0 · 사이버범죄 수사 그래프 분석 플랫폼</div>
+  <h1>온톨로지 설계·개발</h1>
+  <p style="margin-top:14px; font-size: clamp(17px,1.9vw,25px);">KICS 기반 한국형 사이버범죄 수사 온톨로지 — <strong>V4.7 · POLE 정렬 6레이어</strong></p>
+  <div class="tiles" style="margin-top:5vh; max-width: 62vw;">
+    <div class="tile"><div class="big">25</div><div class="lbl">노드 타입</div></div>
+    <div class="tile"><div class="big">72</div><div class="lbl">엣지 타입 (활성 70)</div></div>
+    <div class="tile"><div class="big">13</div><div class="lbl">추론 규칙</div></div>
+  </div>
+  <p class="note">2026-08-24 · 근거: <code>ontology_service.py</code>(SSOT) · docs/CCOP_ONTOLOGY_V4.1.md 외 설계 문서군</p>
+</section>
+
+<!-- 2. 문제 정의 -->
+<section class="slide">
+  <h2>왜 온톨로지인가 <span class="sub">수사 질문은 곧 관계 질문 — 스키마 없이는 자동화도 없다</span></h2>
+  <div class="cols">
+    <div class="card">
+      <h3 class="bad">기존 방식의 한계 (i2 등)</h3>
+      <ul class="points con">
+        <li>분석가가 문서를 읽고 <strong>수동 마크업</strong> — 사건마다 표기가 제각각</li>
+        <li>표준 스키마 부재 → 사건 간 비교·통합·재사용 불가</li>
+        <li>"이 IP를 누가 공유했나" 같은 질문에 <strong>사람이 직접</strong> 그림을 그려야 함</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3 class="good">CCOP 접근 — 온톨로지가 공통 계약</h3>
+      <ul class="points pro">
+        <li><strong>Text2Cypher</strong>: 자연어 질문 → 스키마 제약 Cypher 생성</li>
+        <li><strong>ETL 적재</strong>: RDB·CSV → 그래프 변환의 라벨·방향·멱등 기준</li>
+        <li><strong>문서 추출</strong>: LLM 추출 결과의 할루시네이션 차단 기준</li>
+        <li><strong>시각화</strong>: 노드·엣지 스타일 단일 진실(SSOT)</li>
+      </ul>
+    </div>
+  </div>
+  <div class="verdict"><p>온톨로지는 설계 문서가 아니라 <span class="accent">런타임 계약</span>이다 — 스키마가 표현 못 하는 수사 질문에는 시스템 전체가 답하지 못한다.</p></div>
+</section>
+
+<!-- 3. 규모와 SSOT -->
+<section class="slide">
+  <h2>전체 규모와 관리 방식 <span class="sub">단일 파일 SSOT — 의미·시각화·RDB 매핑·추론규칙의 일원화</span></h2>
+  <div class="tiles four">
+    <div class="tile"><div class="big">25</div><div class="lbl">노드 (6레이어)</div></div>
+    <div class="tile"><div class="big">72</div><div class="lbl">엣지 (활성 70 · deprecated 2)</div></div>
+    <div class="tile"><div class="big">13</div><div class="lbl">추론규칙 (탐지 9 + 생성 4)</div></div>
+    <div class="tile"><div class="big">53</div><div class="lbl">정합 회귀 테스트 상시 통과</div></div>
+  </div>
+  <ul class="points" style="margin-top:3.4vh;">
+    <li><strong>SSOT 단일 파일</strong> — <code>ontology_service.py</code> 2,672줄에 노드·엣지·추론규칙·시각화 스타일·표준 DDL 크로스워크·파생속성 등록부까지 일원화</li>
+    <li><strong>이원화 제거의 역사</strong> — V4.1~4.2에서 "카탈로그 한쪽에만 있던" 엣지·규칙 중복을 청산 (명목 53 → 실측 60, 규칙 10+4 → 13)</li>
+    <li><strong>코드 ↔ 엑셀 동기화</strong> — 설계 산출물(엑셀)과 코드가 함께 마감 (V4.7, 2026-08-13)</li>
+  </ul>
+</section>
+
+<!-- 4. POLE 6레이어 -->
+<section class="slide">
+  <h2>설계 철학 — POLE 정렬 6레이어 <span class="sub">경찰 표준 POLE(Person·Object·Location·Event) + Source·Case 분리 확장</span></h2>
+  <div class="layers">
+    <div class="layer" style="border-left-color: var(--l-source);"><span class="lname">Source</span><span class="lnodes">데이터 출처(수집기관·신뢰등급) — 모든 엣지가 수직 참조하는 증거 사슬의 뿌리</span><span class="lcnt">1</span></div>
+    <div class="layer" style="border-left-color: var(--l-case);"><span class="lname">Case</span><span class="lnodes">사건 · 진정서 · 진정서군집 — 수사 맥락</span><span class="lcnt">3</span></div>
+    <div class="layer" style="border-left-color: var(--l-person);"><span class="lname">Person</span><span class="lnodes">인물 · 법인 — 행위 주체</span><span class="lcnt">2</span></div>
+    <div class="layer" style="border-left-color: var(--l-object);"><span class="lname">Object</span><span class="lnodes">계좌 · 전화 · IP · 사이트 · 파일 · 계정 · 이메일 · 지갑 · 차량 · 기기 · ATM · 사이트군집 — <strong>공유자원 탐지의 축</strong></span><span class="lcnt">12</span></div>
+    <div class="layer" style="border-left-color: var(--l-loc);"><span class="lname">Location</span><span class="lnodes">위치</span><span class="lcnt">1</span></div>
+    <div class="layer" style="border-left-color: var(--l-event);"><span class="lname">Event</span><span class="lnodes">이체 · 통화 · 접속 · 메시지 · 이동 · 사칭 — <strong>노드화(reified)된 행위</strong></span><span class="lcnt">6</span></div>
+  </div>
+  <p class="note">레이어 색상은 제품 시각화 표준(VISUAL_STYLE_V40)과 동일 — 발표 자료와 실제 화면이 같은 언어를 씀</p>
+</section>
+
+<!-- 5. 핵심 사상 1 -->
+<section class="slide">
+  <h2>핵심 사상 ① 식별자는 속성이 아니라 노드다 <span class="sub">전화·계좌·IP를 인물 속성으로 뭉치면 그래프의 존재 이유가 사라진다</span></h2>
+  <div class="cols">
+    <div class="card">
+      <h3 class="bad">인물 카드 방식 (속성 뭉치기)</h3>
+      <p style="margin-bottom:1.2vh;"><code>인물{ 전화:[...], 계좌:[...], IP:[...] }</code></p>
+      <ul class="points con">
+        <li>두 인물이 <strong>같은 IP</strong>를 쓴 사실을 표현할 방법이 없음</li>
+        <li>통화망(<code>contacted</code>)·자금흐름(<code>from/to_account</code>) 엣지를 걸 수 없음</li>
+        <li>크로스-문서 동일인 통합(<code>sameAs</code>)은 노드 기준 — 속성이면 불가</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3 class="good">POLE 분리 방식 (CCOP)</h3>
+      <p style="margin-bottom:1.2vh;"><code>(인물)-[used_ip]→(IP)←[used_ip]-(인물)</code></p>
+      <ul class="points pro">
+        <li>공유 자원이 <strong>교차점</strong>으로 드러남 — 공범·조직 탐지의 단서</li>
+        <li><strong>실증</strong>: 공유 IP <code>122.54.197.65</code> 하나가 가입자 문서 3건을 연결해 조직 구조를 노출 (2차년도 검증)</li>
+        <li>저장은 분리 노드, 화면은 인물중심 뷰 — 표시 레이어에서 해결</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- 6. 핵심 사상 2 -->
+<section class="slide">
+  <h2>핵심 사상 ② 행위는 엣지가 아니라 이벤트 노드다 <span class="sub">Reification — 국제 표준(CASE·Participation Pattern) 정렬</span></h2>
+  <div class="diagram">
+    <div class="flow">
+      <span class="gnode obj">vt_bacnt<br><small>출금계좌</small></span>
+      <span class="gedge"><span class="ename">from_account</span><span class="arrow">→</span></span>
+      <span class="gnode ev">vt_transfer<br><small>이체 (시각·금액)</small></span>
+      <span class="gedge"><span class="ename">to_account</span><span class="arrow">→</span></span>
+      <span class="gnode obj">vt_bacnt<br><small>입금계좌</small></span>
+      <span class="gedge"><span class="ename">via_ip</span><span class="arrow">→</span></span>
+      <span class="gnode obj">vt_ip<br><small>접속 IP</small></span>
+    </div>
+  </div>
+  <ul class="points" style="margin-top:2.6vh;">
+    <li><strong>왜?</strong> 행위 하나에 시각·금액·수단·IP 등 <strong>다면 속성</strong>이 붙고, 참여자가 3개 이상(계좌 2 + IP)일 수 있다 — 엣지 하나로는 못 담음</li>
+    <li><strong>이중 표현</strong> — 요약 직접 엣지(<code>transferred_to</code>·<code>contacted</code>) 병행: 3단계+ 자금흐름 추적 같은 다단계 경로탐색은 직접 엣지가 빠름</li>
+    <li>V4.6에서 직접 엣지에 <strong>이체시각 기간집계</strong>를 추가해 시간 조회까지 지원</li>
+  </ul>
+  <p class="note">노드 vs 엣지 트레이드오프 상세 분석: ONTOLOGY_EVENT_EDGE_20260728 발표 자료</p>
+</section>
+
+<!-- 7. 엣지 체계 -->
+<section class="slide">
+  <h2>엣지 72종의 체계 <span class="sub">기능 그룹별 설계 의도</span></h2>
+  <table>
+    <tr><th style="width:19%;">그룹</th><th style="width:44%;">대표 엣지</th><th>설계 의도</th></tr>
+    <tr><td><b>사건 참여</b></td><td><code>suspect_in</code> <code>victim_in</code> <code>involves</code> <code>filed_as</code></td><td>인물↔사건 역할, 진정서→사건 전환</td></tr>
+    <tr><td><b>수사단서 eg_*</b></td><td><code>eg_used_account/phone/ip/id/email</code></td><td><b>인물 미상이어도</b> 사건→객체 단서 등록 (KICS)</td></tr>
+    <tr><td><b>소유·귀속</b></td><td><code>owns_phone</code> <code>has_account</code> <code>registered_to</code> <code>controls</code></td><td>명의자 vs <b>실질지배</b> 구분 — 대포계좌·대포폰 수사</td></tr>
+    <tr><td><b>사회·조직</b></td><td><code>accomplice_of</code> <code>member_of</code> <code>recruits</code> <code>represents</code></td><td>공범망 · 법인대표(V4.7) — 동일 대표 다수 법인 탐지</td></tr>
+    <tr><td><b>이벤트 참여</b></td><td><code>from/to_account</code> <code>caller/callee</code> <code>accessed_from</code> <code>access_via</code></td><td>reification 참여 관계 — 주체→이벤트→대상 방향 규약</td></tr>
+    <tr><td><b>집계·추론</b></td><td><code>transferred_to</code> <code>contacted</code> <code>communicated_with</code></td><td>다단계 경로탐색(자금 hop 추적) 전용 요약 엣지</td></tr>
+    <tr><td><b>인프라·OSINT</b></td><td><code>hosts</code> <code>resolves_to</code> <code>belongs_to_campaign</code></td><td>사이트-IP-파일 연계, SimHash 피싱 캠페인 군집</td></tr>
+    <tr><td><b>해소·출처</b></td><td><code>sameAs</code> <code>contradicts</code> <code>sourced_from</code></td><td>엔티티 해소 · 모순 기록 · provenance 수직 관통</td></tr>
+  </table>
+  <p class="note">deprecated 2종(<code>clusters_with</code>·<code>owns_device</code>)은 삭제 대신 명시적 표기 — 하위호환 유지</p>
+</section>
+
+<!-- 8. bitemporal -->
+<section class="slide">
+  <h2>시간축 설계 — bitemporal <span class="sub">"언제 유효했나"와 "언제 기록됐나"는 다른 질문이다</span></h2>
+  <div class="cols" style="grid-template-columns: 1.15fr 1fr;">
+    <div class="card">
+      <h3>실측 반례가 재설계를 촉발 — IP <code>27.193.61.154</code></h3>
+      <div class="diagram" style="margin:1.2vh 0; padding:1.6vh 1.2vw;">
+        <div class="flow" style="justify-content:flex-start; gap:1.4vw;">
+          <span class="badge dot" style="color:var(--warn);">2017-03 · 주체 3명 공유 → <b>shared</b></span>
+          <span class="gedge"><span class="arrow">→</span></span>
+          <span class="badge dot" style="color:var(--good);">2017-04 · 단독 사용 → <b>single_user</b></span>
+        </div>
+      </div>
+      <p>전 기간 단일 판정은 이 IP를 "shared"로 뭉뚱그려 <strong>4월의 단독 사용 — 피의자 특정 단서 — 를 평탄화</strong>한다. 역할 전환(공유→단독, 인프라→봇넷)은 조직 재편의 신호다.</p>
+    </div>
+    <div class="card">
+      <h3>V4.6 반영 내용</h3>
+      <ul class="points">
+        <li>모든 엣지 공통 2축: <code>valid_from/to</code>(현실 유효) + <code>rec_created</code>(기록)</li>
+        <li><code>used_ip</code>·<code>has_account</code>·<code>owns_phone</code>에 유효구간 실반영·백필</li>
+        <li><code>ip_role</code> → 구간별 판정: <code>ip_role_timeline</code> + <code>ip_role_current</code></li>
+        <li>call_center 임계는 고정값 아닌 <strong>분포 기반</strong>(실측: 5개↑ 공유 32건, 자연 골 없음)</li>
+      </ul>
+    </div>
+  </div>
+  <div class="verdict"><p>재계산 순서도 규칙으로 고정 — <span class="accent">sameAs 해소 후 실체(entity) 기준</span>. 순서가 바뀌면 같은 데이터에서 다른 결론이 나온다.</p></div>
+</section>
+
+<!-- 9. provenance -->
+<section class="slide">
+  <h2>Provenance — 증거 사슬 <span class="sub">모든 엣지가 출처·신뢰도·검증 상태를 지닌다</span></h2>
+  <div class="cols">
+    <div class="card">
+      <h3>엣지 공통 메타 (EDGE_META_SCHEMA)</h3>
+      <ul class="points">
+        <li><strong>필수</strong>: <code>edge_id</code>(안정 ID) · <code>source_id</code>(vt_src 참조) · <code>rec_created</code> · <code>creation_method</code></li>
+        <li><code>creation_method</code> = manual | etl | ocr_ner | osint | <strong>inference</strong></li>
+        <li>출처는 <code>vt_src</code> 노드 + <code>sourced_from</code> 엣지로 정규화 — 전 레이어 수직 관통</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>신뢰도 3축</h3>
+      <ul class="points">
+        <li><code>confidence</code> 0.0~1.0 (1.0 = 공식 문서)</li>
+        <li><code>credibility</code> 1~5 (GraphAware 기준)</li>
+        <li><code>verified</code> — <strong>주장 vs 확인</strong>의 구분. True면 수사관 ID·검증 일시 필수</li>
+      </ul>
+    </div>
+  </div>
+  <div class="verdict"><p>추론으로 생긴 엣지와 공식문서 엣지가 <span class="accent">그래프 안에서 구분</span>된다 — 분석 결과를 법적 증거로 잇는 전제 조건.</p></div>
+</section>
+
+<!-- 10. 엔티티 해소 -->
+<section class="slide">
+  <h2>엔티티 해소 — human-in-the-loop <span class="sub">자동은 후보까지, 확정은 수사관이</span></h2>
+  <ul class="points">
+    <li><strong>식별자 형식 표준(NODE_ID_STANDARD)</strong> — 노드별 canonical 키 + <code>id_format</code>(평문/md5/sha256): OSINT 해시 데이터와 수사 평문 데이터의 cross-source 매칭 기반</li>
+    <li><strong>sameAs 후보 자동 탐지</strong> — 두 인물이 전화+계좌를 동시 공유하면 후보 생성(신뢰도 0.85), 단 <strong>review_required — 인물·조직의 자동 확정 금지</strong></li>
+    <li><strong>미확정 표현</strong> — <code>is_anonymous</code> 플래그 + <code>traversal_policy=candidate_only</code>(시각화 점선): 확정 전 후보가 분석 결과를 오염시키지 않도록 격리</li>
+    <li><strong>병합 방식</strong> — 임의 ID를 실제 ID로 교체하지 않고 <code>sameAs</code>로 병합: 걸려 있는 엣지를 보존하고 해소 이력을 추적</li>
+  </ul>
+  <div class="verdict"><p>동일인 오통합은 수사에서 가장 위험한 오류 — <span class="accent">자동화의 경계를 스키마에 명시</span>한 것이 이 설계의 핵심이다.</p></div>
+</section>
+
+<!-- 11. 추론 규칙 -->
+<section class="slide">
+  <h2>추론 규칙 13종 <span class="sub">탐지(detection) 9 + 생성(enrichment) 4 — 전 규칙에 법적 근거 명시</span></h2>
+  <table>
+    <tr><th style="width:24%;">규칙</th><th style="width:42%;">트리거 → 산출</th><th style="width:11%;">신뢰도</th><th>법적 근거</th></tr>
+    <tr><td><b>OrganizedCrime</b></td><td>동일 계좌/전화가 3건+ 사건 사용 → <code>accomplice_of</code></td><td>0.80</td><td>범죄수익은닉규제법</td></tr>
+    <tr><td><b>MoneyLaundering</b></td><td>3단계+ 계좌이체 → <code>suspicious_transfer</code></td><td>0.75</td><td>특정금융거래정보법</td></tr>
+    <tr><td><b>BurnerAccount / Phone</b></td><td>1시간 10건+ 이체 · 선불폰+스팸 3건+ → <code>is_burner</code></td><td>0.85</td><td>전자금융거래법 등</td></tr>
+    <tr><td><b>EntityResolution</b></td><td>전화+계좌 동시 공유 → <code>sameAs</code> 후보 (<b>자동확정 금지</b>)</td><td>0.85</td><td>—</td></tr>
+    <tr><td><b>RelayStation</b></td><td>동일 IMEI에 전화 3개+ → <code>vt_dev</code>(중계기) 생성</td><td>0.90</td><td>전기통신사업법 §30</td></tr>
+    <tr><td><b>SiteCluster</b></td><td>HTML SimHash(해밍≤3) → 피싱 캠페인 군집</td><td>—</td><td>—</td></tr>
+    <tr><td colspan="4" style="color:var(--muted);">+ Accomplice · CrossDomainHub · NightCrimePattern · RecruitChain · PtCluster · AnonymousFlag</td></tr>
+  </table>
+  <p class="note">법적 근거가 스키마에 있으므로 탐지 결과가 곧바로 수사 보고 문맥으로 이어진다</p>
+</section>
+
+<!-- 12. 진화 타임라인 -->
+<section class="slide">
+  <h2>진화 이력 — 실측이 설계를 끌었다 <span class="sub">v3.7 → V4.7, 엣지 60 → 72</span></h2>
+  <div class="timeline">
+    <div class="tstep"><div class="tver">V4.1·4.2</div><div class="tdate">07-31</div><p><strong>정합화</strong> — 카탈로그 이원화 해소 (명목 53→실측 60, 추론규칙 13종 통합)</p></div>
+    <div class="tstep"><div class="tver">V4.3·4.4</div><div class="tdate">08-03</div><p><strong>시나리오 반영</strong> — 1·2차년도 출현 엣지 23종 검토 → 직접 3 + reification 확장 6 (60→66)</p></div>
+    <div class="tstep"><div class="tver">V4.5</div><div class="tdate">08-06</div><p><strong>실적재 검증</strong> — 2차년도 데이터 적재(ccop-analysis)에서 신규 5 + 확장 5 (66→71) + 파생속성 등록부</p></div>
+    <div class="tstep"><div class="tver">V4.6</div><div class="tdate">08-13</div><p><strong>시간축</strong> — bitemporal 정착 · ip_role 구간 판정 · 지연확장 · access_type 서브타입</p></div>
+    <div class="tstep"><div class="tver">V4.7</div><div class="tdate">08-13</div><p><strong>표준 DDL 정합</strong> — represents(법인대표) · occp_nm · std_columns 컬럼매핑 (71→72)</p></div>
+  </div>
+  <div class="verdict"><p>사이클: 시나리오 → 요구 도출 → 반영 → <span class="accent">실적재 검증 → 결함 발견 → 재설계</span>. 모든 결정에 실데이터 반례가 근거로 남아 있다.</p></div>
+</section>
+
+<!-- 13. 2차년도 3단계 파도 -->
+<section class="slide">
+  <h2>2차년도 데이터가 만든 3단계 개선 <span class="sub">1차년도=사법 서사, 2차년도=통신 네트워크 — 서로 다른 약점을 찔렀다</span></h2>
+  <ul class="points">
+    <li><strong>① 시나리오 파도 (V4.3·4.4)</strong> — EP6 포털 역조회: 계정→IP·전화 역추적 관계가 스키마에 없었음. 이때 <strong>"행위성은 reification, 속성적 연결은 직접 엣지"</strong> 분기 원칙 수립 — 온톨로지 팽창 방지</li>
+    <li><strong>② 실적재 파도 (V4.5)</strong> — 진짜 데이터를 넣자 보인 것: <code>used_ip</code> 주체가 Person만으론 부족(가입자 데이터는 인물 미상인 채 전화·계정이 IP 사용) → 주체를 Phone·DigitalID·Device로 확장, <code>sent_from_ip</code>·<code>exchanged_to</code>(계좌→코인 환전) 등 신규 5종</li>
+    <li><strong>③ 시간축 파도 (V4.6)</strong> — IP <code>27.193.61.154</code>의 역할 전환(3월 shared → 4월 single)이 전기간 단일 판정의 결함을 실증 → bitemporal 재설계</li>
+  </ul>
+  <div class="verdict"><p>문서 검토로는 안 보이던 결함이 <span class="accent">실적재에서 즉시 드러났다</span> — 2차년도의 역할은 "설계 검증 데이터"였다.</p></div>
+</section>
+
+<!-- 14. V4.7 -->
+<section class="slide">
+  <h2>V4.7 마감 — 표준 DDL 정합 <span class="sub">DA팀 표준 테이블과 온톨로지의 컬럼 단위 연결 (2026-08-13)</span></h2>
+  <div class="cols">
+    <div class="card">
+      <h3>신설</h3>
+      <ul class="points">
+        <li><code>represents</code> — 인물→법인 대표 엣지 (원천 <code>TB_INST_RPRSV_REL_T</code>, 대표구분+유효기간): <strong>동일 대표의 다수 법인</strong> 탐지</li>
+        <li><code>vt_psn.occp_nm</code> — 직업 속성 (<code>TB_PSN_M.CR_NM</code>)</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>정착</h3>
+      <ul class="points">
+        <li><code>std_columns</code> — 온톨로지 속성↔표준 DDL 컬럼 매핑을 스키마에 내장. 값 변환 규칙 포함: <code>CALL_HR</code>(HHMMSS→초), <code>CNTN_DT/CNTN_TYP_CD</code>(접속)</li>
+        <li><code>STANDARD_TABLE_MAP</code> 26항목 — 표준↔레거시 크로스워크, RDB 마이그레이션의 단일 참조원</li>
+      </ul>
+    </div>
+  </div>
+  <div class="verdict"><p>주목할 결정 — 접속 서브타입(web/comm/banking)을 노드 분할 대신 <span class="accent">속성(access_type)으로</span>: 노드가 늘면 T2C 모델 재학습이 필요해진다. <strong>스키마 변경 비용에 모델 비용을 포함해 판단</strong>했다.</p></div>
+</section>
+
+<!-- 15. 소비자 -->
+<section class="slide">
+  <h2>온톨로지를 소비하는 4개 시스템 <span class="sub">하나의 스키마, 네 개의 런타임</span></h2>
+  <div class="cols" style="grid-template-columns: 1fr 1fr; gap: 1.6vw;">
+    <div class="card">
+      <h3>① Text2Cypher (sLLM)</h3>
+      <p>스키마가 프롬프트에 주입되고, v47 모델은 이 스키마 기반 <strong>실행검증 645건</strong>으로 학습. 232 벤치 회귀 0으로 스키마 진화 검증</p>
+    </div>
+    <div class="card">
+      <h3>② 문서→그래프 추출</h3>
+      <p>LLM 추출 결과 중 25노드/70엣지 밖 타입을 <strong>할루시네이션으로 폐기</strong> — PoC에서 환각 엣지 13건 실차단</p>
+    </div>
+    <div class="card">
+      <h3>③ ETL·RDB 적재</h3>
+      <p>라벨·방향·멱등 키의 기준. <strong>정합 회귀 테스트 53건</strong>이 적재↔스키마 불일치를 상시 감시</p>
+    </div>
+    <div class="card">
+      <h3>④ 시각화</h3>
+      <p>색·모양·크기 SSOT + <strong>상태 반응형</strong>(익명=점선, 고위험=테두리 강조, 대포=주황) — 화면이 수사 상태를 즉시 표현</p>
+    </div>
+  </div>
+</section>
+
+<!-- 16. 결론 -->
+<section class="slide">
+  <h2>정리 및 다음 단계</h2>
+  <div class="tiles" style="margin-bottom:2.6vh;">
+    <div class="tile"><div class="big">60→72</div><div class="lbl">3주간 엣지 확장 — 전건 실측(시나리오·실적재) 근거</div></div>
+    <div class="tile"><div class="big">0</div><div class="lbl">232 벤치 회귀 (스키마 진화에도 T2C 성능 유지)</div></div>
+    <div class="tile"><div class="big">53</div><div class="lbl">정합 테스트 상시 통과 (SoT↔적재↔시각화)</div></div>
+  </div>
+  <ul class="points">
+    <li><strong>① RDB 표준 테이블 정합 (P0)</strong> — STANDARD_TABLE_MAP 기반 적재 코드 전환 + 재적재 검증 (~1.5주)</li>
+    <li><strong>② ip_role 실데이터 재현 검증 (S5)</strong> — 27.193.61.154의 3월 shared / 4월 single 구간 판정 재현</li>
+    <li><strong>③ 문서→그래프 트랙 확대</strong> — 1·2차년도 비정형 224건, 온톨로지 검증기로 할루시네이션 통제</li>
+    <li><strong>④ SoT 구조 정리</strong> — ontology_service alias 단일화</li>
+  </ul>
+</section>
+
+<div class="brand">CCOP · 온톨로지 설계·개발 (V4.7)</div>
+<div class="hud">
+  <button id="prev">← 이전</button>
+  <span id="counter">1 / 16</span>
+  <button id="next">다음 →</button>
+</div>
+
+<script>
+  const slides = Array.from(document.querySelectorAll('.slide'));
+  let idx = 0;
+  function show(i) {
+    idx = Math.max(0, Math.min(slides.length - 1, i));
+    slides.forEach((s, j) => s.classList.toggle('active', j === idx));
+    document.getElementById('counter').textContent = (idx + 1) + ' / ' + slides.length;
+    history.replaceState(null, '', '#' + (idx + 1));
+  }
+  document.getElementById('prev').onclick = () => show(idx - 1);
+  document.getElementById('next').onclick = () => show(idx + 1);
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') { e.preventDefault(); show(idx + 1); }
+    if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); show(idx - 1); }
+    if (e.key === 'Home') show(0);
+    if (e.key === 'End') show(slides.length - 1);
+  });
+  show((parseInt(location.hash.slice(1), 10) || 1) - 1);
+</script>
+</body>
+</html>
