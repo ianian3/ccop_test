@@ -82,7 +82,12 @@ _session_order: list = []     # 삽입 순서 추적 (LRU)
 
 def _get_or_create_session(session_id: str, graph_path: str) -> InvestigationSession:
     if session_id and session_id in _sessions:
-        return _sessions[session_id]
+        sess = _sessions[session_id]
+        # 그래프 전환 시 옛 graph_path 고정 방지 — 요청 그래프와 다르면 세션 재생성
+        if getattr(sess, 'graph_path', None) != graph_path:
+            sess = InvestigationSession(graph_path=graph_path)
+            _sessions[session_id] = sess
+        return sess
     sess = InvestigationSession(graph_path=graph_path)
     if session_id:
         if len(_sessions) >= _MAX_SESSIONS:
@@ -133,7 +138,8 @@ def index():
     # 하드코딩 키 없이 세션 쿠키로 호출할 수 있게 함.
     session['ui_authorized'] = True
     session.permanent = True
-    return render_template('index.html')
+    return render_template('index.html',
+                           default_graph_path=current_app.config.get('DEFAULT_GRAPH_PATH', 'tccop_graph_v6'))
 
 # ------------------------------
 # 2. 그래프 기본 기능 (검색, 초기화, 확장, 경로) -> GraphService 사용
@@ -286,12 +292,36 @@ def load_graph_data():
     try:
         safe_set_graph_path(cur, graph_path)
 
-        cypher_query = f"""
-            MATCH (n)-[r]->(m)
-            RETURN id(n), labels(n), properties(n), id(r), type(r), id(m), labels(m), properties(m)
-            LIMIT {limit}
-        """
-        logger.info(f"▶ [GraphLoad] graph={graph_path} Cypher: MATCH (n)-[r]->(m) RETURN ... LIMIT {limit}")
+        # P0: 규모 가드 — 전체 엣지 수가 limit 초과면 잘림 신호(meta)를 실어
+        #     프론트가 "질의/검색으로 좁혀 보세요" 안내를 띄우게 함(전체 통짜 렌더 방지)
+        truncated_meta = None
+        try:
+            cur.execute("MATCH ()-[r]->() RETURN count(r)")
+            total_edges = int(cur.fetchone()[0])
+            if total_edges > limit:
+                truncated_meta = {"group": "meta", "data": {
+                    "kind": "graph_truncated", "shown_edges": limit, "total_edges": total_edges}}
+        except Exception:
+            pass
+
+        # 딥링크 focus: 특정 IP(거점)에 접속(used_ip)한 노드만 펼침 — 대시보드 카드 클릭 진입용(결정론)
+        import re
+        focus_ip = request.args.get('ip', '').strip()
+        if focus_ip and re.match(r'^[0-9a-fA-F.:]{3,45}$', focus_ip):
+            cypher_query = f"""
+                MATCH (n)-[r]->(m:vt_ip {{ip_addr:'{focus_ip}'}})
+                RETURN id(n), labels(n), properties(n), id(r), type(r), id(m), labels(m), properties(m)
+                LIMIT {limit}
+            """
+            truncated_meta = None
+            logger.info(f"▶ [GraphLoad] graph={graph_path} focus_ip={focus_ip}")
+        else:
+            cypher_query = f"""
+                MATCH (n)-[r]->(m)
+                RETURN id(n), labels(n), properties(n), id(r), type(r), id(m), labels(m), properties(m)
+                LIMIT {limit}
+            """
+            logger.info(f"▶ [GraphLoad] graph={graph_path} Cypher: MATCH (n)-[r]->(m) RETURN ... LIMIT {limit}")
         cur.execute(cypher_query)
         rows = cur.fetchall()
 
@@ -342,7 +372,10 @@ def load_graph_data():
                 }
             })
 
-        logger.info(f"▶ [GraphLoad] 결과: 노드 {len(node_ids)}개, 엣지 {len(elements)-len(node_ids)}개")
+        logger.info(f"▶ [GraphLoad] 결과: 노드 {len(node_ids)}개, 엣지 {len(elements)-len(node_ids)}개"
+                    + (f" (전체 {truncated_meta['data']['total_edges']}엣지 중 {limit} 표시 — 잘림)" if truncated_meta else ""))
+        if truncated_meta:
+            elements.insert(0, truncated_meta)
         return jsonify(elements)
 
     except Exception as e:
@@ -350,6 +383,81 @@ def load_graph_data():
         return jsonify([])
     finally:
         conn.close()
+
+@bp.route('/api/graph/briefing', methods=['GET'])
+def graph_briefing():
+    """수사 브리핑 지표 — 그래프의 6하원칙 KPI·핵심거점 IP·집금·자금흐름·sameAs (브리핑 탭용, 결정론)."""
+    import re
+    import psycopg2 as _pg2
+    from app.database import safe_set_graph_path
+    graph_path = request.args.get('graph_path', current_app.config.get('DEFAULT_GRAPH_PATH', 'tccop_graph_v6'))
+    if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', graph_path):
+        return jsonify({"error": "invalid graph_path"}), 400
+    try:
+        conn = _pg2.connect(**current_app.config['DB_CONFIG']); conn.autocommit = True; cur = conn.cursor()
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+    def q(c):
+        # 그래프마다 없는 라벨/엣지(예: 카톡만 있는 EP는 transferred_to 없음)는 예외 → 빈 리스트로 흡수
+        try:
+            safe_set_graph_path(cur, graph_path); cur.execute(c); return cur.fetchall()
+        except Exception:
+            return []
+
+    def q1(c):
+        try:
+            return int(q(c)[0][0])
+        except Exception:
+            return 0
+
+    def isum(rows):
+        return sum(int(x[0]) for x in rows if x[0] is not None and str(x[0]).isdigit())
+
+    D = {"graph_path": graph_path}
+    try:
+        D['n_case'] = q1("MATCH (c:vt_case) RETURN count(*)")
+        D['n_bacnt'] = q1("MATCH (b:vt_bacnt) RETURN count(*)")
+        D['damage_total'] = isum(q("MATCH (c:vt_case) WHERE c.damage_amt IS NOT NULL RETURN c.damage_amt"))
+        D['fund_total'] = isum(q("MATCH ()-[e:transferred_to]->() WHERE e.total_amount IS NOT NULL RETURN e.total_amount"))
+        D['n_realname'] = q1("MATCH (p:vt_psn) WHERE p.source_id CONTAINS 'naver' RETURN count(*)")
+        D['pierce'] = q1("MATCH (b:vt_bacnt)-[:belongs_to]->(o:vt_org {org_name:'피어스미디어'}) RETURN count(b)")
+        D['total_nodes'] = q1("MATCH (n) RETURN count(*)")
+        D['total_edges'] = q1("MATCH ()-[r]->() RETURN count(*)")
+        hubs = []
+        try:
+            for row in q("MATCH (i:vt_ip) WHERE i.ep_count IN ['3','4','5','6'] RETURN i.ip_addr, i.ep_origin, i.ep_count"):
+                ip, o, c = row[0], row[1], row[2]
+                tn = q1(f"MATCH (t:vt_telno)-[:used_ip]->(:vt_ip {{ip_addr:'{ip}'}}) RETURN count(t)")
+                ac = q1(f"MATCH (d:vt_id)-[:used_ip]->(:vt_ip {{ip_addr:'{ip}'}}) RETURN count(d)")
+                hubs.append({'ip': ip, 'eps': o or '', 'ep_count': int(c) if c else 0, 'telno': tn, 'accounts': ac})
+        except Exception:
+            pass
+        D['hubs'] = sorted(hubs, key=lambda x: -x['ep_count'])[:8]
+        ft = []
+        for row in q("MATCH (x:vt_bacnt)-[e:transferred_to]->(y:vt_bacnt) WHERE e.total_amount IS NOT NULL RETURN x.dpstr, y.dpstr, e.total_amount"):
+            if row[2] is not None and str(row[2]).isdigit():
+                ft.append({'from': row[0] or '?', 'to': row[1] or '?', 'amt': int(row[2])})
+        D['fund_top'] = sorted(ft, key=lambda x: -x['amt'])[:6]
+        try:
+            D['sameas'] = [{'a': r[0], 'b': r[1], 'm': r[2]}
+                           for r in q("MATCH (p1:vt_psn)-[e:sameAs]->(p2:vt_psn) RETURN p1.name, p2.name, e.method")][:10]
+        except Exception:
+            D['sameas'] = []
+
+        # PageRank 영향력 Top (scripts/graph_analytics.py --set 후 pagerank 속성이 있을 때만)
+        def _toppr(label, kexpr):
+            rows = q(f"MATCH (n:{label}) WHERE n.pagerank IS NOT NULL RETURN {kexpr}, n.pagerank")
+            top = sorted((r for r in rows if r[0] and r[1]), key=lambda x: -float(x[1]))[:5]
+            return [{'k': r[0], 'pr': round(float(r[1]), 4)} for r in top]
+        D['influence'] = {'bacnt': _toppr('vt_bacnt', 'coalesce(n.dpstr,n.account_no)'),
+                          'psn': _toppr('vt_psn', 'n.name'),
+                          'org': _toppr('vt_org', 'n.org_name')}
+    except Exception as e:
+        conn.close(); return jsonify({"error": str(e)}), 500
+    conn.close()
+    return jsonify(D)
+
 
 @bp.route('/api/search', methods=['GET'])
 def search_node():
@@ -366,12 +474,13 @@ def expand_node():
     node_id = request.args.get('id') or request.args.get('node_id')
     graph_path = request.args.get('graph_path', current_app.config.get('DEFAULT_GRAPH_PATH', 'tccop_graph_v6'))
     session_id = request.args.get('session_id')
+    cap = request.args.get('cap', 200, type=int)   # P0: 방향별 이웃 상한 (고차수 허브 폭증 방지)
 
     if not node_id: return jsonify([])
 
     # 서비스 호출
     _t0 = time.time()
-    elements = GraphService.expand_node(node_id, graph_path)
+    elements = GraphService.expand_node(node_id, graph_path, cap=cap)
     _audit_visual('EXPAND', graph_path, session_id,
                   input_cn=f'node_id={node_id}',
                   cypher_cn=f"MATCH (n)-[r]-(m) WHERE id(n)='{node_id}' RETURN r, m",

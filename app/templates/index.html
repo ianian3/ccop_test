@@ -3,6 +3,7 @@
 
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CCOP Cyber Intelligence (Dark Mode)</title>
     <!-- 로컬 벤더링(폐쇄망 대응): 원본 버전은 app/static/vendor/VENDOR.md 참고 -->
     <script src="/static/vendor/cytoscape/cytoscape.min.js"></script>
@@ -31,7 +32,10 @@
             padding: 0;
             font-family: var(--font-main);
             font-size: 13px;
-            overflow: hidden;
+            /* 데스크탑 기준: 최소폭 보장(요소 잘림 방지), 좁으면 가로 스크롤 / 세로는 고정 */
+            min-width: 1600px;
+            overflow-x: auto;
+            overflow-y: hidden;
             background: var(--bg-main);
             color: var(--text-primary);
             -webkit-font-smoothing: antialiased;
@@ -546,6 +550,28 @@
         ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
         ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
     </style>
+  <script>window.DEFAULT_GRAPH_PATH = "{{ default_graph_path }}";
+// P0 대량 시각화 가드: 서버가 보내는 meta(잘림 신호)를 분리하고 배너로 안내
+function splitMeta(data){
+  if(!Array.isArray(data)) return {els:data, metas:[]};
+  const metas=data.filter(e=>e&&e.group==='meta');
+  const els=data.filter(e=>e&&e.group!=='meta');
+  return {els, metas};
+}
+function showTruncateBanner(metas){
+  const m=(metas||[]).find(x=>x.data&&(x.data.kind==='graph_truncated'||x.data.kind==='truncated'));
+  if(!m) return;
+  const d=m.data;
+  let msg;
+  if(d.kind==='graph_truncated'){
+    msg=`⚠️ 그래프가 큽니다 — 전체 ${d.total_edges.toLocaleString()}엣지 중 ${d.shown_edges.toLocaleString()}개만 표시. 자연어 질문/검색으로 좁혀 보세요.`;
+  }else{
+    msg=`⚠️ 이 노드는 이웃이 ${d.total.toLocaleString()}개 — ${d.shown.toLocaleString()}개만 펼침. 검색으로 좁혀 보세요.`;
+  }
+  if(typeof showToast==='function') showToast(msg,'warning');
+  else console.warn(msg);
+}
+</script>
 </head>
 
 <body>
@@ -1298,6 +1324,10 @@
                         style="width: 145px; background:#1a1a1a; color:#e0e0e0; border:none; padding:4px 6px; font-weight:600; cursor:pointer; font-family:var(--font-main); border-radius:4px;">
                         <option value="">그래프 선택...</option>
                     </select>
+                    <button type="button" id="loadFullBtn" onclick="loadFullGraph()" title="선택 그래프 전체 로드(대형은 상한까지만 표시)"
+                        style="margin-left:4px; background:#253154; color:#9fb4e0; border:1px solid #34405c; padding:4px 8px; border-radius:4px; cursor:pointer; font-size:11px; font-weight:600;">
+                        <i class="fas fa-eye"></i> 전체 보기
+                    </button>
                     <button onclick="openGraphModal()"
                         style="background:#55efc4; color:#121212; border:none; padding:5px 10px; font-size:11px;"
                         title="그래프 관리 (생성/삭제)">
@@ -1398,6 +1428,9 @@
         </button>
         <button class="nav-tab" onclick="switchTab('dashboard')" id="tab-dashboard">
             <i class="fas fa-tachometer-alt"></i> 대시보드
+        </button>
+        <button class="nav-tab" onclick="switchTab('briefing')" id="tab-briefing">
+            <i class="fas fa-search"></i> 수사 브리핑
         </button>
         <button class="nav-tab" onclick="switchTab('legal')" id="tab-legal">
             <i class="fas fa-gavel"></i> 법률 검색
@@ -2347,7 +2380,16 @@
                 { selector: 'edge.highlight', style: { 'width': 4, 'line-color': '#ff005c', 'target-arrow-color': '#ff005c', 'z-index': 999 } },
                 { selector: 'node.highlight', style: { 'border-color': '#ff005c', 'border-width': 4, 'shadow-blur': 25, 'shadow-color': '#ff005c', 'z-index': 999 } },
                 { selector: 'node.path-source', style: { 'border-color': '#00cec9', 'border-width': 6, 'shadow-blur': 30, 'shadow-color': '#00cec9', 'z-index': 1000 } },
-                { selector: '.path-dim', style: { 'opacity': 0.15 } }
+                { selector: '.path-dim', style: { 'opacity': 0.15 } },
+                // 집계 배지: RETURN 노드에 병합된 스칼라(개수 등)를 라벨에 병기 + 강조 테두리
+                { selector: 'node[badge]', style: {
+                    'label': function (ele) {
+                        const p = ele.data('props') || {};
+                        const base = p.name || p.title || p.flnm || p.val || p.event_type || p.type || ele.data('label') || 'Node';
+                        return base + '  ⬤' + ele.data('badge');
+                    },
+                    'border-width': 3, 'border-color': '#f1c40f', 'font-weight': 'bold'
+                } }
             ],
             layout: { name: 'dagre', rankDir: 'LR', nodeSep: 50, edgeSep: 10, rankSep: 100, animate: false, padding: 50 }
         });
@@ -2642,16 +2684,22 @@
                             </div>
                         `).join('');
 
-                        // 드롭다운 업데이트
-                        const currentValue = select.value;
+                        // 드롭다운 업데이트 — 첫 로드 시 서버 기본 그래프(DEFAULT_GRAPH_PATH) 우선,
+                        // 없으면 tccop_graph_v6, 그래도 없으면 첫 항목 (알파벳순 첫 항목이 잡히던 버그 방지)
+                        const names = data.graphs.map(g => g.name);
+                        const preferred = (window.DEFAULT_GRAPH_PATH || 'tccop_graph_v6');
+                        const currentValue = select.value
+                            || (names.includes(preferred) ? preferred : names[0]);
                         select.innerHTML = data.graphs.map(g =>
                             `<option value="${g.name}" ${g.name === currentValue ? 'selected' : ''}>${g.name}</option>`
                         ).join('');
+                        if (select.value !== currentValue) select.value = currentValue;
 
                         // 캔버스가 비어있으면 현재 선택된 그래프 자동 로드
                         // (단, 비주얼 쿼리 결과 표시 모드에서는 자동 로드가 vq 결과를 덮으므로 스킵)
                         if (cy.elements().length === 0 && select.value && !window._vqMode) {
-                            switchGraph();
+                            // P0: 빈 페이지로 시작 — 전체 자동 렌더 금지. 질의/검색으로 진입 유도.
+                            if (typeof showToast==='function') showToast(`🔍 '${select.value}' 선택됨 — 자연어 질문이나 검색으로 시작하세요 (전체 표시는 상단 '전체 보기').`, 'info');
                         }
                     }
                 })
@@ -2710,20 +2758,27 @@
         function switchGraph() {
             const graphName = document.getElementById('targetGraphInfo').value;
             if (!graphName) return;
-            if (_layoutLocked) setLayoutLocked(false, true);   // 그래프 전체 교체 — 이전 배치가 무의미하므로 고정 자동 해제
-            console.log('Switching to graph:', graphName);
-
-            // 캔버스 초기화
+            if (_layoutLocked) setLayoutLocked(false, true);
+            // P0: 빈 페이지로 전환 — 전체 자동 렌더 금지. 질의/검색 또는 '전체 보기'로 진입.
             cy.elements().remove();
             updateFilterCounts();
-            showToast(`📊 '${graphName}' 그래프로 전환 중...`, "info");
+            showToast(`🔍 '${graphName}' 선택됨 — 자연어 질문·검색으로 시작하세요 (전체는 '전체 보기' 버튼).`, "info");
+        }
 
+        // 명시적 전체 로드 ('전체 보기' 버튼 전용 — 대형 그래프는 서버 규모 가드로 잘림 안내)
+        function loadFullGraph() {
+            const graphName = document.getElementById('targetGraphInfo').value;
+            if (!graphName) return;
+            if (_layoutLocked) setLayoutLocked(false, true);
+            cy.elements().remove();
+            updateFilterCounts();
+            showToast(`📊 '${graphName}' 전체 로드 중...`, "info");
             // 선택된 그래프에서 노드/엣지 로드
             fetch(`/api/graph/load?graph_path=${graphName}&limit=3000`)
                 .then(r => r.json())
                 .then(data => {
                     if (data && data.length > 0) {
-                        cy.add(data);
+                        const {els:_ld,metas:_lm}=splitMeta(data); showTruncateBanner(_lm); cy.add(_ld);
                         // 그래프 선택 로드 시에도 접기 모드(기본 ON)면 바로 접힌 상태로 표시
                         const collapsedN = isEventCollapseMode() ? applyEventCollapse() : 0;
                         // 접고도 가시 엣지가 많은 밀집 그래프 → 성능 모드 (합계·접힌 엣지는 스타일 유지)
@@ -2883,7 +2938,83 @@
                 case 'legal':
                     openLegalModal();
                     break;
+                case 'briefing':
+                    openBriefingModal();
+                    break;
             }
+        }
+
+        // ── 수사 브리핑 탭 (모달, 통합/EP 그래프 지표 동적 렌더) ──
+        function openBriefingModal(){
+            let m=document.getElementById('briefing-modal');
+            if(!m){
+                m=document.createElement('div'); m.id='briefing-modal';
+                m.style.cssText='position:fixed;inset:0;background:rgba(6,12,26,.72);z-index:9999;display:flex;align-items:flex-start;justify-content:center;overflow:auto;padding:30px';
+                m.onclick=e=>{if(e.target===m)closeBriefing();};
+                document.body.appendChild(m);
+            }
+            m.style.display='flex';
+            const g=(document.getElementById('targetGraphInfo')||{}).value||'';
+            m.innerHTML='<div style="color:#a9b8d6;margin:auto;font-size:15px">🔍 브리핑 생성 중…</div>';
+            fetch(`/api/graph/briefing?graph_path=${encodeURIComponent(g)}`).then(r=>r.json()).then(D=>{
+                if(D.error){m.innerHTML=`<div style="color:#f87171;margin:auto">브리핑 오류: ${D.error}</div>`;return;}
+                renderBriefing(m,D,g);
+            }).catch(e=>{m.innerHTML=`<div style="color:#f87171;margin:auto">${e}</div>`;});
+        }
+        function closeBriefing(){const m=document.getElementById('briefing-modal');if(m)m.style.display='none';}
+        function _eok(n){return (n/100000000).toFixed(2);}
+        function renderBriefing(m,D,g){
+            const kpi=(v,u,l,c)=>`<div style="background:#16203a;border:1px solid #2a3a5e;border-top:3px solid ${c};border-radius:10px;padding:12px 14px"><div style="font-size:22px;font-weight:800;font-family:monospace;color:#e8eefb">${v}<span style="font-size:11px;color:#6f80a6">${u}</span></div><div style="font-size:12px;color:#a9b8d6;margin-top:3px">${l}</div></div>`;
+            const hubRows=(D.hubs||[]).map(h=>`<tr style="border-bottom:1px solid #22314f"><td style="padding:7px 6px"><a onclick="briefingFocus('${h.ip}')" style="color:#f87171;font-family:monospace;font-weight:600;cursor:pointer" title="이 거점 그래프로 펼치기">${h.ip} ↗</a></td><td style="padding:7px 6px;color:#a9b8d6">${h.ep_count}개EP</td><td style="padding:7px 6px;font-size:12px"><span style="color:#c084fc">070·${h.telno}</span> <span style="color:#fbbf24">계정 ${h.accounts}</span></td></tr>`).join('')||'<tr><td style="padding:8px;color:#6f80a6">교차 거점 없음(단일 EP 그래프)</td></tr>';
+            const fmax=(D.fund_top&&D.fund_top[0]?D.fund_top[0].amt:1)||1;
+            const fundRows=(D.fund_top||[]).map(f=>`<div style="display:grid;grid-template-columns:auto 1fr auto;gap:8px;align-items:center;padding:4px 0;font-size:12px"><span style="color:#a9b8d6;white-space:nowrap">${f.from} → ${f.to}</span><span style="height:14px;border-radius:4px;background:linear-gradient(90deg,#fbbf24,#f97316);width:${Math.round(f.amt/fmax*100)}%"></span><span style="font-family:monospace;font-weight:700;color:#e8eefb">${_eok(f.amt)}억</span></div>`).join('')||'<div style="color:#6f80a6;font-size:12px">자금흐름 없음</div>';
+            const saRows=(D.sameas||[]).map(s=>`<span style="display:inline-block;font-size:12px;padding:3px 9px;border-radius:6px;background:#1d2a48;border:1px solid #2a3a5e;color:#a9b8d6;margin:2px">${s.a} ↔ ${s.b}</span>`).join('')||'<span style="color:#6f80a6;font-size:12px">후보 없음</span>';
+            const prcard=(t,arr,col)=>`<div style="background:#16203a;border:1px solid #2a3a5e;border-radius:10px;padding:12px"><div style="color:${col};font-size:11px;font-weight:700;margin-bottom:6px">${t}</div>${(arr||[]).map((x,i)=>`<div style="display:flex;justify-content:space-between;font-size:12px;padding:2px 0;color:#a9b8d6"><span>${i+1}. ${x.k}</span><span style="font-family:monospace;color:#e8eefb">${x.pr}</span></div>`).join('')||'<span style="color:#6f80a6;font-size:12px">— (graph_analytics 미실행)</span>'}</div>`;
+            const inf=D.influence||{};
+            const inflGrid=`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">${prcard('계좌',inf.bacnt,'#fbbf24')}${prcard('인물',inf.psn,'#38bdf8')}${prcard('조직',inf.org,'#34d399')}</div>`;
+            m.innerHTML=`<div style="background:#0e1526;border:1px solid #2a3a5e;border-radius:16px;max-width:960px;width:100%;padding:22px 24px;color:#e8eefb;font-family:'Pretendard',sans-serif">
+              <div style="display:flex;align-items:center;gap:12px;border-bottom:2px solid #2a3a5e;padding-bottom:14px;margin-bottom:16px">
+                <span style="font-size:20px;font-weight:800">🔍 수사 브리핑</span>
+                <span style="font-size:12px;color:#a9b8d6"><code>${g}</code> · 노드 ${(D.total_nodes||0).toLocaleString()} · 엣지 ${(D.total_edges||0).toLocaleString()}</span>
+                <button onclick="closeBriefing()" style="margin-left:auto;background:#1d2a48;border:1px solid #2a3a5e;color:#a9b8d6;border-radius:8px;padding:5px 12px;cursor:pointer">닫기 ✕</button>
+              </div>
+              <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:18px">
+                ${kpi(D.n_case||0,'건','신고 사건','#f87171')}${kpi(_eok(D.damage_total||0),'억','편취금','#fbbf24')}${kpi(_eok(D.fund_total||0),'억','자금흐름','#f97316')}${kpi(D.n_bacnt||0,'개','계좌','#c084fc')}${kpi((D.hubs||[]).length,'개','거점 IP','#f43f5e')}${kpi(D.n_realname||0,'명','실명 특정','#38bdf8')}
+              </div>
+              <div style="display:grid;grid-template-columns:1.3fr 1fr;gap:18px">
+                <div>
+                  <div style="font-size:12px;font-weight:700;color:#6f80a6;text-transform:uppercase;margin-bottom:8px">핵심 거점 IP <span style="font-weight:400">— 클릭 시 그래프 펼침</span></div>
+                  <div style="background:#16203a;border:1px solid #2a3a5e;border-radius:10px;padding:12px"><table style="width:100%;border-collapse:collapse;font-size:13px"><tbody>${hubRows}</tbody></table></div>
+                  <div style="font-size:12px;font-weight:700;color:#6f80a6;text-transform:uppercase;margin:16px 0 8px">자금흐름 Top</div>
+                  <div style="background:#16203a;border:1px solid #2a3a5e;border-radius:10px;padding:12px">${fundRows}</div>
+                </div>
+                <div>
+                  <div style="font-size:12px;font-weight:700;color:#6f80a6;text-transform:uppercase;margin-bottom:8px">집금 조직</div>
+                  <div style="background:#16203a;border:1px solid #2a3a5e;border-radius:10px;padding:14px"><div style="font-size:30px;font-weight:800;font-family:monospace;color:#34d399">${D.pierce||0}<span style="font-size:13px;color:#6f80a6;font-weight:600">개 계좌</span></div><div style="color:#a9b8d6;font-size:13px;margin-top:2px">피어스미디어 집금망</div></div>
+                  <div style="font-size:12px;font-weight:700;color:#6f80a6;text-transform:uppercase;margin:16px 0 8px">sameAs 검토 큐</div>
+                  <div style="background:#16203a;border:1px solid #2a3a5e;border-radius:10px;padding:12px">${saRows}</div>
+                </div>
+              </div>
+              <div style="margin-top:18px">
+                <div style="font-size:12px;font-weight:700;color:#6f80a6;text-transform:uppercase;margin-bottom:8px">영향력 Top (PageRank) — 자동 랭킹된 핵심 계좌·인물·조직</div>
+                ${inflGrid}
+              </div>
+              <div style="font-size:11px;color:#6f80a6;margin-top:16px;border-top:1px solid #2a3a5e;padding-top:12px">결정론 적재(source_id 원본 대조) · 비식별 시나리오 · sameAs 미확정(수사관 검토) · PageRank는 graph_analytics.py 실행 시 갱신</div>
+            </div>`;
+        }
+        function briefingFocus(ip){
+            closeBriefing();
+            const g=(document.getElementById('targetGraphInfo')||{}).value||'';
+            switchTab('graph');
+            fetch(`/api/graph/load?graph_path=${encodeURIComponent(g)}&ip=${encodeURIComponent(ip)}&limit=300`)
+              .then(r=>r.json()).then(data=>{
+                if(typeof cy!=='undefined'&&data&&data.length){
+                    cy.elements().remove(); const added=cy.add(data);
+                    if(typeof afterElementsAdded==='function')afterElementsAdded(added);
+                    cy.layout({name:'concentric',concentric:n=>(n.data('label')==='vt_ip'?100:1),levelWidth:()=>1,minNodeSpacing:14,spacingFactor:0.9,animate:true}).run();
+                    if(typeof showToast==='function')showToast(`거점 ${ip} 펼침 (${data.length}요소)`,'success');
+                }
+              }).catch(e=>console.error('briefingFocus:',e));
         }
 
 
@@ -3619,7 +3750,7 @@
         function expandNodeById(node) {
             if (!node) return;
             const graphName = document.getElementById('targetGraphInfo').value;
-            fetch(`${API_URL}/expand?id=${node.id()}&graph_path=${graphName}&session_id=${_investSessionId}`).then(r => r.json()).then(data => {
+            fetch(`${API_URL}/expand?id=${node.id()}&graph_path=${graphName}&session_id=${_investSessionId}`).then(r => r.json()).then(data => { const {els:_xe,metas:_xm}=splitMeta(data); showTruncateBanner(_xm); data=_xe;
                 if (!data || data.length === 0) return showToast("추가 연결 정보 없음", "info");
                 const added = cy.add(data);
                 afterElementsAdded(added);
@@ -5398,7 +5529,7 @@
 
             fetch(`${API_URL}/expand?id=${selectedNode.id()}&graph_path=${graphName}&session_id=${_investSessionId}`)
                 .then(r => r.json())
-                .then(data => {
+                .then(data => { const {els:_xe,metas:_xm}=splitMeta(data); showTruncateBanner(_xm); data=_xe;
                     hideLoading();
                     if (!data || data.length === 0) {
                         return showToast("추가 연결 정보가 없습니다", "info");
@@ -5714,13 +5845,17 @@
 
             // 모델러 데이터 적재 후 자동 그래프 로드
             const autoGraph = urlParams.get('graph');
+            const focusIp = urlParams.get('ip');   // 대시보드 거점 IP 카드 딥링크
             if (autoGraph) {
                 setTimeout(() => {
                     const graphSel = document.getElementById('targetGraphInfo');
                     if (graphSel) {
                         graphSel.value = autoGraph;
-                        // 그래프 로드 트리거
-                        fetch(`/api/graph/load?graph_path=${encodeURIComponent(autoGraph)}&limit=3000`)
+                        // 그래프 로드 트리거 (ip focus 딥링크면 해당 거점 IP 접속자만 펼침)
+                        const loadUrl = focusIp
+                            ? `/api/graph/load?graph_path=${encodeURIComponent(autoGraph)}&ip=${encodeURIComponent(focusIp)}&limit=300`
+                            : `/api/graph/load?graph_path=${encodeURIComponent(autoGraph)}&limit=3000`;
+                        fetch(loadUrl)
                             .then(r => r.json())
                             .then(data => {
                                 if (data && data.length > 0) {
@@ -5728,7 +5863,13 @@
                                         cy.elements().remove();
                                         const added = cy.add(data);
                                         afterElementsAdded(added);
-                                        cy.layout({ name: 'dagre', rankDir: 'LR', nodeSep: 50, rankSep: 100, animate: true }).run();
+                                        if (focusIp) {
+                                            // 거점 IP focus: fan-in(다수→IP 1) 구조 → IP 중심 방사형(concentric)
+                                            cy.layout({ name: 'concentric', concentric: n => (n.data('label') === 'vt_ip' ? 100 : 1),
+                                                levelWidth: () => 1, minNodeSpacing: 14, spacingFactor: 0.9, animate: true }).run();
+                                        } else {
+                                            cy.layout({ name: 'dagre', rankDir: 'LR', nodeSep: 50, rankSep: 100, animate: true }).run();
+                                        }
                                     }
                                     if (typeof showToast === 'function') showToast(`'${autoGraph}' 그래프 로드 완료 (${data.length}개 요소)`, 'success');
                                 } else {
