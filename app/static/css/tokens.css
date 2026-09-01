@@ -20,24 +20,25 @@
   --color-accent-blue:    #4dabf7;  /* 링크 · 선택 · 정보 (청록의 블루 짝) */
   --color-accent-blue-deep: #1c7ed6;
 
-  /* ── 2. Surface ladder (다크) ──────────────────────────────── */
-  --color-canvas:         #0f0f0f;  /* 페이지/그래프 캔버스 */
-  --color-surface:        #141414;  /* 카드/행 */
-  --color-surface-raised: #1a1a1a;  /* 패널/서브내비 */
-  --color-surface-header: #1e1e1e;  /* 헤더/모달 */
-  --color-surface-hover:  #2d2d2d;
-  --color-surface-input:  #2d3436;  /* 입력창 */
+  /* ── 2. Surface ladder (라이트: 이미지 기준 흰 배경) ──────────── */
+  --color-canvas:         #f4f6f9;  /* 페이지 배경 */
+  --color-surface:        #ffffff;  /* 카드/행 */
+  --color-surface-raised: #eef1f6;  /* 패널/서브내비(탭바) */
+  --color-surface-header: #1e4276;  /* 헤더(경찰 남색) */
+  --color-surface-hover:  #e7ebf2;
+  --color-surface-input:  #ffffff;  /* 입력창 */
+  --color-graph-canvas:   #eef1f6;  /* 그래프 캔버스(노드 대비용 아주 연한 회색) */
 
-  /* ── 3. Text ladder ────────────────────────────────────────── */
-  --color-text-strong:    #ffffff;  /* 헤더/강조 */
-  --color-text:           #e0e0e0;  /* 본문 */
-  --color-text-secondary: #b2bec3;  /* 보조 */
-  --color-text-muted:     #888888;  /* 비활성/캡션 */
+  /* ── 3. Text ladder (라이트: 검정 계열, 시인성 우선) ──────────── */
+  --color-text-strong:    #0b1220;  /* 헤더/강조(거의 검정) */
+  --color-text:           #16202e;  /* 본문(진한 잉크) */
+  --color-text-secondary: #3a4453;  /* 보조 */
+  --color-text-muted:     #6b7280;  /* 비활성/캡션 */
 
   /* ── 4. Border / divider ───────────────────────────────────── */
-  --color-border-soft:    #2d2d2d;
-  --color-border:         #333333;
-  --color-border-strong:  #444444;
+  --color-border-soft:    #e6e9ef;
+  --color-border:         #d5dae2;
+  --color-border-strong:  #b0b8c4;
 
   /* ── 5. Semantic (상태) ─────────────────────────────────────
      primary(청록)와 구분되도록 success 는 명확한 '녹색'으로 둔다. */
@@ -108,10 +109,10 @@
   --radius-circle: 50%;   /* 노드 스와치/아이콘 버튼 */
 
   /* ── 10. Elevation (다크: 경계선 + 절제된 그림자) ─────────────── */
-  --elev-0: none;                              /* 경계선만 */
-  --elev-1: 0 2px 6px rgba(0, 0, 0, 0.40);     /* 카드 */
-  --elev-2: 0 2px 8px rgba(0, 0, 0, 0.50);     /* 패널/스티키 */
-  --elev-3: 0 12px 40px rgba(0, 0, 0, 0.75);   /* 모달 */
+  --elev-0: none;                                /* 경계선만 */
+  --elev-1: 0 1px 3px rgba(16, 24, 40, 0.10);    /* 카드 */
+  --elev-2: 0 2px 8px rgba(16, 24, 40, 0.10);    /* 패널/스티키 */
+  --elev-3: 0 12px 40px rgba(16, 24, 40, 0.18);  /* 모달 */
 
   /* ── 11. Motion (Meta 문서 Known Gaps 권장치 반영) ───────────── */
   --motion-fast:   150ms;
@@ -128,7 +129,7 @@
   --bg-panel:       var(--color-surface-raised);
   --bg-card:        var(--color-surface);
   --bg-card-hover:  var(--color-surface-hover);
-  --bg-modal:       var(--color-surface-header);
+  --bg-modal:       var(--color-surface);
   --bg-input:       var(--color-surface-input);
   --text-header:    var(--color-text-strong);
   --text-primary:   var(--color-text);

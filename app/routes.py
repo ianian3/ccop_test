@@ -472,6 +472,109 @@ def graph_briefing():
     return jsonify(D)
 
 
+@bp.route('/api/graph/timeline', methods=['GET'])
+def graph_timeline():
+    """타임라인 — 이체(transferred_to)·통화(contacted) 이벤트를 날짜별 집계(사건 순서·집중 시각화)."""
+    import re
+    import psycopg2 as _pg2
+    from app.database import safe_set_graph_path
+    from collections import defaultdict
+    graph_path = request.args.get('graph_path', current_app.config.get('DEFAULT_GRAPH_PATH', 'tccop_graph_v6'))
+    if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', graph_path):
+        return jsonify({"error": "invalid graph_path"}), 400
+    try:
+        conn = _pg2.connect(**current_app.config['DB_CONFIG']); conn.autocommit = True; cur = conn.cursor()
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+    def q(c):
+        try:
+            safe_set_graph_path(cur, graph_path); cur.execute(c); return cur.fetchall()
+        except Exception:
+            return []
+
+    def normd(d):
+        d = str(d) if d is not None else ''
+        if re.match(r'^\d{8}$', d):
+            return f'{d[:4]}-{d[4:6]}-{d[6:8]}'
+        if re.match(r'^\d{4}-\d{2}-\d{2}', d):
+            return d[:10]
+        return None
+
+    tr = defaultdict(lambda: {'c': 0, 'amt': 0})
+    for dt, amt in q("MATCH ()-[e:transferred_to]->() WHERE e.first_dlng_dt IS NOT NULL RETURN e.first_dlng_dt, e.total_amount"):
+        d = normd(dt)
+        if d:
+            tr[d]['c'] += 1
+            tr[d]['amt'] += int(amt) if amt and str(amt).isdigit() else 0
+    ct = defaultdict(int)
+    for row in q("MATCH ()-[e:contacted]->() WHERE e.first_dt IS NOT NULL RETURN e.first_dt"):
+        d = normd(row[0])
+        if d:
+            ct[d] += 1
+    dates = sorted(set(tr) | set(ct))
+    out = [{'date': d, 'transfer_cnt': tr[d]['c'], 'transfer_amt': tr[d]['amt'], 'contact_cnt': ct[d]} for d in dates]
+    conn.close()
+    return jsonify({'graph_path': graph_path, 'events': out})
+
+
+@bp.route('/api/graph/atm_map', methods=['GET'])
+def graph_atm_map():
+    """집금 ATM 지도 — vt_atm(현금입금 지점) 주소를 시군구로 집계·좌표 매핑(인출 지리 시각화)."""
+    import re
+    import psycopg2 as _pg2
+    from app.database import safe_set_graph_path
+    from collections import defaultdict
+    graph_path = request.args.get('graph_path', current_app.config.get('DEFAULT_GRAPH_PATH', 'tccop_graph_v6'))
+    if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', graph_path):
+        return jsonify({"error": "invalid graph_path"}), 400
+    # 시군구 대표 좌표(시청/구청 근사)
+    COORD = {
+        ('경북', '포항시'): (36.019, 129.343), ('경기', '고양시'): (37.658, 126.832),
+        ('서울', '강동구'): (37.530, 127.124), ('대전', '대덕구'): (36.347, 127.415),
+        ('충북', '청주시'): (36.642, 127.489), ('경기', '양주시'): (37.785, 127.046),
+        ('경기', '용인시'): (37.241, 127.178), ('경기', '의정부시'): (37.738, 127.034),
+        ('경기', '화성시'): (37.199, 126.831), ('경남', '거제시'): (34.880, 128.621),
+        ('서울', '성동구'): (37.563, 127.037), ('울산', '울주군'): (35.522, 129.242),
+        ('충남', '당진시'): (36.890, 126.646), ('충남', '아산시'): (36.790, 127.002),
+        ('충남', '천안시'): (36.815, 127.114), ('강원', '원주시'): (37.342, 127.920),
+        ('강원', '정선군'): (37.380, 128.661), ('광주', '광산구'): (35.140, 126.794),
+        ('광주', '북구'): (35.174, 126.912), ('대구', '달성군'): (35.775, 128.431),
+        ('대전', '서구'): (36.355, 127.384), ('부산', '동래구'): (35.205, 129.084),
+        ('서울', '강남구'): (37.517, 127.047),
+    }
+    SIDO = '서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충북|충남|전북|전남|경북|경남|제주'
+    try:
+        conn = _pg2.connect(**current_app.config['DB_CONFIG']); conn.autocommit = True; cur = conn.cursor()
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    try:
+        safe_set_graph_path(cur, graph_path)
+        cur.execute("MATCH (a:vt_atm) RETURN a.atm_nm, a.addr, a.deposit_total, a.deposit_count")
+        rows = cur.fetchall()
+    except Exception:
+        conn.close(); return jsonify([])
+    agg = defaultdict(lambda: {'total': 0, 'count': 0, 'atms': 0, 'coord': None, 'name': ''})
+    for nm, addr, tot, cnt in rows:
+        full = f"{addr or ''} {nm or ''}"
+        m = re.search(f'({SIDO})\\s*(\\S+?(?:시|군|구))', full)
+        if not m:
+            continue
+        coord = COORD.get((m.group(1), m.group(2)))
+        if not coord:
+            continue
+        a = agg[(m.group(1), m.group(2))]
+        a['total'] += int(tot) if tot and str(tot).isdigit() else 0
+        a['count'] += int(cnt) if cnt and str(cnt).isdigit() else 0
+        a['atms'] += 1
+        a['coord'] = coord
+        a['name'] = f'{m.group(1)} {m.group(2)}'
+    out = [{'name': a['name'], 'lat': a['coord'][0], 'lng': a['coord'][1],
+            'total': a['total'], 'count': a['count'], 'atms': a['atms']} for a in agg.values()]
+    conn.close()
+    return jsonify(sorted(out, key=lambda x: -x['total']))
+
+
 @bp.route('/api/search', methods=['GET'])
 def search_node():
     keyword = request.args.get('keyword', '').strip()
