@@ -1581,6 +1581,7 @@ function showTruncateBanner(metas){
                 <!-- ── 네트워크 분석 알고리즘 (CALL ccop.algo.* → UI) ── -->
                 <span style="width:1px;height:20px;background:#d5dae2;margin:0 6px;display:inline-block;vertical-align:middle;"></span>
                 <select id="algoSelect" title="네트워크 분석 알고리즘 선택"
+                    onmousedown="event.stopPropagation()" onpointerdown="event.stopPropagation()"
                     style="background:#fff;color:#16202e;border:1px solid #d5dae2;border-radius:14px;padding:5px 10px;font-size:11px;font-weight:600;cursor:pointer;font-family:var(--font-main);">
                     <optgroup label="중심성">
                         <option value="top:pagerank">PageRank · 영향력</option>
@@ -1597,6 +1598,7 @@ function showTruncateBanner(metas){
                     </optgroup>
                 </select>
                 <select id="algoLabel" title="노드 타입 필터"
+                    onmousedown="event.stopPropagation()" onpointerdown="event.stopPropagation()"
                     style="background:#fff;color:#16202e;border:1px solid #d5dae2;border-radius:14px;padding:5px 8px;font-size:11px;font-weight:600;cursor:pointer;margin-left:4px;font-family:var(--font-main);">
                     <option value="">전체</option>
                     <option value="vt_bacnt">계좌</option>
@@ -4048,8 +4050,18 @@ function showTruncateBanner(metas){
                 if (!data || data.length === 0) return showToast("추가 연결 정보 없음", "info");
                 const added = cy.add(data);
                 afterElementsAdded(added);
-                if (!_layoutLocked) cy.layout({ name: 'dagre', rankDir: 'LR', nodeSep: 50, rankSep: 100, animate: true }).run();
-                showToast(`관계 확장: ${data.filter(e => e.group === 'nodes').length}개 노드 추가`, "success");
+                // 원래 위치에서 확장: 새 노드만 부모 주변에 원형 배치(기존 노드·뷰포트 유지, fit·전체재배치 안 함)
+                if (!_layoutLocked) {
+                    const _p = node.position();
+                    const _nn = added.nodes();
+                    const _c = Math.max(1, _nn.length);
+                    _nn.positions((ele, i) => {
+                        const a = (2 * Math.PI * i) / _c - Math.PI / 2;
+                        const r = 120 + (i % 3) * 38;   // 다중 반경으로 겹침 완화
+                        return { x: _p.x + r * Math.cos(a), y: _p.y + r * Math.sin(a) };
+                    });
+                }
+                showToast(`관계 확장: ${data.filter(e => e.group === 'nodes').length}개 노드 추가 (원위치 유지)`, "success");
             }).catch(e => showToast("관계 확장 오류: " + e.message, "error"));
         }
         cy.on('dbltap', 'node', function (evt) { expandNodeById(evt.target); });
