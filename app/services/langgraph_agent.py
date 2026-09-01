@@ -72,6 +72,37 @@ _BRIDGE_KEY_MAP: Dict[str, tuple] = {
 }
 
 
+def _augment_anchor_node(elements, cypher, graph_path):
+    """검색 대상 앵커 노드 보강 — cypher의 첫 {key:'val'} 노드가 결과에 없으면
+    그 노드 + 1-hop 관계를 추가한다. v47 sLLM이 'X 찾아줘'를 has_account 등
+    특정 관계 노드만 RETURN하고 대상 노드(인물 등) 자체를 빠뜨리는 편향을 보정."""
+    import re
+    if not cypher:
+        return elements
+    m = re.search(r"\(\s*\w+\s*:\s*(\w+)\s*\{\s*(\w+)\s*:\s*'([^']+)'\s*\}", cypher)
+    if not m:
+        return elements
+    lbl, key, val = m.group(1), m.group(2), m.group(3)
+    for el in elements:
+        if isinstance(el, dict) and el.get('group') == 'nodes':
+            if str(el.get('data', {}).get('props', {}).get(key, '')) == val:
+                return elements  # 앵커 노드가 이미 결과에 있음
+    ev = val.replace("'", "''")
+    wrapped = (f"SELECT * FROM cypher('{graph_path}', $$ MATCH (n:{lbl} {{{key}: '{ev}'}}) "
+               f"OPTIONAL MATCH (n)-[r]-(m) RETURN n, r, m $$) AS (n agtype, r agtype, m agtype);")
+    try:
+        ok, extra = GraphService.execute_cypher(wrapped, graph_path)
+        if ok and extra:
+            existing = {el.get('data', {}).get('id') for el in elements if isinstance(el, dict)}
+            for el in extra:
+                if isinstance(el, dict) and el.get('data', {}).get('id') not in existing:
+                    elements.append(el)
+            logger.info(f"[anchor] 검색 대상 노드 보강: {lbl}{{{key}:{val}}} +{len(extra)}요소")
+    except Exception as e:
+        logger.debug(f"anchor augment skip: {e}")
+    return elements
+
+
 def _enrich_elements_bridge_key(elements: List) -> List:
     """각 노드 element에 bridge_key(RDB 역추적 키) + evid_grade/src_tier 추가"""
     enriched = []
@@ -741,6 +772,12 @@ A: SELECT * FROM cypher('{state['graph_path']}', $$ MATCH (p:vt_psn {{name: '피
 Q: "CASE-99 사건 연루 인물"
 A: SELECT * FROM cypher('{state['graph_path']}', $$ MATCH (c:vt_case {{flnm: 'CASE-99'}})-[r:involves]->(p:vt_psn) RETURN c, r, p $$) AS (c agtype, r agtype, p agtype);
 
+Q: "조지영 찾아줘" / "이진아 노드" / "홍길동 관련 정보 모두"   ← 단순 개체 조회(관계 지정 없음)
+A: SELECT * FROM cypher('{state['graph_path']}', $$ MATCH (p:vt_psn {{name: '조지영'}}) OPTIONAL MATCH (p)-[r]-(m) RETURN p, r, m $$) AS (p agtype, r agtype, m agtype);
+
+Q: "계좌 1003102115650 조회" / "이 계좌 노드 보여줘"   ← 대상 노드 자체 + 1-hop 연결
+A: SELECT * FROM cypher('{state['graph_path']}', $$ MATCH (b:vt_bacnt {{account_no: '1003102115650'}}) OPTIONAL MATCH (b)-[r]-(m) RETURN b, r, m $$) AS (b agtype, r agtype, m agtype);
+
 [PATH 인텐트 — 두 개체 간 연결 경로 탐색]
 PATH 질문인 경우 shortestPath 패턴 사용:
 MATCH p=shortestPath((a:LabelA {{key: 'val1'}})-[*..6]-(b:LabelB {{key: 'val2'}})) RETURN p
@@ -751,6 +788,9 @@ AS (p agtype);
 3. 모든 컬럼은 agtype. 4. 수사 무관 질문이면 GENERAL: 답변 출력.
 5. DELETE/SET/MERGE 등 쓰기 명령 절대 금지.
 6. RETURN 절 변수 수와 AS(컬럼 agtype, ...) 수가 반드시 일치해야 함.
+7. 단순 개체 조회("X 찾아줘/조회/노드/누구/관련 정보"처럼 특정 관계를 지정하지 않은 경우):
+   대상 노드를 RETURN에 반드시 포함하고, `OPTIONAL MATCH (n)-[r]-(m)`로 1-hop 관계를 함께 반환한다.
+   (연결이 없어도 대상 노드 자체는 결과에 나와야 함 — has_account 등 특정 관계만 RETURN 하지 말 것)
 
 [질문]
 {state['question']}"""
@@ -1094,6 +1134,8 @@ AS (p agtype);
         metrics = {**state.get("metrics", {}), "data_view_node": time.time() - start_time}
 
         raw_elements = state['execution_result'] if state['execution_result'] else []
+        # 앵커 노드 보강 — v47이 'X 찾아줘'를 관계 노드(계좌 등)만 RETURN하는 편향 보정
+        raw_elements = _augment_anchor_node(raw_elements, state.get('cypher_query', ''), state['graph_path'])
         enriched_elements = _enrich_elements_bridge_key(raw_elements)
         result_status = "success" if not state.get("error_message") else "partial_success"
 
