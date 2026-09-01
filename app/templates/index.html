@@ -70,6 +70,17 @@
             background: var(--bg-subnav);
         }
 
+        /* 그래프 도구 툴바 — 헤더에서 분리(검색·사이퍼쿼리·뷰 컨트롤) */
+        .graph-toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 24px;
+            background: #ffffff;
+            border-bottom: 1px solid var(--border-soft);
+        }
+
         /* ── 탭 ── */
         .nav-tab {
             padding: 8px 18px;
@@ -98,10 +109,10 @@
         }
 
         .nav-tab.active {
-            color: #00cec9;
+            color: #1e4276;
             font-weight: 700;
-            background: rgba(0, 206, 201, 0.06);
-            border-bottom: 2px solid #00cec9;
+            background: rgba(30, 66, 118, 0.06);
+            border-bottom: 2px solid #1e4276;
         }
 
         .nav-tab i { font-size: 13px; }
@@ -147,7 +158,7 @@
         }
 
         .search-bar:focus-within {
-            border-color: #00cec9;
+            border-color: #1e4276;
         }
 
         input {
@@ -198,15 +209,15 @@
 
         /* 검색 — 모델러 btn-teal */
         .btn-search {
-            background: #00cec9;
-            color: #121212;
+            background: #1e4276;
+            color: #ffffff;
             border: none;
         }
 
         /* AI 쿼리생성 — 모델러 btn-blue */
         .btn-ai {
-            background: #00cec9;
-            color: #06201f;
+            background: #1e4276;
+            color: #ffffff;
             border: none;
         }
 
@@ -223,8 +234,8 @@
 
         /* CTA */
         .btn-primary {
-            background: #00cec9;
-            color: #121212;
+            background: #1e4276;
+            color: #ffffff;
         }
 
         /* ══════════════════════════════════════════
@@ -260,7 +271,7 @@
         }
 
         h3 {
-            color: #00cec9;
+            color: #1e4276;
             font-size: 13px;
             font-weight: 700;
             margin: 0 0 10px 0;
@@ -507,7 +518,7 @@
             border-left: 3px solid rgba(255,255,255,0.4);
         }
 
-        .toast.success { background: linear-gradient(135deg, #00b894, #00cec9); }
+        .toast.success { background: linear-gradient(135deg, #00b894, #1e4276); }
         .toast.error   { background: linear-gradient(135deg, #d63031, #e17055); }
         .toast.warning { background: linear-gradient(135deg, #f97316, #fdcb6e); color: #ffffff; }
         .toast.info    { background: linear-gradient(135deg, #e7ecf5, #4a90d9); }
@@ -574,8 +585,8 @@
         .example-query:last-child { border-bottom: none; }
 
         .example-query:hover {
-            background: rgba(0, 206, 201, 0.08);
-            color: #00cec9;
+            background: rgba(30, 66, 118, 0.08);
+            color: #1e4276;
             padding-left: 18px;
         }
 
@@ -625,7 +636,7 @@ function showTruncateBanner(metas){
     <div id="graph-modal"
         style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(22,30,51,0.88); z-index: 9999; align-items: center; justify-content: center; backdrop-filter: blur(3px);">
         <div class="modal-content" style="width: 500px;">
-            <h3 style="margin-top:0; color: #00cec9; border-bottom: 1px solid rgba(255,255,255,0.10); padding-bottom: 10px;">
+            <h3 style="margin-top:0; color: #1e4276; border-bottom: 1px solid rgba(255,255,255,0.10); padding-bottom: 10px;">
                 <i class="fas fa-database"></i> 그래프 관리
             </h3>
 
@@ -698,7 +709,7 @@ function showTruncateBanner(metas){
                 </label>
                 <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
                     <span
-                        style="color:#00cec9; font-weight:bold; font-size:16px; background:#e7ecf5; padding:6px 12px; border-radius:4px; border:1px solid #00cec9;">
+                        style="color:#1e4276; font-weight:bold; font-size:16px; background:#e7ecf5; padding:6px 12px; border-radius:4px; border:1px solid #1e4276;">
                         tccopdb <span style="font-size:12px; color:#4a5568; font-weight:normal;">(AgensGraph
                             v2.1)</span>
                     </span>
@@ -770,9 +781,9 @@ function showTruncateBanner(metas){
                     </label>
                     <label style="flex:1; min-width:140px; display:flex; align-items:center; cursor:pointer; background:#e7ecf5; padding:8px 10px; border-radius:4px; border:1px solid rgba(255,255,255,0.12);">
                         <input type="radio" name="sourceDomain" value="EXT"
-                            style="margin-right:8px; accent-color:#00cec9;">
+                            style="margin-right:8px; accent-color:#1e4276;">
                         <div>
-                            <div style="color:#00cec9; font-size:13px; font-weight:bold;">EXT</div>
+                            <div style="color:#1e4276; font-size:13px; font-weight:bold;">EXT</div>
                             <div style="color:#6b7280; font-size:10px;">외부기관 제공 (T2 수사)</div>
                         </div>
                     </label>
@@ -844,7 +855,7 @@ function showTruncateBanner(metas){
                     </label>
                 </div>
                 <div id="wizardConsole"
-                    style="background:#ffffff; color:#00cec9; padding:10px; border-radius:4px; font-size:11px; font-family:monospace; min-height:120px; max-height:200px; overflow-y:auto; border:1px inset #555; white-space:pre-wrap; line-height:1.4;">
+                    style="background:#ffffff; color:#1e4276; padding:10px; border-radius:4px; font-size:11px; font-family:monospace; min-height:120px; max-height:200px; overflow-y:auto; border:1px inset #555; white-space:pre-wrap; line-height:1.4;">
                     대기 중... 파일을 선택하고 적재 버튼을 눌러주세요.
                 </div>
             </div>
@@ -887,7 +898,7 @@ function showTruncateBanner(metas){
                     <div style="display:flex; align-items:center; gap:6px;">
                         <i class="fas fa-database" style="font-size:11px; color:var(--accent-green);"></i>
                         <select id="dbSelector" onchange="onDbSelectorChange()"
-                            style="background:#f4f6f9; color:#00cec9; border:1px solid rgba(0,206,201,0.3); padding:4px 10px; border-radius:8px; font-size:12px; cursor:pointer; min-width:120px; outline:none;">
+                            style="background:#f4f6f9; color:#1e4276; border:1px solid rgba(30,66,118,0.3); padding:4px 10px; border-radius:8px; font-size:12px; cursor:pointer; min-width:120px; outline:none;">
                             <option>로딩중...</option>
                         </select>
                         <button id="dbSwitchBtn" onclick="switchDatabase()"
@@ -951,8 +962,8 @@ function showTruncateBanner(metas){
                         <div style="font-size: 11px; color: #888;"><i class="fas fa-circle"></i> 총 노드</div>
                     </div>
                     <div
-                        style="background: #ffffff; padding: 14px; border-radius: 8px; border-left: 3px solid #00cec9; text-align: center;">
-                        <div style="font-size: 24px; font-weight: bold; color: #00cec9;" id="stat-gdb-edges">-</div>
+                        style="background: #ffffff; padding: 14px; border-radius: 8px; border-left: 3px solid #1e4276; text-align: center;">
+                        <div style="font-size: 24px; font-weight: bold; color: #1e4276;" id="stat-gdb-edges">-</div>
                         <div style="font-size: 11px; color: #888;"><i class="fas fa-link"></i> 총 엣지</div>
                     </div>
                     <div
@@ -973,7 +984,7 @@ function showTruncateBanner(metas){
                         </div>
                     </div>
                     <div style="background: #ffffff; padding: 16px; border-radius: 8px;">
-                        <h4 style="margin: 0 0 14px 0; color: #00cec9; font-size: 14px;">
+                        <h4 style="margin: 0 0 14px 0; color: #1e4276; font-size: 14px;">
                             <i class="fas fa-link"></i> 엣지 타입별 분포
                         </h4>
                         <div id="gdb-edge-types" style="max-height: 280px; overflow-y: auto;">
@@ -1008,12 +1019,12 @@ function showTruncateBanner(metas){
                     </div>
                     <!-- Memory -->
                     <div style="background:#ffffff; padding:16px; border-radius:8px;">
-                        <h4 style="margin:0 0 10px 0; color:#00cec9; font-size:14px;"><i class="fas fa-memory"></i>
+                        <h4 style="margin:0 0 10px 0; color:#1e4276; font-size:14px;"><i class="fas fa-memory"></i>
                             Memory Usage</h4>
                         <div style="font-size:24px; font-weight:bold; color:white;" id="sys-mem">- %</div>
                         <div style="background:#333; height:8px; border-radius:4px; margin-top:8px; overflow:hidden;">
                             <div id="sys-mem-bar"
-                                style="width:0%; height:100%; background:#00cec9; transition:width 0.5s;"></div>
+                                style="width:0%; height:100%; background:#1e4276; transition:width 0.5s;"></div>
                         </div>
                         <div style="font-size:11px; color:#4a5568; margin-top:6px; text-align:right;" id="sys-mem-detail">
                         </div>
@@ -1118,7 +1129,7 @@ function showTruncateBanner(metas){
         style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(22,30,51,0.88); z-index: 10000; align-items: center; justify-content: center; backdrop-filter: blur(3px);">
         <div class="modal-content" style="width: 500px; padding:0; overflow:hidden;">
             <div
-                style="background:linear-gradient(135deg, #00b894, #00cec9); padding:15px 20px; display:flex; justify-content:space-between; align-items:center;">
+                style="background:linear-gradient(135deg, #00b894, #1e4276); padding:15px 20px; display:flex; justify-content:space-between; align-items:center;">
                 <h3 style="margin:0; color:white; font-size:16px;"><i class="fas fa-check-circle"></i> 데이터 적재 완료</h3>
                 <button onclick="document.getElementById('etl-result-modal').style.display='none'"
                     style="background:transparent; border:none; color:white; font-size:18px; cursor:pointer;">
@@ -1135,17 +1146,17 @@ function showTruncateBanner(metas){
                     <div
                         style="display:flex; justify-content:space-between; margin-bottom:8px; padding-bottom:8px; border-bottom:1px solid #d5dae2;">
                         <span style="color:#e6e9ef;"><i class="fas fa-user"></i> 인물 (Suspects)</span>
-                        <span id="etl-count-suspects" style="color:#00cec9; font-weight:bold;">0</span>
+                        <span id="etl-count-suspects" style="color:#1e4276; font-weight:bold;">0</span>
                     </div>
                     <div
                         style="display:flex; justify-content:space-between; margin-bottom:8px; padding-bottom:8px; border-bottom:1px solid #d5dae2;">
                         <span style="color:#e6e9ef;"><i class="fas fa-university"></i> 계좌 (Accounts)</span>
-                        <span id="etl-count-accounts" style="color:#00cec9; font-weight:bold;">0</span>
+                        <span id="etl-count-accounts" style="color:#1e4276; font-weight:bold;">0</span>
                     </div>
                     <div
                         style="display:flex; justify-content:space-between; margin-bottom:8px; padding-bottom:8px; border-bottom:1px solid #d5dae2;">
                         <span style="color:#e6e9ef;"><i class="fas fa-phone"></i> 전화번호 (Phones)</span>
-                        <span id="etl-count-phones" style="color:#00cec9; font-weight:bold;">0</span>
+                        <span id="etl-count-phones" style="color:#1e4276; font-weight:bold;">0</span>
                     </div>
                     <div
                         style="display:flex; justify-content:space-between; margin-bottom:8px; padding-bottom:8px; border-bottom:1px solid #d5dae2;">
@@ -1257,7 +1268,7 @@ function showTruncateBanner(metas){
                                     <label style="display:block; color:#aaa; font-size:12px; margin-bottom:5px;">GDB 라벨
                                         (Label)</label>
                                     <input type="text" id="map-node-label" placeholder="예: Person"
-                                        style="width:100%; padding:8px; background:#eef1f6; color:#00cec9; border:1px solid rgba(255,255,255,0.12); border-radius:4px; font-weight:bold;">
+                                        style="width:100%; padding:8px; background:#eef1f6; color:#1e4276; border:1px solid rgba(255,255,255,0.12); border-radius:4px; font-weight:bold;">
                                 </div>
                             </div>
                         </div>
@@ -1355,12 +1366,47 @@ function showTruncateBanner(metas){
                 </div>
             </div>
 
-            <div style="display:flex; flex-wrap:wrap; gap: 8px; align-items: center; justify-content:flex-end;">
+
+        </div>
+    </div>
+
+    <!-- 하단: 탭 네비게이션 -->
+    <div class="header-tabs">
+        <button class="nav-tab active" onclick="switchTab('graph')" id="tab-graph">
+            <i class="fas fa-project-diagram"></i> 지식그래프 탐색
+        </button>
+        <button class="nav-tab" id="tab-v40-pipeline" onclick="switchTab('v40-pipeline')">
+            <i class="fas fa-layer-group"></i> V4.0 L1→L5 파이프라인
+        </button>
+        <button class="nav-tab" onclick="switchTab('etl')" id="tab-etl">
+            <i class="fas fa-file-import"></i> 데이터 적재
+        </button>
+        <button class="nav-tab" onclick="switchTab('dashboard')" id="tab-dashboard">
+            <i class="fas fa-tachometer-alt"></i> 대시보드
+        </button>
+        <button class="nav-tab" onclick="switchTab('briefing')" id="tab-briefing">
+            <i class="fas fa-search"></i> 수사 브리핑
+        </button>
+        <button class="nav-tab" onclick="switchTab('timeline')" id="tab-timeline">
+            <i class="fas fa-stream"></i> 타임라인
+        </button>
+        <button class="nav-tab" onclick="switchTab('map')" id="tab-map">
+            <i class="fas fa-map-marked-alt"></i> 집금 지도
+        </button>
+        <button class="nav-tab" onclick="switchTab('legal')" id="tab-legal">
+            <i class="fas fa-gavel"></i> 법률 검색
+        </button>
+        <button class="nav-tab" onclick="window.location.href='/modeler'" id="tab-modeling">
+            <i class="fas fa-pencil-alt"></i> GDB 모델링
+        </button>
+    </div>
+
+    <!-- 그래프 도구 툴바 (헤더에서 분리 — 검색·사이퍼쿼리·뷰 컨트롤) -->
+    <div class="graph-toolbar">
                 <div class="search-bar">
-                    <label style="color:#4a5568; font-size:11px; margin-right:2px; font-weight:700; white-space:nowrap; letter-spacing:0.5px;"><i
-                            class="fas fa-database"></i> GRAPH:</label>
+                    <label style="color:#4a5568; font-size:12px; font-weight:700; white-space:nowrap; letter-spacing:0.3px;"><i class="fas fa-database"></i> GRAPH</label>
                     <select id="targetGraphInfo" onchange="switchGraph()"
-                        style="width: 145px; background:#ffffff; color:#16202e; border:none; padding:4px 6px; font-weight:600; cursor:pointer; font-family:var(--font-main); border-radius:4px;">
+                        style="width: 240px; background:#ffffff; color:#16202e; border:1px solid #d5dae2; padding:6px 10px; font-weight:600; cursor:pointer; font-family:var(--font-main); border-radius:6px; font-size:13px;">
                         <option value="">그래프 선택...</option>
                     </select>
                     <button type="button" id="loadFullBtn" onclick="loadFullGraph()" title="선택 그래프 전체 로드(대형은 상한까지만 표시)"
@@ -1388,7 +1434,7 @@ function showTruncateBanner(metas){
                     <input type="text" id="aiInput" placeholder="자연어로 질문하세요..." style="width: 190px;">
                     <button class="btn-ai" onclick="askAI()"><i class="fas fa-robot"></i> 쿼리생성</button>
                     <label style="font-size:11px;color:#4a5568;margin-left:8px;display:inline-flex;align-items:center;gap:4px;cursor:pointer;white-space:nowrap;" title="경로의 이벤트 시간 선후관계 T(e1)≤T(e2)를 쿼리에 반영">
-                        <input type="checkbox" id="temporalContinuity" style="accent-color:#00cec9;"> 시간순 연속성
+                        <input type="checkbox" id="temporalContinuity" style="accent-color:#1e4276;"> 시간순 연속성
                     </label>
                     <button onclick="toggleExampleQueries()"
                         style="background:#ffffff; border:1px solid #d5dae2; color:#4a5568; padding:6px 10px; font-size:11.5px;" title="예시 질문">
@@ -1440,7 +1486,7 @@ function showTruncateBanner(metas){
 
                 <div class="search-bar" style="gap:4px;">
                     <button id="btn-layout-layer" onclick="setLayout('layer')"
-                        style="background:#00cec9; color:#121212; border:none; padding:6px 10px; font-size:11px; border-radius:4px 0 0 4px;"
+                        style="background:#1e4276; color:#ffffff; border:none; padding:6px 10px; font-size:11px; border-radius:4px 0 0 4px;"
                         title="POLE 6-레이어 좌→우 배치">
                         <i class="fas fa-layer-group"></i> 레이어
                     </button>
@@ -1450,39 +1496,6 @@ function showTruncateBanner(metas){
                         <i class="fas fa-project-diagram"></i> 자동
                     </button>
                 </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- 하단: 탭 네비게이션 -->
-    <div class="header-tabs">
-        <button class="nav-tab active" onclick="switchTab('graph')" id="tab-graph">
-            <i class="fas fa-project-diagram"></i> 지식그래프 탐색
-        </button>
-        <button class="nav-tab" id="tab-v40-pipeline" onclick="switchTab('v40-pipeline')">
-            <i class="fas fa-layer-group"></i> V4.0 L1→L5 파이프라인
-        </button>
-        <button class="nav-tab" onclick="switchTab('etl')" id="tab-etl">
-            <i class="fas fa-file-import"></i> 데이터 적재
-        </button>
-        <button class="nav-tab" onclick="switchTab('dashboard')" id="tab-dashboard">
-            <i class="fas fa-tachometer-alt"></i> 대시보드
-        </button>
-        <button class="nav-tab" onclick="switchTab('briefing')" id="tab-briefing">
-            <i class="fas fa-search"></i> 수사 브리핑
-        </button>
-        <button class="nav-tab" onclick="switchTab('timeline')" id="tab-timeline">
-            <i class="fas fa-stream"></i> 타임라인
-        </button>
-        <button class="nav-tab" onclick="switchTab('map')" id="tab-map">
-            <i class="fas fa-map-marked-alt"></i> 집금 지도
-        </button>
-        <button class="nav-tab" onclick="switchTab('legal')" id="tab-legal">
-            <i class="fas fa-gavel"></i> 법률 검색
-        </button>
-        <button class="nav-tab" onclick="window.location.href='/modeler'" id="tab-modeling">
-            <i class="fas fa-pencil-alt"></i> GDB 모델링
-        </button>
     </div>
     </div>
 
@@ -1679,7 +1692,7 @@ function showTruncateBanner(metas){
             <span style="color:#4a5568;">|</span>
             <span style="color:#4a5568; font-size:11px;">그래프: </span>
             <select id="modeling-graph-select"
-                style="background:#eef1f6; color:#00cec9; border:1px solid rgba(255,255,255,0.12); border-radius:4px; padding:4px 8px; font-size:12px;"></select>
+                style="background:#eef1f6; color:#1e4276; border:1px solid rgba(255,255,255,0.12); border-radius:4px; padding:4px 8px; font-size:12px;"></select>
             <button onclick="createModelingGraph()"
                 style="background:#6c5ce7; color:white; border:none; padding:6px 10px; border-radius:6px; cursor:pointer; font-size:11px;"><i
                     class="fas fa-plus"></i> 새 그래프</button>
@@ -1739,7 +1752,7 @@ function showTruncateBanner(metas){
                         </button>
                     </div>
                     <select id="rdb-source-select" onchange="onRdbSourceChanged()"
-                        style="width:100%; background:#f4f6f9; color:#00cec9; border:1px solid rgba(255,255,255,0.12); border-radius:6px; padding:6px 10px; font-size:12px;">
+                        style="width:100%; background:#f4f6f9; color:#1e4276; border:1px solid rgba(255,255,255,0.12); border-radius:6px; padding:6px 10px; font-size:12px;">
                         <option value="default">tccopdb (기본 DB)</option>
                     </select>
                 </div>
@@ -1849,7 +1862,7 @@ function showTruncateBanner(metas){
                     <label style="display:block; color:#a29bfe; font-size:11px; margin-bottom:6px; font-weight:bold;">📂
                         기존 GDB 선택</label>
                     <select id="wiz-graph-select"
-                        style="width:100%; background:#f4f6f9; color:#00cec9; border:1px solid #6c5ce7; border-radius:6px; padding:8px 10px; font-size:13px;"
+                        style="width:100%; background:#f4f6f9; color:#1e4276; border:1px solid #6c5ce7; border-radius:6px; padding:8px 10px; font-size:13px;"
                         onchange="onWizGraphSelected()">
                     </select>
                     <div id="wiz-graph-info" style="margin-top:6px; color:#4a5568; font-size:10px;"></div>
@@ -1904,7 +1917,7 @@ function showTruncateBanner(metas){
                         <label style="color:#fdcb6e; font-size:10px; flex-shrink:0; font-weight:bold;">📋 작업
                             테이블:</label>
                         <select id="wiz-s3-table-select" onchange="onS3TableChanged()"
-                            style="flex:1; background:#e7ecf5; color:#00cec9; border:1px solid rgba(255,255,255,0.12); border-radius:4px; padding:4px 6px; font-size:11px;">
+                            style="flex:1; background:#e7ecf5; color:#1e4276; border:1px solid rgba(255,255,255,0.12); border-radius:4px; padding:4px 6px; font-size:11px;">
                             <option value="">-- 선택된 테이블 없음 --</option>
                         </select>
                     </div>
@@ -2054,7 +2067,7 @@ function showTruncateBanner(metas){
                         style="flex:1; background:#e7ecf5; color:#4a5568; border:1px solid rgba(255,255,255,0.12); padding:10px; border-radius:8px; cursor:pointer; font-size:12px;">←
                         GDB 선택</button>
                     <button onclick="goWizardStep(4);wizLoadGraph();"
-                        style="flex:2; background:linear-gradient(135deg,#0984e3,#00cec9); color:white; border:none; padding:10px; border-radius:8px; cursor:pointer; font-size:13px; font-weight:bold;">다음:
+                        style="flex:2; background:linear-gradient(135deg,#0984e3,#1e4276); color:white; border:none; padding:10px; border-radius:8px; cursor:pointer; font-size:13px; font-weight:bold;">다음:
                         그래프 탐색 →</button>
                 </div>
             </div>
@@ -2063,14 +2076,14 @@ function showTruncateBanner(metas){
             <div id="wizard-step4" style="flex:1; display:none; flex-direction:column; overflow:hidden;">
                 <div
                     style="padding:14px; text-align:center; border-bottom:1px solid #333; background:linear-gradient(135deg,#ffffff,#ffffff);">
-                    <i class="fas fa-search-plus" style="font-size:30px; color:#00cec9; margin-bottom:6px;"></i>
+                    <i class="fas fa-search-plus" style="font-size:30px; color:#1e4276; margin-bottom:6px;"></i>
                     <div style="color:white; font-size:14px; font-weight:bold;">그래프 탐색</div>
                     <div style="color:#4a5568; font-size:11px; margin-top:2px;">생성된 GDB를 캔버스에 로드하여 탐색합니다</div>
                 </div>
 
                 <!-- 그래프 정보 -->
                 <div style="padding:12px 14px; border-bottom:1px solid #333;">
-                    <label style="display:block; color:#00cec9; font-size:11px; margin-bottom:6px; font-weight:bold;">📊
+                    <label style="display:block; color:#1e4276; font-size:11px; margin-bottom:6px; font-weight:bold;">📊
                         대상 그래프</label>
                     <div id="wiz-s4-graph-name"
                         style="background:#f4f6f9; color:#fdcb6e; padding:10px; border-radius:6px; border:1px solid rgba(255,255,255,0.12); font-size:13px; font-weight:bold; text-align:center;">
@@ -2141,82 +2154,12 @@ function showTruncateBanner(metas){
         </div>
 
         <div id="sidebar">
-            <!-- 범례 패널 (POLE 6-Layer v3.4 온톨로지) -->
-            <div class="panel" style="flex: 0 0 auto; padding: 15px; overflow-y: auto; max-height: calc(100vh - 200px);">
-                <h3 style="color: #00cec9; font-size: 14px; margin-bottom: 10px; display:flex; align-items:center; gap:8px;">
-                    <i class="fas fa-layer-group"></i> V3.5 온톨로지 범례
-                    <span id="v40SsotBadge"
-                        title="V4.0 SSOT API 로드 상태"
-                        style="font-size:9px; padding:2px 6px; border-radius:8px; background:#4a5568; color:#fff; font-weight:bold; letter-spacing:0.3px;">
-                        V4.0 loading…
-                    </span>
-                </h3>
 
-                <!-- 노드 타입: 6-Layer POLE 구조 -->
-                <div style="margin-bottom: 12px;">
-                    <div style="color: #666; font-size: 10px; margin-bottom: 6px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.8px;">노드 타입 (22종)</div>
-
-                    <!-- L1: Source -->
-                    <div style="color:#e17055; font-size:9px; font-weight:bold; margin-bottom:3px;">L1 · Source</div>
-                    <div style="display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 7px;">
-                        <span class="legend-item" onclick="filterByType('vt_src')" style="border-color: #e17055;">🔗 소스</span>
-                    </div>
-
-                    <!-- L2: Case -->
-                    <div style="color:#d63031; font-size:9px; font-weight:bold; margin-bottom:3px;">L2 · Case</div>
-                    <div style="display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 7px;">
-                        <span class="legend-item" onclick="filterByType('vt_case')" style="border-color: #d63031;">📁 사건</span>
-                        <span class="legend-item" onclick="filterByType('vt_petition')" style="border-color: #ff7675;">📋 진정서</span>
-                    </div>
-
-                    <!-- L3: Person -->
-                    <div style="color:#6c5ce7; font-size:9px; font-weight:bold; margin-bottom:3px;">L3 · Person</div>
-                    <div style="display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 7px;">
-                        <span class="legend-item" onclick="filterByType('vt_psn')" style="border-color: #6c5ce7;">👤 인물</span>
-                        <span class="legend-item" onclick="filterByType('vt_org')" style="border-color: #a29bfe;">🏢 조직</span>
-                    </div>
-
-                    <!-- L4: Object -->
-                    <div style="color:#0984e3; font-size:9px; font-weight:bold; margin-bottom:3px;">L4 · Object (11종)</div>
-                    <div style="display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 7px;">
-                        <span class="legend-item" onclick="filterByType('vt_bacnt')" style="border-color: #f1c40f;">🏦 계좌</span>
-                        <span class="legend-item" onclick="filterByType('vt_crypto')" style="border-color: #f9ca24;">₿ 가상자산</span>
-                        <span class="legend-item" onclick="filterByType('vt_ip')" style="border-color: #fd79a8;">🖥️ IP</span>
-                        <span class="legend-item" onclick="filterByType('vt_site')" style="border-color: var(--accent-green);">🌐 사이트</span>
-                        <span class="legend-item" onclick="filterByType('vt_file')" style="border-color: #a29bfe;">📄 파일</span>
-                        <span class="legend-item" onclick="filterByType('vt_id')" style="border-color: #fab1a0;">🆔 ID</span>
-                        <span class="legend-item" onclick="filterByType('vt_email')" style="border-color: #0984e3;">📧 이메일</span>
-                        <span class="legend-item" onclick="filterByType('vt_telno')" style="border-color: var(--accent-blue);">📱 전화번호</span>
-                        <span class="legend-item" onclick="filterByType('vt_vhcl')" style="border-color: #6c5ce7;">🚗 차량</span>
-                        <span class="legend-item" onclick="filterByType('vt_dev')" style="border-color: #4a5568;">💻 기기</span>
-                        <span class="legend-item" onclick="filterByType('vt_atm')" style="border-color: #fdcb6e;">🏧 ATM</span>
-                    </div>
-
-                    <!-- L5: Location -->
-                    <div style="color:var(--accent-green); font-size:9px; font-weight:bold; margin-bottom:3px;">L5 · Location</div>
-                    <div style="display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 7px;">
-                        <span class="legend-item" onclick="filterByType('vt_loc')" style="border-color: var(--accent-green);">📍 위치</span>
-                    </div>
-
-                    <!-- L6: Event -->
-                    <div style="color:#fdcb6e; font-size:9px; font-weight:bold; margin-bottom:3px;">L6 · Event (6종)</div>
-                    <div style="display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 2px;">
-                        <span class="legend-item" onclick="filterByType('vt_transfer')" style="border-color: #e17055;">💸 이체</span>
-                        <span class="legend-item" onclick="filterByType('vt_call')" style="border-color: #0984e3;">📞 통화</span>
-                        <span class="legend-item" onclick="filterByType('vt_access')" style="border-color: #fd79a8;">🔐 접속</span>
-                        <span class="legend-item" onclick="filterByType('vt_msg')" style="border-color: #55efc4;">✉️ 메시지</span>
-                        <span class="legend-item" onclick="filterByType('vt_movement')" style="border-color: #fdcb6e;">🚶 이동</span>
-                        <span class="legend-item" onclick="filterByType('vt_impersonation')" style="border-color: #e17055;">🎭 사칭</span>
-                    </div>
-                </div>
-
-
-            </div>
 
             <!-- 사이드바 헤더 탭 -->
             <div style="display:flex; border-bottom:1px solid #e6e9ef; background:#ffffff;">
                 <div class="sidebar-tab active" onclick="switchSidebarTab('details')" id="stab-details"
-                    style="flex:1; text-align:center; padding:12px 0; cursor:pointer; color:#00cec9; border-bottom:2px solid #00cec9; font-size:13px; font-weight:600;">
+                    style="flex:1; text-align:center; padding:12px 0; cursor:pointer; color:#1e4276; border-bottom:2px solid #1e4276; font-size:13px; font-weight:600;">
                     <i class="fas fa-info-circle"></i> 상세 정보
                 </div>
                 <div class="sidebar-tab" onclick="switchSidebarTab('history')" id="stab-history"
@@ -2227,7 +2170,7 @@ function showTruncateBanner(metas){
 
             <!-- 1. 상세 정보 탭 -->
             <div id="panel-details" class="sidebar-content" style="flex:1; overflow-y:auto; padding:20px;">
-                <h3 style="color: #00cec9; display:flex; justify-content:space-between; align-items:center;">
+                <h3 style="color: #1e4276; display:flex; justify-content:space-between; align-items:center;">
                     <span><i class="fas fa-cube"></i> 선택된 객체</span>
                     <span id="selected-node-type"
                         style="font-size:11px; background:#ffffff; padding:2px 8px; border-radius:10px; color:#888;">선택
@@ -2246,7 +2189,7 @@ function showTruncateBanner(metas){
                     <h4 style="color:#4a5568; margin:0 0 10px 0; font-size:13px;">액션</h4>
                     <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
                         <button onclick="expandNode()"
-                            style="background:#00cec9; color:#121212; border:none; padding:8px; border-radius:4px; cursor:pointer;">
+                            style="background:#1e4276; color:#ffffff; border:none; padding:8px; border-radius:4px; cursor:pointer;">
                             <i class="fas fa-expand-arrows-alt"></i> 1-Hop 확장
                         </button>
                         <div
@@ -2264,7 +2207,7 @@ function showTruncateBanner(metas){
                             </button>
                         </div>
                         <button onclick="findShortestPath()"
-                            style="background:#fdcb6e; color:#121212; border:none; padding:8px; border-radius:4px; cursor:pointer;">
+                            style="background:#fdcb6e; color:#ffffff; border:none; padding:8px; border-radius:4px; cursor:pointer;">
                             <i class="fas fa-route"></i> 경로 탐색
                         </button>
                     </div>
@@ -2275,7 +2218,7 @@ function showTruncateBanner(metas){
             <!-- 3. 히스토리 탭 -->
             <div id="panel-history" class="sidebar-content"
                 style="display:none; flex:1; overflow-y:auto; padding:20px;">
-                <h3 style="color: #00cec9;"><i class="fas fa-clock"></i> 최근 활동</h3>
+                <h3 style="color: #1e4276;"><i class="fas fa-clock"></i> 최근 활동</h3>
                 <div id="activity-log" style="font-size:12px;">
                     <div style="color:#555; font-style:italic;">기록된 활동이 없습니다.</div>
                 </div>
@@ -2395,7 +2338,7 @@ function showTruncateBanner(metas){
                 { selector: 'edge[label="operates"]', style: { 'line-color': '#00b894', 'target-arrow-color': '#00b894', 'label': '운영', 'width': 3 } },
                 { selector: 'edge[label="recruits"]', style: { 'line-color': '#ff6b6b', 'target-arrow-color': '#ff6b6b', 'label': '모집', 'width': 3 } },
                 { selector: 'edge[label="blackmails"]', style: { 'line-color': '#d63031', 'target-arrow-color': '#d63031', 'label': '협박', 'width': 3, 'line-style': 'dashed' } },
-                { selector: 'edge[label="hosts"]', style: { 'line-color': '#00cec9', 'target-arrow-color': '#00cec9', 'label': '호스팅', 'width': 2 } },
+                { selector: 'edge[label="hosts"]', style: { 'line-color': '#1e4276', 'target-arrow-color': '#1e4276', 'label': '호스팅', 'width': 2 } },
                 { selector: 'edge[label="contains_file"]', style: { 'line-color': '#55efc4', 'target-arrow-color': '#55efc4', 'label': '파일포함', 'width': 2 } },
                 // [소유/사용]
                 { selector: 'edge[label="owns"]', style: { 'line-color': '#a29bfe', 'target-arrow-color': '#a29bfe', 'label': 'owns' } },
@@ -2432,7 +2375,7 @@ function showTruncateBanner(metas){
                 { selector: ':selected', style: { 'border-width': 4, 'border-color': '#ff7675', 'line-color': '#ff7675', 'target-arrow-color': '#ff7675', 'shadow-blur': 20, 'shadow-color': '#ff7675' } },
                 { selector: 'edge.highlight', style: { 'width': 4, 'line-color': '#ff005c', 'target-arrow-color': '#ff005c', 'z-index': 999 } },
                 { selector: 'node.highlight', style: { 'border-color': '#ff005c', 'border-width': 4, 'shadow-blur': 25, 'shadow-color': '#ff005c', 'z-index': 999 } },
-                { selector: 'node.path-source', style: { 'border-color': '#00cec9', 'border-width': 6, 'shadow-blur': 30, 'shadow-color': '#00cec9', 'z-index': 1000 } },
+                { selector: 'node.path-source', style: { 'border-color': '#1e4276', 'border-width': 6, 'shadow-blur': 30, 'shadow-color': '#1e4276', 'z-index': 1000 } },
                 { selector: '.path-dim', style: { 'opacity': 0.15 } },
                 // 집계 배지: RETURN 노드에 병합된 스칼라(개수 등)를 라벨에 병기 + 강조 테두리
                 { selector: 'node[badge]', style: {
@@ -2726,7 +2669,7 @@ function showTruncateBanner(metas){
                         listDiv.innerHTML = data.graphs.map(g => `
                             <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 10px; background:#e7ecf5; margin-bottom:5px; border-radius:4px;">
                                 <span style="color:#e6e9ef;">
-                                    <i class="fas fa-project-diagram" style="color:#00cec9; margin-right:8px;"></i>
+                                    <i class="fas fa-project-diagram" style="color:#1e4276; margin-right:8px;"></i>
                                     ${g.name} <span style="color:#4a5568; font-size:11px;">(${g.node_count} nodes)</span>
                                 </span>
                                 <button type="button" onclick="deleteGraph('${g.name}')" 
@@ -3509,7 +3452,7 @@ function showTruncateBanner(metas){
             if (_eventCollapsed) {
                 // 접힌 상태 = 활성(주황 채움). 버튼은 '펼치기' 동작 안내.
                 btn.innerHTML = '<i class="fas fa-expand-arrows-alt"></i> 이벤트 펼치기';
-                btn.style.background = '#00cec9'; btn.style.borderColor = '#00cec9'; btn.style.color = '#06201f';
+                btn.style.background = '#1e4276'; btn.style.borderColor = '#1e4276'; btn.style.color = '#ffffff';
                 btn.title = '현재 이벤트가 엣지로 접힌 상태 — 클릭 시 노드로 펼침 (DB 정본 유지)';
             } else {
                 // 펼친 상태 = 비활성(테두리만). 버튼은 '접기' 동작 안내.
@@ -3753,7 +3696,7 @@ function showTruncateBanner(metas){
             if (!btn) return;
             if (_layoutLocked) {
                 btn.innerHTML = '<i class="fas fa-lock"></i> 위치 고정';
-                btn.style.background = '#00cec9'; btn.style.borderColor = '#00cec9'; btn.style.color = '#06201f';
+                btn.style.background = '#1e4276'; btn.style.borderColor = '#1e4276'; btn.style.color = '#ffffff';
                 btn.title = '위치 고정 중 — 자동 재배치 안 함 (클릭 시 해제)';
             } else {
                 btn.innerHTML = '<i class="fas fa-lock-open"></i> 위치 고정';
@@ -3912,15 +3855,15 @@ function showTruncateBanner(metas){
 
             // 이름/라벨 표시
             if (d.name) {
-                h += `<tr><th style="text-align:left; color:#888; padding:5px; border-bottom:1px solid #e6e9ef;">Name</th><td style="padding:5px; border-bottom:1px solid #e6e9ef; color:#00cec9; font-weight:bold;">${d.name}</td></tr>`;
+                h += `<tr><th style="text-align:left; color:#888; padding:5px; border-bottom:1px solid #e6e9ef;">Name</th><td style="padding:5px; border-bottom:1px solid #e6e9ef; color:#1e4276; font-weight:bold;">${d.name}</td></tr>`;
             }
 
             for (k in p) {
                 let val = p[k];
                 // 코드값인 경우 이름 병기
-                if (k === 'bnk_cd') val = `${val} <span style="color:#00cec9">(${getCodeName('BANK', val)})</span>`;
-                else if (k === 'carr_cd') val = `${val} <span style="color:#00cec9">(${getCodeName('CARRIER', val)})</span>`;
-                else if (k === 'role_cd') val = `${val} <span style="color:#00cec9">(${getCodeName('ROLE', val)})</span>`;
+                if (k === 'bnk_cd') val = `${val} <span style="color:#1e4276">(${getCodeName('BANK', val)})</span>`;
+                else if (k === 'carr_cd') val = `${val} <span style="color:#1e4276">(${getCodeName('CARRIER', val)})</span>`;
+                else if (k === 'role_cd') val = `${val} <span style="color:#1e4276">(${getCodeName('ROLE', val)})</span>`;
                 else if (k === 'crime_cd') val = `${val}`;
 
                 h += `<tr><th style="text-align:left; color:#888; padding:5px; border-bottom:1px solid #e6e9ef;">${k}</th><td style="padding:5px; border-bottom:1px solid #e6e9ef; color:#16202e;">${val}</td></tr>`;
@@ -3930,7 +3873,7 @@ function showTruncateBanner(metas){
             // 4. 연결 정보 요약
             const degree = node.degree();
             h += `<div style="margin-top:15px; padding:10px; background:#ffffff; border-radius:4px; color:#888; border:1px solid #e6e9ef;">
-                    <i class="fas fa-project-diagram"></i> 연결된 노드: <span style="color:#00cec9; font-weight:bold;">${degree}</span>개
+                    <i class="fas fa-project-diagram"></i> 연결된 노드: <span style="color:#1e4276; font-weight:bold;">${degree}</span>개
                    </div>`;
 
             // 5. bridge_key — 원본 RDB 출처
@@ -4072,7 +4015,7 @@ function showTruncateBanner(metas){
             if (!banner) {
                 banner = document.createElement('div');
                 banner.id = 'pathBanner';
-                banner.style.cssText = 'position:fixed;top:60px;left:50%;transform:translateX(-50%);background:linear-gradient(135deg,#ffffff,#e7ecf5);color:#fff;padding:10px 24px;border-radius:25px;z-index:9999;font-size:13px;display:flex;align-items:center;gap:12px;box-shadow:0 4px 20px rgba(0,0,0,0.5);border:1px solid #00cec9;';
+                banner.style.cssText = 'position:fixed;top:60px;left:50%;transform:translateX(-50%);background:linear-gradient(135deg,#ffffff,#e7ecf5);color:#fff;padding:10px 24px;border-radius:25px;z-index:9999;font-size:13px;display:flex;align-items:center;gap:12px;box-shadow:0 4px 20px rgba(0,0,0,0.5);border:1px solid #1e4276;';
                 document.body.appendChild(banner);
             }
             banner.innerHTML = `<span>${msg}</span><button onclick="clearPathHighlight()" style="background:#ff7675;border:none;color:#fff;padding:4px 12px;border-radius:12px;cursor:pointer;font-size:11px;">✕ 닫기</button>`;
@@ -4389,7 +4332,7 @@ function showTruncateBanner(metas){
                 return `<div style="background:#ffffff; border-radius:6px; padding:12px 14px; margin-bottom:8px; border-left:3px solid #6c5ce7;">
                     <div style="display:flex; justify-content:space-between; align-items:baseline;">
                         <span style="color:#a29bfe; font-weight:bold; font-size:13px;">${r.rank}. ${legalEsc(r.law_name)} ${legalEsc(r.article_ref)}</span>
-                        <span>${badge('BM25', (s.bm25_rank != null) ? '#' + (s.bm25_rank + 1) : null, '#0984e3')}${badge('벡터', (s.vector_rank != null) ? '#' + (s.vector_rank + 1) : null, '#00cec9')}${badge('관련성', s.rerank, '#55efc4')}</span>
+                        <span>${badge('BM25', (s.bm25_rank != null) ? '#' + (s.bm25_rank + 1) : null, '#0984e3')}${badge('벡터', (s.vector_rank != null) ? '#' + (s.vector_rank + 1) : null, '#1e4276')}${badge('관련성', s.rerank, '#55efc4')}</span>
                     </div>
                     ${r.title ? `<div style="color:#4a5568; font-size:12px; margin-top:2px;">${legalEsc(r.title)}</div>` : ''}
                     <div style="color:#e6e9ef; font-size:12px; margin-top:6px; line-height:1.6;">${legalEsc(content.slice(0, 300))}${content.length > 300 ? '…' : ''}</div>
@@ -4814,7 +4757,7 @@ function showTruncateBanner(metas){
             files.forEach((f, i) => {
                 html += `
                 < div style = "display:flex; justify-content:space-between; align-items:center; padding:5px; border-bottom:1px solid #d5dae2;" >
-                        <span style="color:#e6e9ef;"><i class="fas fa-file-csv" style="color:#00cec9; margin-right:5px;"></i> ${f.name}</span>
+                        <span style="color:#e6e9ef;"><i class="fas fa-file-csv" style="color:#1e4276; margin-right:5px;"></i> ${f.name}</span>
                         <span style="color:#4a5568;">${(f.size / 1024).toFixed(1)} KB</span>
                         <span id="wiz-status-${i}" style="color:#ffeaa7;">대기중</span>
                     </div >
@@ -5160,7 +5103,7 @@ function showTruncateBanner(metas){
 
                         // 온톨로지 매핑 표시
                         html += `< div style = "margin-top:10px;" >
-                <h5 style="margin:0 0 6px; color:#00cec9; font-size:11px;">
+                <h5 style="margin:0 0 6px; color:#1e4276; font-size:11px;">
                     <i class="fas fa-sitemap"></i> 온톨로지 매핑 (RDB → GDB)
                 </h5>`;
                         const layerMap = {
@@ -5187,7 +5130,7 @@ function showTruncateBanner(metas){
                                     <span style="color:${color};">[${layer}] ${item.description}</span>
                                     <span style="color:#4a5568;">${item.table}</span>
                                     <span style="color:#4a5568;">→</span>
-                                    <span style="color:#00cec9; font-weight:bold;">${item.graph_label}</span>
+                                    <span style="color:#1e4276; font-weight:bold;">${item.graph_label}</span>
                                     <span style="color:#e6e9ef;">${item.count}건</span>
                                 </div > `;
                         });
@@ -5307,7 +5250,7 @@ function showTruncateBanner(metas){
                                         <div style="font-size:10px; color:#4a5568;">총 노드</div>
                                     </div>
                                     <div style="background:#ffffff; padding:8px; border-radius:4px; text-align:center;">
-                                        <div style="font-size:18px; font-weight:bold; color:#00cec9;">${s.edges}</div>
+                                        <div style="font-size:18px; font-weight:bold; color:#1e4276;">${s.edges}</div>
                                         <div style="font-size:10px; color:#4a5568;">총 엣지</div>
                                     </div>
                                     <div style="background:#ffffff; padding:8px; border-radius:4px; text-align:center;">
@@ -5486,7 +5429,7 @@ function showTruncateBanner(metas){
                 .then(r => r.json())
                 .then(data => {
                     if (data.status === 'success' && data.tables.length > 0) {
-                        const colors = ['#6c5ce7','#e17055','#00b894','#0984e3','#fdcb6e','#fd79a8','#4a5568','#e84393','#00cec9','#a29bfe'];
+                        const colors = ['#6c5ce7','#e17055','#00b894','#0984e3','#fdcb6e','#fd79a8','#4a5568','#e84393','#1e4276','#a29bfe'];
                         area.innerHTML = data.tables.map((t, i) => {
                             const bg = colors[i % colors.length];
                             const textColor = bg === '#fdcb6e' ? '#ffffff' : 'white';
@@ -5586,7 +5529,7 @@ function showTruncateBanner(metas){
         function queryRdbTable(tableName, page) {
             page = page || 1;
             const resultDiv = document.getElementById('rdb-query-result');
-            resultDiv.innerHTML = '<p style="color:#00cec9; text-align:center;"><i class="fas fa-spinner fa-spin"></i> 로딩 중...</p>';
+            resultDiv.innerHTML = '<p style="color:#1e4276; text-align:center;"><i class="fas fa-spinner fa-spin"></i> 로딩 중...</p>';
 
             // 선택된 버튼 하이라이트
             document.querySelectorAll('.rdb-table-btn').forEach(b => b.style.opacity = '0.6');
@@ -5676,15 +5619,15 @@ function showTruncateBanner(metas){
             const edgeDiv = document.getElementById('gdb-edge-types');
             const graphListDiv = document.getElementById('gdb-graph-list');
 
-            nodeDiv.innerHTML = '<p style="color:#00cec9; text-align:center; font-size:12px;"><i class="fas fa-spinner fa-spin"></i> 로딩 중...</p>';
-            edgeDiv.innerHTML = '<p style="color:#00cec9; text-align:center; font-size:12px;"><i class="fas fa-spinner fa-spin"></i> 로딩 중...</p>';
+            nodeDiv.innerHTML = '<p style="color:#1e4276; text-align:center; font-size:12px;"><i class="fas fa-spinner fa-spin"></i> 로딩 중...</p>';
+            edgeDiv.innerHTML = '<p style="color:#1e4276; text-align:center; font-size:12px;"><i class="fas fa-spinner fa-spin"></i> 로딩 중...</p>';
 
             fetch(`/api/v1/gdb/detail-stats?graph_name=${graphName}`)
                 .then(r => r.json())
                 .then(data => {
                     if (data.status === 'success') {
                         const d = data.data;
-                        const labelColors = ['#a29bfe', '#0984e3', '#55efc4', '#ffeaa7', '#fd79a8', '#fdcb6e', '#00cec9', '#e17055', '#4a5568', '#e6e9ef'];
+                        const labelColors = ['#a29bfe', '#0984e3', '#55efc4', '#ffeaa7', '#fd79a8', '#fdcb6e', '#1e4276', '#e17055', '#4a5568', '#e6e9ef'];
 
                         // 노드 라벨별 바 차트
                         if (d.nodes.length > 0) {
@@ -6033,8 +5976,8 @@ function showTruncateBanner(metas){
             // 선택 탭 활성화
             const activeTab = document.getElementById('stab-' + tabName);
             activeTab.classList.add('active');
-            activeTab.style.color = '#00cec9';
-            activeTab.style.borderColor = '#00cec9';
+            activeTab.style.color = '#1e4276';
+            activeTab.style.borderColor = '#1e4276';
 
             // 콘텐츠 전환
             document.querySelectorAll('.sidebar-content').forEach(content => {
@@ -6218,7 +6161,7 @@ function showTruncateBanner(metas){
     <div id="manual-node-modal"
         style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(22,30,51,0.88); z-index:9999; align-items:center; justify-content:center; backdrop-filter:blur(3px);">
         <div class="modal-content" style="max-width: 420px;">
-            <h3 style="margin-top:0; color:#00cec9;"><i class="fas fa-plus-circle"></i> 증거 노드 추가</h3>
+            <h3 style="margin-top:0; color:#1e4276;"><i class="fas fa-plus-circle"></i> 증거 노드 추가</h3>
             <div style="margin-bottom: 12px;">
                 <label style="display:block; margin-bottom:5px; color:#4a5568;">종류</label>
                 <select id="mn-label" onchange="renderNodeFields()"
@@ -6289,7 +6232,7 @@ function showTruncateBanner(metas){
     <div id="manual-edge-modal"
         style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(22,30,51,0.88); z-index:9999; align-items:center; justify-content:center; backdrop-filter:blur(3px);">
         <div class="modal-content" style="max-width: 400px;">
-            <h3 style="margin-top:0; color:#00cec9;"><i class="fas fa-link"></i> 엣지 수동 연결</h3>
+            <h3 style="margin-top:0; color:#1e4276;"><i class="fas fa-link"></i> 엣지 수동 연결</h3>
             <div style="margin-bottom: 12px;">
                 <label style="display:block; margin-bottom:5px; color:#4a5568;">소스 노드 ID</label>
                 <input type="text" id="me-src" readonly
@@ -7165,7 +7108,7 @@ function showTruncateBanner(metas){
                 return;
             }
 
-            var colors = ['#0984e3', '#6c5ce7', '#00b894', '#e17055', '#fdcb6e', '#d63031', '#4a5568', '#00cec9'];
+            var colors = ['#0984e3', '#6c5ce7', '#00b894', '#e17055', '#fdcb6e', '#d63031', '#4a5568', '#1e4276'];
             container.innerHTML = selectedTables.map(function (t, i) {
                 var c = colors[i % colors.length];
                 var colCount = (t.columns || []).length;
@@ -7429,7 +7372,7 @@ function showTruncateBanner(metas){
             var progressHtml = '<div style="padding:20px; text-align:center;">' +
                 '<div style="color:#fdcb6e; font-size:14px; font-weight:bold; margin-bottom:10px;">🔄 1-Mode 노드 생성 중...</div>' +
                 '<div style="background:#e7ecf5; border-radius:10px; height:20px; overflow:hidden; margin-bottom:8px;">' +
-                '<div id="m1-progress-bar" style="background:linear-gradient(90deg,#0984e3,#00cec9); height:100%; width:0%; transition:width 0.3s; border-radius:10px;"></div></div>' +
+                '<div id="m1-progress-bar" style="background:linear-gradient(90deg,#0984e3,#1e4276); height:100%; width:0%; transition:width 0.3s; border-radius:10px;"></div></div>' +
                 '<div id="m1-progress-text" style="color:#4a5568; font-size:11px;">0 / ' + uniqueVals.length + '</div></div>';
             if (dataArea) dataArea.innerHTML = progressHtml;
 

@@ -12,11 +12,11 @@
   /* ── 1. Primary (청록-블루) ─────────────────────────────────
      Meta 원칙 차용: primary 는 '상호작용' 신호로만 쓰고 데이터/노드
      색과 겹치지 않게 희소하게 유지한다(그래서 노드 범례엔 청록 없음). */
-  --color-primary:        #00cec9;  /* 주요 액션 CTA (버튼/활성 탭) */
-  --color-primary-hover:  #12b5b0;
-  --color-primary-active: #0e9b96;  /* pressed */
-  --color-primary-soft:   rgba(0, 206, 201, 0.14);  /* 정보 콜아웃 배경 틴트 */
-  --color-on-primary:     #06201f;  /* 밝은 청록 위 텍스트(근흑) */
+  --color-primary:        #1e4276;  /* 주요 액션 CTA (네이비 헤더와 통일) */
+  --color-primary-hover:  #2a5599;
+  --color-primary-active: #16305a;  /* pressed */
+  --color-primary-soft:   rgba(30, 66, 118, 0.10);  /* 정보 콜아웃 배경 틴트 */
+  --color-on-primary:     #ffffff;  /* 네이비 위 텍스트(흰색) */
   --color-accent-blue:    #4dabf7;  /* 링크 · 선택 · 정보 (청록의 블루 짝) */
   --color-accent-blue-deep: #1c7ed6;
 
