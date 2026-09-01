@@ -1,11 +1,22 @@
 #!/usr/bin/env python3
-"""통합 그래프 그래프분석 — PageRank(영향력 랭킹)·Louvain(자동 조직 탐지).
+"""통합 그래프 네트워크 분석 엔진 — 15+ 알고리즘 (중심성·커뮤니티·구조·경로·유사도).
 
 AgensGraph는 전용 GDS(그래프 알고리즘)가 없어, 그래프를 NetworkX로 export 후 계산하고
-결과를 노드 속성(pagerank·community_id)으로 되쓴다(--set). 브리핑/시각화에서 활용.
-  · PageRank: 방향 그래프에서 '영향력 있는 노드'(콜센터 IP·집금 계좌·핵심 인물) 자동 랭킹
-  · Louvain: 무방향에서 자동 조직(커뮤니티) 탐지 — belongs_to 수동 판정을 자동화
-실행: python3 scripts/graph_analytics.py [--graph ccop_ep_integrated] [--set]
+전역(노드 단위) 결과를 노드 속성으로 되쓴다(--set). 브리핑/시각화/질의(CALL)에서 활용.
+
+■ 노드속성 알고리즘 (--set 으로 사전계산 → Cypher `ORDER BY n.<metric>` 로 조회)
+  중심성   pagerank · degree_cent · betweenness(k-샘플) · eigenvector · closeness(--heavy)
+  커뮤니티  community_id(Louvain) · community_lp(Label Propagation)
+  구조     component(약연결요소) · kcore(k-코어) · clustering(삼각형 계수)
+■ 온디맨드 알고리즘 (함수로 노출 — CALL 미들웨어/질의에서 파라미터와 함께 호출)
+  경로     algo_shortest_path(src,dst) · algo_all_paths
+  유사도    algo_common_neighbors(node) = 공통이웃 Jaccard (링크예측/동일인 후보)
+  패턴     algo_cycles = 순환 흐름 탐지 (자금세탁 typology)
+
+실행:
+  python3 scripts/graph_analytics.py --graph ccop_ep_integrated          # 리포트만
+  python3 scripts/graph_analytics.py --graph ccop_ep_integrated --set    # 노드 속성 되쓰기
+  python3 scripts/graph_analytics.py --graph ccop_ep_integrated --heavy  # closeness 포함(느림)
 """
 import sys
 import os
@@ -23,24 +34,153 @@ KP = {'vt_psn': 'name', 'vt_bacnt': 'account_no', 'vt_telno': 'telno', 'vt_ip': 
 KEYEXPR = ("coalesce(n.name,n.account_no,n.telno,n.ip_addr,n.id_val,n.flnm,"
            "n.org_name,n.atm_nm,n.email_addr,n.src_name)")
 
+# 정수(범주) 속성 vs 실수(점수) 속성 구분 — SET 포맷용
+INT_METRICS = {'community_id', 'community_lp', 'component', 'kcore'}
+
 
 def esc(v):
     return str(v).replace("\\", "\\\\").replace("'", "''")
+
+
+# ══════════════════════════════════════════════════════════════════
+#  온디맨드 알고리즘 (경로·유사도·패턴) — CALL 레이어/질의에서 파라미터와 호출
+# ══════════════════════════════════════════════════════════════════
+def algo_shortest_path(G, src, dst):
+    """최단경로 (무방향). 자금·연락 최단 연결 고리."""
+    try:
+        return nx.shortest_path(G.to_undirected(), src, dst)
+    except (nx.NetworkXNoPath, nx.NodeNotFound):
+        return None
+
+
+def algo_all_paths(G, src, dst, cutoff=5, limit=20):
+    """A→B 모든 경로(길이 cutoff 이하). 다단계 경유(layering) 추적."""
+    try:
+        paths = []
+        for p in nx.all_simple_paths(G, src, dst, cutoff=cutoff):
+            paths.append(p)
+            if len(paths) >= limit:
+                break
+        return paths
+    except nx.NodeNotFound:
+        return []
+
+
+def algo_common_neighbors(G, node, topn=10):
+    """공통이웃 Jaccard 유사도 — 링크예측/동일인·공범 후보. [(other, jaccard, 공통수)]."""
+    Gu = G.to_undirected()
+    if node not in Gu:
+        return []
+    nb = set(Gu[node])
+    if not nb:
+        return []
+    scores = []
+    # 이웃의 이웃만 후보로 (전체 O(V) 회피)
+    cand = set()
+    for x in nb:
+        cand |= set(Gu[x])
+    cand.discard(node)
+    for other in cand:
+        onb = set(Gu[other])
+        inter = nb & onb
+        if inter:
+            union = nb | onb
+            scores.append((other, len(inter) / len(union), len(inter)))
+    return sorted(scores, key=lambda x: -x[1])[:topn]
+
+
+def algo_cycles(G, max_len=6, limit=15):
+    """순환 흐름 탐지 (방향 그래프) — 자금세탁 circular flow (A→B→C→A)."""
+    out = []
+    try:
+        for c in nx.simple_cycles(G, length_bound=max_len):
+            if len(c) >= 2:
+                out.append(c)
+                if len(out) >= limit:
+                    break
+    except TypeError:
+        # 구버전 networkx: length_bound 미지원 → 수동 필터
+        for c in nx.simple_cycles(G):
+            if 2 <= len(c) <= max_len:
+                out.append(c)
+                if len(out) >= limit:
+                    break
+    return out
+
+
+# ══════════════════════════════════════════════════════════════════
+#  전역(노드 단위) 알고리즘 — --set 으로 노드 속성에 사전계산
+# ══════════════════════════════════════════════════════════════════
+def compute_node_metrics(G, heavy=False):
+    """노드별 지표 dict 를 metric→{node:value} 로 반환 + 커뮤니티 리스트."""
+    N = G.number_of_nodes()
+    Gu = G.to_undirected()
+    M = {}
+
+    # ── 중심성 ──
+    print("[centrality] pagerank·degree·betweenness·eigenvector 계산…")
+    M['pagerank'] = nx.pagerank(G, alpha=0.85)
+    M['degree_cent'] = nx.degree_centrality(G)
+    # betweenness: 전 노드는 O(V·E)라 24k에선 무거움 → k-샘플 근사(정규화)
+    k = min(500, N) if N > 800 else None
+    M['betweenness'] = nx.betweenness_centrality(G, k=k, seed=42, normalized=True)
+    try:
+        M['eigenvector'] = nx.eigenvector_centrality(G, max_iter=1000, tol=1e-4)
+    except (nx.PowerIterationFailedConvergence, nx.AmbiguousSolution):
+        M['eigenvector'] = {n: 0.0 for n in G}
+    if heavy:
+        print("[centrality] closeness (전역 최단경로 — 느림)…")
+        M['closeness'] = nx.closeness_centrality(G)
+
+    # ── 커뮤니티 ──
+    print("[community] Louvain·Label Propagation…")
+    louvain = sorted(nx.community.louvain_communities(Gu, seed=42), key=len, reverse=True)
+    M['community_id'] = {n: i for i, c in enumerate(louvain) for n in c}
+    lp = sorted(nx.community.label_propagation_communities(Gu), key=len, reverse=True)
+    M['community_lp'] = {n: i for i, c in enumerate(lp) for n in c}
+
+    # ── 구조 ──
+    print("[structure] 약연결요소·k-core·삼각형계수…")
+    comp = sorted(nx.weakly_connected_components(G), key=len, reverse=True)
+    M['component'] = {n: i for i, c in enumerate(comp) for n in c}
+    M['kcore'] = nx.core_number(Gu)
+    M['clustering'] = nx.clustering(Gu)
+
+    return M, louvain
+
+
+def report_top(M, id2, metric, labels=('vt_bacnt', 'vt_psn', 'vt_ip', 'vt_org', 'vt_telno'), topn=3):
+    scores = M.get(metric, {})
+    by = defaultdict(list)
+    for nid, s in sorted(scores.items(), key=lambda x: -x[1]):
+        lbl, key = id2.get(nid, ('?', '?'))
+        if key:
+            by[lbl].append((key, s))
+    print(f"\n  ── {metric} ──")
+    for lbl in labels:
+        top = by.get(lbl, [])[:topn]
+        if top:
+            print(f"    [{lbl}] " + " · ".join(f"{k}({s:.4f})" for k, s in top))
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--graph', default='ccop_ep_integrated')
     ap.add_argument('--set', action='store_true', help='결과를 노드 속성으로 되쓰기')
+    ap.add_argument('--heavy', action='store_true', help='closeness 등 무거운 전역 계산 포함')
     args = ap.parse_args()
     app = create_app()
     with app.app_context():
-        conn = psycopg2.connect(**app.config['DB_CONFIG']); conn.autocommit = True; cur = conn.cursor()
+        conn = psycopg2.connect(**app.config['DB_CONFIG'])
+        conn.autocommit = True
+        cur = conn.cursor()
 
         def q(c):
-            safe_set_graph_path(cur, args.graph); cur.execute(c); return cur.fetchall()
+            safe_set_graph_path(cur, args.graph)
+            cur.execute(c)
+            return cur.fetchall()
 
-        # ── export ──
+        # ── export: AgensGraph → NetworkX ──
         id2 = {}
         for nid, lbl, key in q(f"MATCH (n) RETURN id(n), label(n), {KEYEXPR}"):
             id2[str(nid)] = (lbl, key)
@@ -50,51 +190,61 @@ def main():
             G.add_edge(str(a), str(b))
         print(f"[export] {args.graph} — 노드 {G.number_of_nodes()} · 엣지 {G.number_of_edges()}")
 
-        # ── PageRank ──
-        pr = nx.pagerank(G, alpha=0.85)
-        # ── Louvain (무방향) ──
-        comms = nx.community.louvain_communities(G.to_undirected(), seed=42)
-        comms_sorted = sorted(comms, key=len, reverse=True)
-        node2c = {}
-        for i, c in enumerate(comms_sorted):
-            for n in c:
-                node2c[n] = i
-        print(f"[louvain] 커뮤니티 {len(comms)}개 (최대 {len(comms_sorted[0])}노드)")
+        # ── 전역 알고리즘 계산 ──
+        M, louvain = compute_node_metrics(G, heavy=args.heavy)
 
-        # ── Top PageRank (라벨별) ──
-        by = defaultdict(list)
-        for nid, score in sorted(pr.items(), key=lambda x: -x[1]):
-            lbl, key = id2.get(nid, ('?', '?'))
-            by[lbl].append((key, score))
-        print("\n=== PageRank 상위 (영향력) ===")
-        for lbl in ['vt_ip', 'vt_bacnt', 'vt_psn', 'vt_org', 'vt_telno']:
-            top = by.get(lbl, [])[:5]
-            if top:
-                print(f"  [{lbl}] " + " · ".join(f"{k}({s:.4f})" for k, s in top))
+        # ── 리포트: 중심성 ──
+        print("\n=== ① 중심성 (누가 핵심·영향력자인가) ===")
+        for metric in ['pagerank', 'betweenness', 'degree_cent', 'eigenvector'] + (['closeness'] if args.heavy else []):
+            report_top(M, id2, metric)
 
-        # ── 큰 커뮤니티(조직) ──
-        print("\n=== Louvain 자동 조직 (상위 6) ===")
-        for i, c in enumerate(comms_sorted[:6]):
+        # ── 리포트: 커뮤니티 ──
+        print("\n=== ② 커뮤니티 (어떤 무리가 한 조직인가) ===")
+        print(f"  Louvain {len(louvain)}개 (최대 {len(louvain[0])}노드)")
+        for i, c in enumerate(louvain[:5]):
             labels = Counter(id2.get(n, ('?', ''))[0] for n in c)
-            persons = [id2[n][1] for n in c if id2.get(n, ('?', ''))[0] == 'vt_psn' and id2[n][1]][:5]
-            print(f"  조직#{i}: {len(c)}노드 {dict(labels)}")
-            if persons:
-                print(f"          인물: {persons}")
+            persons = [id2[n][1] for n in c if id2.get(n, ('?', ''))[0] == 'vt_psn' and id2[n][1]][:4]
+            print(f"    조직#{i}: {len(c)}노드 {dict(labels)}" + (f" · 인물 {persons}" if persons else ""))
 
-        # ── SET back ──
+        # ── 리포트: 구조 ──
+        print("\n=== ③ 구조 (밀집 코어·연결요소) ===")
+        core = M['kcore']
+        top_core = sorted(core.items(), key=lambda x: -x[1])[:8]
+        print("  k-core 상위(밀집 참여): " + " · ".join(
+            f"{id2.get(n, ('?', '?'))[1]}(k={k})" for n, k in top_core if id2.get(n, ('?', '?'))[1]))
+        ncomp = len(set(M['component'].values()))
+        print(f"  약연결요소 {ncomp}개 (최대 요소가 본체)")
+
+        # ── 리포트: 패턴(순환) ──
+        print("\n=== ④ 패턴 — 순환 흐름(자금세탁 circular flow) ===")
+        cyc = algo_cycles(G, max_len=6, limit=8)
+        if cyc:
+            for c in cyc[:5]:
+                names = [str(id2.get(n, ('?', '?'))[1] or '?') for n in c]
+                print(f"    순환({len(c)}): " + " → ".join(names) + f" → {names[0]}")
+        else:
+            print("    (길이 6 이하 순환 없음)")
+
+        # ── SET back: 10개 노드 지표를 속성으로 ──
         if args.set:
+            metrics = list(M.keys())
+            print(f"\n[SET] {len(metrics)}개 지표 되쓰기: {metrics}")
             conn.autocommit = False
             cnt = 0
             for nid, (lbl, key) in id2.items():
-                if lbl not in KP or key is None or key == '':
+                if lbl not in KP or not key:
                     continue
-                cur.execute(f"MATCH (n:{lbl} {{{KP[lbl]}:'{esc(key)}'}}) "
-                            f"SET n.pagerank='{pr.get(nid, 0):.6f}', n.community_id='{node2c.get(nid, -1)}'")
+                parts = []
+                for m in metrics:
+                    v = M[m].get(nid, 0)
+                    parts.append(f"n.{m}='{int(v)}'" if m in INT_METRICS else f"n.{m}='{float(v):.6f}'")
+                cur.execute(f"MATCH (n:{lbl} {{{KP[lbl]}:'{esc(key)}'}}) SET " + ", ".join(parts))
                 cnt += 1
                 if cnt % 3000 == 0:
-                    conn.commit(); print(f"  SET {cnt}…")
+                    conn.commit()
+                    print(f"  SET {cnt}…")
             conn.commit()
-            print(f"[SET 완료] {cnt}노드에 pagerank·community_id 부여")
+            print(f"[SET 완료] {cnt}노드에 {len(metrics)}개 지표 부여")
         conn.close()
 
 
