@@ -584,6 +584,24 @@ def search_node():
     elements = GraphService.search_nodes(keyword, graph_path)
     return jsonify(elements)
 
+@bp.route('/api/graph/algo', methods=['POST'])
+def graph_algo():
+    """네트워크 분석 알고리즘 질의 — CALL ccop.algo.*({...}) 또는 {algo, params}.
+    top(중심성·커뮤니티·구조 지표 상위)·path(최단경로)·similar(Jaccard)·cycles(순환)·community.
+    사전계산 지표는 scripts/graph_analytics.py --set 으로 노드 속성에 미리 심어둠."""
+    from app.services.graph_algo_service import GraphAlgoService, parse_call
+    d = request.get_json(silent=True) or {}
+    graph = d.get('graph_path', 'ccop_ep_integrated')
+    try:
+        if d.get('call'):
+            algo, params = parse_call(d['call'])
+        else:
+            algo, params = d.get('algo'), d.get('params', {})
+        return jsonify(GraphAlgoService.dispatch(graph, algo, params))
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
+
+
 @bp.route('/api/expand', methods=['GET'])
 def expand_node():
     # 'id' 또는 'node_id' 둘 다 지원
