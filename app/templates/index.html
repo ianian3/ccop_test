@@ -1084,7 +1084,7 @@ function showTruncateBanner(metas){
             <div
                 style="background: #ffffff; padding: 15px; border-radius: 6px; margin-bottom: 15px; border: 1px dashed rgba(255,255,255,0.15);">
                 <textarea id="legal-question" rows="2" placeholder="예: 대포통장을 양도하면 어떤 처벌을 받나요?"
-                    style="width:100%; box-sizing:border-box; background:#ffffff; color:#e6e9ef; border:1px solid rgba(255,255,255,0.15); border-radius:4px; padding:10px; font-size:14px; resize:vertical; outline:none;"></textarea>
+                    style="width:100%; box-sizing:border-box; background:#ffffff; color:#4a5568; border:1px solid rgba(255,255,255,0.15); border-radius:4px; padding:10px; font-size:14px; resize:vertical; outline:none;"></textarea>
                 <div style="display:flex; align-items:center; gap:12px; margin-top:12px; flex-wrap:wrap;">
                     <label style="color:#6b7280; font-size:13px;">모드
                         <select id="legal-mode"
@@ -1112,7 +1112,7 @@ function showTruncateBanner(metas){
             <!-- 답변 영역 -->
             <div id="legal-answer-area"
                 style="display:none; background:#e6f7ee; border:1px solid #00b894; border-radius:6px; padding:15px; margin-bottom:15px;">
-                <div id="legal-answer-text" style="color:#e6e9ef; font-size:14px; line-height:1.7; white-space:pre-wrap;"></div>
+                <div id="legal-answer-text" style="color:#4a5568; font-size:14px; line-height:1.7; white-space:pre-wrap;"></div>
                 <div id="legal-citations" style="margin-top:12px;"></div>
                 <div id="legal-disclaimer" style="margin-top:10px; color:#6b7280; font-size:11px; font-style:italic;"></div>
             </div>
@@ -1145,26 +1145,26 @@ function showTruncateBanner(metas){
                 <div style="background:rgba(255,255,255,0.05); border-radius:8px; padding:15px; margin-bottom:20px;">
                     <div
                         style="display:flex; justify-content:space-between; margin-bottom:8px; padding-bottom:8px; border-bottom:1px solid #d5dae2;">
-                        <span style="color:#e6e9ef;"><i class="fas fa-user"></i> 인물 (Suspects)</span>
+                        <span style="color:#4a5568;"><i class="fas fa-user"></i> 인물 (Suspects)</span>
                         <span id="etl-count-suspects" style="color:#1e4276; font-weight:bold;">0</span>
                     </div>
                     <div
                         style="display:flex; justify-content:space-between; margin-bottom:8px; padding-bottom:8px; border-bottom:1px solid #d5dae2;">
-                        <span style="color:#e6e9ef;"><i class="fas fa-university"></i> 계좌 (Accounts)</span>
+                        <span style="color:#4a5568;"><i class="fas fa-university"></i> 계좌 (Accounts)</span>
                         <span id="etl-count-accounts" style="color:#1e4276; font-weight:bold;">0</span>
                     </div>
                     <div
                         style="display:flex; justify-content:space-between; margin-bottom:8px; padding-bottom:8px; border-bottom:1px solid #d5dae2;">
-                        <span style="color:#e6e9ef;"><i class="fas fa-phone"></i> 전화번호 (Phones)</span>
+                        <span style="color:#4a5568;"><i class="fas fa-phone"></i> 전화번호 (Phones)</span>
                         <span id="etl-count-phones" style="color:#1e4276; font-weight:bold;">0</span>
                     </div>
                     <div
                         style="display:flex; justify-content:space-between; margin-bottom:8px; padding-bottom:8px; border-bottom:1px solid #d5dae2;">
-                        <span style="color:#e6e9ef;"><i class="fas fa-exchange-alt"></i> 이체/통화 (Actions)</span>
+                        <span style="color:#4a5568;"><i class="fas fa-exchange-alt"></i> 이체/통화 (Actions)</span>
                         <span id="etl-count-actions" style="color:#fdcb6e; font-weight:bold;">0</span>
                     </div>
                     <div style="display:flex; justify-content:space-between;">
-                        <span style="color:#e6e9ef;"><i class="fas fa-project-diagram"></i> 관계 (Relations)</span>
+                        <span style="color:#4a5568;"><i class="fas fa-project-diagram"></i> 관계 (Relations)</span>
                         <span id="etl-count-relations" style="color:#ff7675; font-weight:bold;">0</span>
                     </div>
                 </div>
@@ -1195,7 +1195,7 @@ function showTruncateBanner(metas){
                     <i class="fas fa-project-diagram" style="font-size:20px; color:white;"></i>
                     <div>
                         <h3 style="margin:0; color:white; font-size:18px;">GDB 변환 설계기 (Ontology Designer)</h3>
-                        <div style="color:#e6e9ef; font-size:12px;">RDB 데이터를 그래프(노드/엣지)로 변환하는 규칙을 정의합니다.</div>
+                        <div style="color:#4a5568; font-size:12px;">RDB 데이터를 그래프(노드/엣지)로 변환하는 규칙을 정의합니다.</div>
                     </div>
                 </div>
                 <button onclick="closeRdbDesignModal()"
@@ -1209,7 +1209,7 @@ function showTruncateBanner(metas){
                     style="width: 350px; background:#e7ecf5; border-right:1px solid #d5dae2; display:flex; flex-direction:column;">
                     <div
                         style="padding:15px; border-bottom:1px solid #d5dae2; display:flex; justify-content:space-between; align-items:center;">
-                        <span style="color:#e6e9ef; font-weight:bold;">매핑 규칙 목록</span>
+                        <span style="color:#4a5568; font-weight:bold;">매핑 규칙 목록</span>
                         <button onclick="autoGenerateMapping()"
                             style="padding:5px 10px; font-size:11px; background:#55efc4; box-shadow:0 0 8px rgba(85,239,196,0.4);">
                             <i class="fas fa-magic"></i> AI 자동 제안
@@ -1314,7 +1314,7 @@ function showTruncateBanner(metas){
                                     <label style="display:block; color:#aaa; font-size:12px; margin-bottom:5px;">데이터 연결
                                         조건 (Join Condition)</label>
                                     <div style="display:flex; gap:10px; align-items:center;">
-                                        <span style="color:#e6e9ef; font-size:13px;">RDB 테이블:</span>
+                                        <span style="color:#4a5568; font-size:13px;">RDB 테이블:</span>
                                         <select id="map-edge-table"
                                             style="width:150px; padding:5px; background:#eef1f6; color:white; border:1px solid rgba(255,255,255,0.12);">
                                             <option value="rdb_transfers">rdb_transfers (이체)</option>
@@ -1338,7 +1338,7 @@ function showTruncateBanner(metas){
                 <!-- 하단 액션바 -->
                 <div
                     style="padding:20px; background:#e7ecf5; border-top:1px solid #d5dae2; display:flex; justify-content:space-between; align-items:center;">
-                    <div id="design-status" style="color:#e6e9ef; font-size:14px;">
+                    <div id="design-status" style="color:#4a5568; font-size:14px;">
                         <i class="fas fa-info-circle"></i> 규칙을 설정하여 미리보기를 확인하세요.
                     </div>
                     <div style="display:flex; gap:10px;">
@@ -1628,7 +1628,7 @@ function showTruncateBanner(metas){
                             </select>
                         </div>
                     </div>
-                    <label style="display:flex; align-items:center; gap:8px; margin-top:12px; color:#e6e9ef; font-size:12px; cursor:pointer;">
+                    <label style="display:flex; align-items:center; gap:8px; margin-top:12px; color:#4a5568; font-size:12px; cursor:pointer;">
                         <input type="checkbox" id="v40PipelineFresh" checked style="cursor:pointer; accent-color:#00b894;">
                         <span><b>새로 적재</b> — 기존 스테이징(test_v40) 비우고 이 파일들만으로 그래프 생성
                             <span style="color:#6b7280;">(끄면 이전 적재분에 누적)</span></span>
@@ -2489,7 +2489,7 @@ function showTruncateBanner(metas){
             const cols = Array.from(new Set(scalars.flatMap(s => Object.keys((s.data && s.data.props) || {}))));
             const rows = scalars.map(s => s.data && s.data.props || {});
             const thead = `<tr>${cols.map(c => `<th style="padding:4px 8px; border-bottom:1px solid #555; color:#0984e3; text-align:left; font-size:11px;">${c}</th>`).join('')}</tr>`;
-            const tbody = rows.map(r => `<tr>${cols.map(c => `<td style="padding:4px 8px; border-bottom:1px solid #333; font-size:11px; color:#e6e9ef;">${(r[c] !== undefined && r[c] !== null) ? r[c] : ''}</td>`).join('')}</tr>`).join('');
+            const tbody = rows.map(r => `<tr>${cols.map(c => `<td style="padding:4px 8px; border-bottom:1px solid #333; font-size:11px; color:#4a5568;">${(r[c] !== undefined && r[c] !== null) ? r[c] : ''}</td>`).join('')}</tr>`).join('');
             body.innerHTML = `<div style="font-size:10px; color:#6b7280; margin-bottom:6px;">스칼라 결과 ${scalars.length}건 · ${cols.length}컬럼</div><table style="width:100%; border-collapse:collapse;">${thead}${tbody}</table>`;
             panel.style.display = 'block';
         }
@@ -2668,7 +2668,7 @@ function showTruncateBanner(metas){
                         // 목록 표시
                         listDiv.innerHTML = data.graphs.map(g => `
                             <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 10px; background:#e7ecf5; margin-bottom:5px; border-radius:4px;">
-                                <span style="color:#e6e9ef;">
+                                <span style="color:#4a5568;">
                                     <i class="fas fa-project-diagram" style="color:#1e4276; margin-right:8px;"></i>
                                     ${g.name} <span style="color:#4a5568; font-size:11px;">(${g.node_count} nodes)</span>
                                 </span>
@@ -4335,7 +4335,7 @@ function showTruncateBanner(metas){
                         <span>${badge('BM25', (s.bm25_rank != null) ? '#' + (s.bm25_rank + 1) : null, '#0984e3')}${badge('벡터', (s.vector_rank != null) ? '#' + (s.vector_rank + 1) : null, '#1e4276')}${badge('관련성', s.rerank, '#55efc4')}</span>
                     </div>
                     ${r.title ? `<div style="color:#4a5568; font-size:12px; margin-top:2px;">${legalEsc(r.title)}</div>` : ''}
-                    <div style="color:#e6e9ef; font-size:12px; margin-top:6px; line-height:1.6;">${legalEsc(content.slice(0, 300))}${content.length > 300 ? '…' : ''}</div>
+                    <div style="color:#4a5568; font-size:12px; margin-top:6px; line-height:1.6;">${legalEsc(content.slice(0, 300))}${content.length > 300 ? '…' : ''}</div>
                     ${r.source ? `<div style="color:#4a5568; font-size:10px; margin-top:4px;"><i class="fas fa-file"></i> ${legalEsc(r.source)}</div>` : ''}
                 </div>`;
             }).join('');
@@ -4530,7 +4530,7 @@ function showTruncateBanner(metas){
                 nodesHtml += `
                     <div style="display:inline-flex; align-items:center; gap:6px; padding:8px 12px; background:#e7ecf5; border:2px solid ${getColorByLabel(col.kics_label)}; border-radius:20px; font-size:12px;">
                         <span style="color:${getColorByLabel(col.kics_label)};">${getLabelIcon(col.kics_label)}</span>
-                        <span style="color:#e6e9ef;">${col.name}</span>
+                        <span style="color:#4a5568;">${col.name}</span>
                         <span style="color:#4a5568; font-size:10px;">${col.kics_label}</span>
                     </div>
                 `;
@@ -4757,7 +4757,7 @@ function showTruncateBanner(metas){
             files.forEach((f, i) => {
                 html += `
                 < div style = "display:flex; justify-content:space-between; align-items:center; padding:5px; border-bottom:1px solid #d5dae2;" >
-                        <span style="color:#e6e9ef;"><i class="fas fa-file-csv" style="color:#1e4276; margin-right:5px;"></i> ${f.name}</span>
+                        <span style="color:#4a5568;"><i class="fas fa-file-csv" style="color:#1e4276; margin-right:5px;"></i> ${f.name}</span>
                         <span style="color:#4a5568;">${(f.size / 1024).toFixed(1)} KB</span>
                         <span id="wiz-status-${i}" style="color:#ffeaa7;">대기중</span>
                     </div >
@@ -5096,7 +5096,7 @@ function showTruncateBanner(metas){
                                     <span style="color:#a29bfe; font-size:12px;">
                                         <i class="fas fa-arrow-right"></i> 데이터 보유 테이블
                                     </span>
-                                    <span style="color:#e6e9ef; font-size:12px; font-weight:bold;">
+                                    <span style="color:#4a5568; font-size:12px; font-weight:bold;">
                                         ${dataItems.length}개 / 총 레코드 ${expectedNodes}건
                                     </span>
                                 </div>`;
@@ -5131,7 +5131,7 @@ function showTruncateBanner(metas){
                                     <span style="color:#4a5568;">${item.table}</span>
                                     <span style="color:#4a5568;">→</span>
                                     <span style="color:#1e4276; font-weight:bold;">${item.graph_label}</span>
-                                    <span style="color:#e6e9ef;">${item.count}건</span>
+                                    <span style="color:#4a5568;">${item.count}건</span>
                                 </div > `;
                         });
                         html += '</div>';
@@ -5490,7 +5490,7 @@ function showTruncateBanner(metas){
                             gList.innerHTML = gdb.graphs.map(g => `
                                 <div style="display:flex; justify-content:space-between; padding:8px; border-bottom:1px solid #333; align-items:center;">
                                     <div>
-                                        <span style="color:#e6e9ef; font-weight:bold;">${g.name}</span>
+                                        <span style="color:#4a5568; font-weight:bold;">${g.name}</span>
                                         <span style="color:${g.status === 'active' ? '#00b894' : '#d63031'}; font-size:10px; margin-left:6px;">● ${g.status}</span>
                                     </div>
                                     <span style="color:#4a5568; font-size:11px;">V: ${g.vertex_labels}, E: ${g.edge_labels}</span>
@@ -5542,10 +5542,10 @@ function showTruncateBanner(metas){
                         let html = `<div style="margin-bottom:8px; display:flex; justify-content:space-between; align-items:center;">`;
                         html += `<span style="color:#4a5568; font-size:11px;">📋 ${tableName} — 총 ${data.total.toLocaleString()} 건(${data.page} / ${data.total_pages}페이지)</span>`;
                         html += `<div style="display:flex; gap:4px;">`;
-                        if (data.page > 1) html += `<button onclick="queryRdbTable('${tableName}',${data.page - 1})" style="background:#444;color:#e6e9ef;border:none;padding:3px 8px;border-radius:3px;cursor:pointer;font-size:10px;">◀ 이전</button>`;
-                        if (data.page < data.total_pages) html += `<button onclick="queryRdbTable('${tableName}',${data.page + 1})" style="background:#444;color:#e6e9ef;border:none;padding:3px 8px;border-radius:3px;cursor:pointer;font-size:10px;">다음 ▶</button>`;
+                        if (data.page > 1) html += `<button onclick="queryRdbTable('${tableName}',${data.page - 1})" style="background:#444;color:#4a5568;border:none;padding:3px 8px;border-radius:3px;cursor:pointer;font-size:10px;">◀ 이전</button>`;
+                        if (data.page < data.total_pages) html += `<button onclick="queryRdbTable('${tableName}',${data.page + 1})" style="background:#444;color:#4a5568;border:none;padding:3px 8px;border-radius:3px;cursor:pointer;font-size:10px;">다음 ▶</button>`;
                         html += `</div></div>`;
-                        html += '<table style="width:100%; border-collapse:collapse; color:#e6e9ef;">';
+                        html += '<table style="width:100%; border-collapse:collapse; color:#4a5568;">';
 
                         // 헤더
                         const colNames = data.columns.map(c => c.name).filter(c => c !== 'created_at');
@@ -5638,7 +5638,7 @@ function showTruncateBanner(metas){
                                 const color = labelColors[i % labelColors.length];
                                 html += `
                                 <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
-                                    <div style="width:90px; color:#e6e9ef; font-size:11px; text-align:right; flex-shrink:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${n.label}">${n.label}</div>
+                                    <div style="width:90px; color:#4a5568; font-size:11px; text-align:right; flex-shrink:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${n.label}">${n.label}</div>
                                     <div style="flex:1; background:#e7ecf5; border-radius:4px; overflow:hidden; height:20px;">
                                         <div style="width:${pct}%; background:${color}; height:100%; border-radius:4px; transition: width 0.6s ease;"></div>
                                     </div>
@@ -5660,7 +5660,7 @@ function showTruncateBanner(metas){
                                 const color = labelColors[(i + 3) % labelColors.length];
                                 html += `
                                 <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
-                                    <div style="width:110px; color:#e6e9ef; font-size:11px; text-align:right; flex-shrink:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${e.type}">${e.type}</div>
+                                    <div style="width:110px; color:#4a5568; font-size:11px; text-align:right; flex-shrink:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${e.type}">${e.type}</div>
                                     <div style="flex:1; background:#e7ecf5; border-radius:4px; overflow:hidden; height:20px;">
                                         <div style="width:${pct}%; background:${color}; height:100%; border-radius:4px; transition: width 0.6s ease;"></div>
                                     </div>
@@ -5872,7 +5872,7 @@ function showTruncateBanner(metas){
                 }
                 html += `
                 <div style="background:rgba(255,255,255,0.05); padding:10px; margin-bottom:5px; border-radius:4px; border-left:3px solid ${color}; display:flex; justify-content:space-between; align-items:center;">
-                    <div style="color:#e6e9ef; font-size:12px;">
+                    <div style="color:#4a5568; font-size:12px;">
                         <span style="color:${color}; margin-right:5px;">${icon}</span>
                         ${content}
                     </div>
@@ -7195,7 +7195,7 @@ function showTruncateBanner(metas){
                         ).join('') + '</tr></thead><tbody>';
                         d.rows.forEach(r => {
                             html += '<tr>' + uniqueCols.map(c =>
-                                '<td style="padding:2px 4px; border-bottom:1px solid #333; color:#e6e9ef; font-size:9px; max-width:80px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + (r[c] || '') + '</td>'
+                                '<td style="padding:2px 4px; border-bottom:1px solid #333; color:#4a5568; font-size:9px; max-width:80px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + (r[c] || '') + '</td>'
                             ).join('') + '</tr>';
                         });
                         html += '</tbody></table>';
@@ -7267,7 +7267,7 @@ function showTruncateBanner(metas){
                             let val = row[col] || '';
                             // 긴 값 자르기
                             if (val.length > 20) val = val.substring(0, 18) + '…';
-                            html += `<td style="padding:4px; color:#e6e9ef; border-bottom:1px solid #333; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:120px;" title="${row[col] || ''}">${val}</td>`;
+                            html += `<td style="padding:4px; color:#4a5568; border-bottom:1px solid #333; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:120px;" title="${row[col] || ''}">${val}</td>`;
                         });
                         html += '</tr>';
                     });
