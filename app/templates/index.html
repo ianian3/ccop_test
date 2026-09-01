@@ -133,7 +133,7 @@
             line-height: 1.15;
             white-space: nowrap;
         }
-        .logo-title span.logo-accent { color: #ffd43b; }
+        .logo-title span.logo-accent { color: #ffffff; }
         .logo-sub {
             font-size: 10px;
             color: #c2d0e8;
@@ -1578,6 +1578,35 @@ function showTruncateBanner(metas){
                     title="Louvain 조직 군집을 테두리 색으로 — 같은 무리 식별">🎨 군집색</button>
                 <button id="btn-ego" class="tool-btn" style="--tc:#4dabf7; margin-left:2px" onclick="toggleEgoMode()"
                     title="노드 클릭 시 직접 연결(이웃)만 강조 — 연관관계 즉시 파악">🔗 연관강조</button>
+                <!-- ── 네트워크 분석 알고리즘 (CALL ccop.algo.* → UI) ── -->
+                <span style="width:1px;height:20px;background:#d5dae2;margin:0 6px;display:inline-block;vertical-align:middle;"></span>
+                <select id="algoSelect" title="네트워크 분석 알고리즘 선택"
+                    style="background:#fff;color:#16202e;border:1px solid #d5dae2;border-radius:14px;padding:5px 10px;font-size:11px;font-weight:600;cursor:pointer;font-family:var(--font-main);">
+                    <optgroup label="중심성">
+                        <option value="top:pagerank">PageRank · 영향력</option>
+                        <option value="top:betweenness">매개중심성 · 중개허브</option>
+                        <option value="top:degree_cent">연결중심성 · 연결수</option>
+                        <option value="top:eigenvector">고유벡터 · 영향이웃</option>
+                    </optgroup>
+                    <optgroup label="구조">
+                        <option value="top:kcore">k-core · 밀집참여</option>
+                        <option value="top:clustering">삼각형계수 · 결속</option>
+                    </optgroup>
+                    <optgroup label="패턴">
+                        <option value="cycles">순환흐름 · 자금세탁</option>
+                    </optgroup>
+                </select>
+                <select id="algoLabel" title="노드 타입 필터"
+                    style="background:#fff;color:#16202e;border:1px solid #d5dae2;border-radius:14px;padding:5px 8px;font-size:11px;font-weight:600;cursor:pointer;margin-left:4px;font-family:var(--font-main);">
+                    <option value="">전체</option>
+                    <option value="vt_bacnt">계좌</option>
+                    <option value="vt_psn">인물</option>
+                    <option value="vt_ip">IP</option>
+                    <option value="vt_org">조직</option>
+                    <option value="vt_telno">전화</option>
+                </select>
+                <button class="tool-btn" style="--tc:#1e4276;margin-left:4px" onclick="runAlgo()"
+                    title="선택한 네트워크 분석 알고리즘 실행 — 결과를 사이드바·그래프에 표시">▶ 분석</button>
             </div>
 
             <!-- V4.0 5계층 통합 마법사 (L1→L5) — 상단 탭바 버튼으로 토글 -->
@@ -2910,6 +2939,66 @@ function showTruncateBanner(metas){
             cy.batch(() => { cy.elements().style('opacity', 0.1); hood.style('opacity', 1); });
         }
         function clearEgo() { cy.batch(() => cy.elements().removeStyle('opacity')); }
+
+        // ── 네트워크 분석 알고리즘 UI (CALL ccop.algo.* → /api/graph/algo) ──
+        const _ALGO_NAME = { pagerank: 'PageRank(영향력)', betweenness: '매개중심성(중개허브)', degree_cent: '연결중심성', eigenvector: '고유벡터중심성', kcore: 'k-core(밀집참여)', clustering: '삼각형계수(결속)' };
+        function _nodeKey(n) { const p = n.data('props') || {}; return String(p.name || p.account_no || p.telno || p.ip_addr || p.id_val || p.flnm || p.org_name || p.atm_nm || p.email_addr || p.src_name || ''); }
+        function runAlgo() {
+            const sel = document.getElementById('algoSelect').value;
+            const graph = document.getElementById('targetGraphInfo').value;
+            if (!graph) { showToast('그래프를 먼저 선택하세요', 'warning'); return; }
+            let body;
+            if (sel === 'cycles') body = { graph_path: graph, algo: 'cycles', params: { maxLen: 6, limit: 12 } };
+            else body = { graph_path: graph, algo: 'top', params: { metric: sel.split(':')[1], label: document.getElementById('algoLabel').value, topN: 15 } };
+            showToast('🔬 네트워크 분석 실행 중…', 'info');
+            fetch(API_URL + '/graph/algo', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+                .then(r => r.json()).then(d => {
+                    if (d.error) { showToast('분석 오류: ' + d.error, 'error'); return; }
+                    if (d.algo === 'cycles') renderCyclesResult(d); else renderTopResult(d);
+                }).catch(e => showToast('분석 실패: ' + e, 'error'));
+        }
+        function renderTopResult(d) {
+            switchSidebarTab('details');
+            const nm = _ALGO_NAME[d.metric] || d.metric;
+            let h = `<div style="font-weight:700;color:#1e4276;margin-bottom:10px;font-size:13px;">🔬 ${nm} 상위 ${d.results.length}<span style="color:#98a2b3;font-weight:400;font-size:11px;"> / 전체 ${d.total}</span></div>`;
+            h += '<table style="width:100%;border-collapse:collapse;font-size:12px;">';
+            d.results.forEach(r => {
+                const k = String(r.key).replace(/'/g, "\\'");
+                h += `<tr style="cursor:pointer;border-bottom:1px solid #eef1f6;" onclick="focusAlgoNode('${k}')" title="클릭 시 그래프에서 강조">
+                    <td style="padding:5px;color:#98a2b3;width:24px;">${r.rank}</td>
+                    <td style="padding:5px;font-weight:600;color:#16202e;">${r.key}</td>
+                    <td style="padding:5px;color:#1e4276;text-align:right;font-variant-numeric:tabular-nums;">${(+r.score).toFixed(4)}</td></tr>`;
+            });
+            h += '</table><div style="margin-top:8px;color:#98a2b3;font-size:10px;">상위 노드는 그래프에서 주황 테두리로 강조 · 행 클릭 시 focus</div>';
+            document.getElementById('node-info').innerHTML = h;
+            highlightAlgoNodes(d.results.map(r => r.key));
+            showToast(`✅ ${nm} 상위 ${d.results.length} — 사이드바·그래프 표시`, 'success');
+        }
+        function renderCyclesResult(d) {
+            switchSidebarTab('details');
+            let h = `<div style="font-weight:700;color:#1e4276;margin-bottom:10px;font-size:13px;">🔄 순환 흐름 ${d.count}건<span style="color:#98a2b3;font-weight:400;font-size:11px;"> · 자금세탁 typology</span></div>`;
+            (d.cycles || []).forEach((c, i) => { const names = c.map(x => x.key || '?').join(' → '); h += `<div style="padding:6px 4px;border-bottom:1px solid #eef1f6;font-size:12px;color:#16202e;">${i + 1}. ${names} → <span style="color:#1e4276;">${c[0].key}</span></div>`; });
+            if (!d.count) h += '<div style="color:#98a2b3;">길이 6 이하 순환 없음</div>';
+            document.getElementById('node-info').innerHTML = h;
+            highlightAlgoNodes((d.cycles || []).flat().map(x => x.key));
+            showToast(`✅ 순환 ${d.count}건 탐지 — 노드 강조`, 'success');
+        }
+        function highlightAlgoNodes(keys) {
+            if (!window.cy) return;
+            const kset = new Set(keys.filter(k => k && String(k).trim()).map(String));
+            cy.batch(() => {
+                cy.nodes().forEach(n => {
+                    const key = _nodeKey(n);
+                    if (key && kset.has(key)) n.style({ 'border-color': '#e17055', 'border-width': 6, 'z-index': 9999 });
+                });
+            });
+        }
+        function focusAlgoNode(key) {
+            if (!window.cy) return;
+            const t = cy.nodes().filter(n => _nodeKey(n) === String(key))[0];
+            if (t) { cy.animate({ center: { eles: t }, zoom: 1.2 }, { duration: 400 }); t.select(); t.emit('tap'); }
+            else showToast('그래프에 없는 노드 — 전체 보기 후 재시도', 'info');
+        }
 
         function applyPoleLayerLayout() {
             if (_layoutLocked) return;   // 위치 고정 중 — 재배치 생략
