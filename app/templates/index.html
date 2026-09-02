@@ -3076,6 +3076,20 @@ function showTruncateBanner(metas){
             highlightAlgoNodes(mem.map(m => m.key));
             showToast(`✅ 군집 #${d.id} 멤버 ${d.size} — 로드된 노드 강조`, 'success');
         }
+        // 앵커 중심 방사형 배치 — 검색/추천 시작 결과의 기본 시각화 (hop 거리별 동심원).
+        // 대형 누적 캔버스(>600노드)나 위치고정 중에는 기존 레이아웃 유지.
+        function focusRadial(anchorKey) {
+            if (!window.cy || _layoutLocked) return false;
+            const t = cy.nodes(':visible').filter(n => _nodeKey(n) === String(anchorKey))[0];
+            if (!t || cy.nodes(':visible').length > 600) return false;
+            const dist = {};
+            cy.elements(':visible').bfs({ roots: t, visit: (v, e, u, i, depth) => { dist[v.id()] = depth; } });
+            cy.layout({ name: 'concentric',
+                concentric: n => 10 - Math.min(dist[n.id()] !== undefined ? dist[n.id()] : 6, 6),
+                levelWidth: () => 1, minNodeSpacing: 26, animate: true, fit: true, padding: 70 }).run();
+            return true;
+        }
+
         // ── 콜드스타트 추천 (영향력 Top 10) — 빈 캔버스에서 시작점 제시 ──
         const _REC_LABELS = { vt_bacnt:'🏦 계좌', vt_psn:'👤 인물', vt_ip:'🖥 IP', vt_telno:'📱 전화', vt_org:'🏢 조직', vt_id:'🆔 계정', vt_email:'📧 이메일', vt_atm:'🏧 ATM' };
         function showStartRecommend(graph) {
@@ -3633,7 +3647,11 @@ function showTruncateBanner(metas){
             fetch(`${API_URL}/search?keyword=${encodeURIComponent(keyword)}&graph_path=${graphName}`)
                 .then(r => r.json()).then(d => {
                     const before = cy.nodes().length;
-                    const added = mergeIntoGraph(preprocessElements(_asElementArray(d)));
+                    const added = mergeIntoGraph(preprocessElements(_asElementArray(d)), { skipLayout: true });
+                    // 앵커 중심 방사형이 기본 — 불가 시(대형 누적 등) 기존 자동 배치 폴백
+                    if (!focusRadial(keyword) && !_layoutLocked) {
+                        cy.elements(':visible').layout({ name: 'dagre', rankDir: 'LR', nodeSep: 50, rankSep: 100, animate: true, fit: true }).run();
+                    }
                     if (isAccumulateMode() && before > 0) {
                         showToast(`🔍 누적 +${added}개 노드 (총 ${cy.nodes().length}개)`, 'success');
                     }
@@ -3671,7 +3689,7 @@ function showTruncateBanner(metas){
         }
 
         // rawEls(전처리 완료된 요소 배열)를 그래프에 병합. 반환: 새로 추가된 노드 수.
-        function mergeIntoGraph(rawEls) {
+        function mergeIntoGraph(rawEls, opts) {
             const els = _asElementArray(rawEls);
             const additive = isAccumulateMode() && cy.elements().length > 0;
             if (!additive) {
@@ -3711,7 +3729,7 @@ function showTruncateBanner(metas){
             // 이벤트 접기 모드면 새로 들어온 이벤트도 즉시 접기 + 고정 모드 신규 노드 배치 (멱등)
             afterElementsAdded(added);
             // 누적인데 새로 추가된 게 없으면(전부 중복) 재배치 생략 — 화면 흔들림 방지 · 위치 고정 시 항상 생략
-            if ((!additive || safe.length > 0) && !_layoutLocked) {
+            if ((!additive || safe.length > 0) && !_layoutLocked && !(opts && opts.skipLayout)) {
                 const layoutEles = isEventCollapseMode() ? cy.elements(':visible') : cy.elements();
                 layoutEles.layout({ name: 'dagre', rankDir: 'LR', nodeSep: 50, rankSep: 100, animate: true, fit: true }).run();
             }
