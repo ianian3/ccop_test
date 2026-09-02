@@ -2889,6 +2889,15 @@ function showTruncateBanner(metas){
                 n.style({ 'width': sz + 'px', 'height': sz + 'px' });
             });
         }
+        // 중심성 크기 상시 적용 — 어떤 흐름(전체보기·검색·추천·확장·T2C·딥링크)으로
+        // 노드가 들어와도 버튼 ON이면 PageRank 크기 자동 반영 (debounce 150ms)
+        let _prSizeTimer = null;
+        cy.on('add', 'node', () => {
+            if (!_centralityOn) return;
+            clearTimeout(_prSizeTimer);
+            _prSizeTimer = setTimeout(applyPagerankSizing, 150);
+        });
+
         function applyIntelView() {
             if (_layoutLocked) return;
             const PR = n => { const pp = n.data('props') || {}; return +(pp.pagerank || 0); };
