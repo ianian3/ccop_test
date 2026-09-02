@@ -1615,6 +1615,16 @@ function showTruncateBanner(metas){
                 <button class="tool-btn" style="--tc:#1e4276;margin-left:4px" onclick="runAlgo()"
                     title="선택한 네트워크 분석 알고리즘 실행 — 결과를 사이드바·그래프에 표시">▶ 분석</button>
             </div>
+            <!-- 콜드스타트 추천: 빈 캔버스에서 어디부터 볼지 — 영향력(PageRank) Top 10 -->
+            <div id="startRecommend" style="display:none; position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); z-index:200; width:560px; max-width:calc(100% - 480px); background:rgba(255,255,255,0.98); border:1px solid #d5dae2; border-radius:14px; box-shadow:0 8px 32px rgba(16,24,40,0.14); padding:18px 20px;">
+                <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
+                    <span style="font-weight:800; color:#1e4276; font-size:15px;">🎯 추천 시작점 — 영향력 Top 10</span>
+                    <button onclick="closeStartRecommend()" style="margin-left:auto; background:transparent; border:none; color:#98a2b3; font-size:16px; cursor:pointer;">✕</button>
+                </div>
+                <div style="font-size:11.5px; color:#4a5568; margin-bottom:12px;">처음이라면 아래 핵심 노드에서 시작하세요 — 클릭하면 해당 노드와 연결 관계를 불러옵니다. (PageRank 자동 랭킹)</div>
+                <div id="startRecommendList" style="display:grid; grid-template-columns:1fr 1fr; gap:6px;"></div>
+                <div style="font-size:10.5px; color:#98a2b3; margin-top:10px;">다른 시작 방법: 상단 <b>검색</b> · <b>자연어 질문</b> · <b>전체 보기</b> · <b>수사 브리핑</b> 탭</div>
+            </div>
 
             <!-- V4.0 5계층 통합 마법사 (L1→L5) — 상단 탭바 버튼으로 토글 -->
             <div id="v40PipelinePanel"
@@ -2732,6 +2742,7 @@ function showTruncateBanner(metas){
                         if (cy.elements().length === 0 && select.value && !window._vqMode) {
                             // P0: 빈 페이지로 시작 — 전체 자동 렌더 금지. 질의/검색으로 진입 유도.
                             if (typeof showToast==='function') showToast(`🔍 '${select.value}' 선택됨 — 자연어 질문이나 검색으로 시작하세요 (전체 표시는 상단 '전체 보기').`, 'info');
+                            showStartRecommend(select.value);
                         }
                     }
                 })
@@ -2795,6 +2806,7 @@ function showTruncateBanner(metas){
             cy.elements().remove();
             updateFilterCounts();
             showToast(`🔍 '${graphName}' 선택됨 — 자연어 질문·검색으로 시작하세요 (전체는 '전체 보기' 버튼).`, "info");
+            showStartRecommend(graphName);
         }
 
         // 명시적 전체 로드 ('전체 보기' 버튼 전용 — 대형 그래프는 서버 규모 가드로 잘림 안내)
@@ -3064,6 +3076,34 @@ function showTruncateBanner(metas){
             highlightAlgoNodes(mem.map(m => m.key));
             showToast(`✅ 군집 #${d.id} 멤버 ${d.size} — 로드된 노드 강조`, 'success');
         }
+        // ── 콜드스타트 추천 (영향력 Top 10) — 빈 캔버스에서 시작점 제시 ──
+        const _REC_LABELS = { vt_bacnt:'🏦 계좌', vt_psn:'👤 인물', vt_ip:'🖥 IP', vt_telno:'📱 전화', vt_org:'🏢 조직', vt_id:'🆔 계정', vt_email:'📧 이메일', vt_atm:'🏧 ATM' };
+        function showStartRecommend(graph) {
+            if (!graph || (window.cy && cy.nodes().length > 0)) return;   // 이미 데이터 있으면 불필요
+            fetch(API_URL + '/graph/algo', { method:'POST', headers:{'Content-Type':'application/json'},
+                body: JSON.stringify({ graph_path: graph, algo:'top', params:{ metric:'pagerank', topN:20 } }) })
+                .then(r=>r.json()).then(d=>{
+                    const rows=(d.results||[]).filter(r=>_REC_LABELS[r.label]).slice(0,10);
+                    if (!rows.length) return;   // 지표 미계산 그래프 — 조용히 생략
+                    document.getElementById('startRecommendList').innerHTML = rows.map((r,i)=>{
+                        const k=String(r.key).replace(/'/g,"\\'");
+                        return `<div onclick="startFromNode('${k}')" style="cursor:pointer;display:flex;align-items:center;gap:8px;padding:7px 10px;border:1px solid #e6e9ef;border-radius:9px;background:#f9fafc;" onmouseover="this.style.borderColor='#1e4276'" onmouseout="this.style.borderColor='#e6e9ef'">
+                            <span style="color:#98a2b3;font-size:11px;width:16px;">${i+1}</span>
+                            <span style="font-size:11px;white-space:nowrap;">${_REC_LABELS[r.label]}</span>
+                            <span style="font-weight:700;color:#0b1220;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">${r.key}</span>
+                            <span style="font-family:monospace;font-size:10px;color:#1e4276;">${(+r.score).toFixed(4)}</span></div>`;
+                    }).join('');
+                    document.getElementById('startRecommend').style.display='block';
+                }).catch(()=>{});
+        }
+        function closeStartRecommend(){ const el=document.getElementById('startRecommend'); if(el) el.style.display='none'; }
+        function startFromNode(key){
+            closeStartRecommend();
+            const inp=document.getElementById('manualInput'); if(inp) inp.value=key;
+            manualSearch();
+        }
+        if (window.cy) cy.on('add', 'node', closeStartRecommend);   // 데이터 들어오면 자동 숨김
+
         let _algoKeys = [];   // 현재 분석 강조 대상 키 (토글·리셋과 협조)
         let _lastAlgoHtml = null;   // 마지막 분석 결과 패널(리스트) — 노드 상세에서 '뒤로가기' 복원용
         function backToAlgoList() {
