@@ -3302,7 +3302,7 @@ function showTruncateBanner(metas){
                 <button onclick="closeBriefing()" style="margin-left:auto;background:#f4f6f9;border:1px solid #d5dae2;color:#3a4453;border-radius:8px;padding:5px 12px;cursor:pointer">닫기 ✕</button>
               </div>
               <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:18px">
-                ${kpi(D.n_case||0,'건','신고 사건','#f87171')}${kpi(_eok(D.damage_total||0),'억','편취금','#fbbf24')}${kpi(_eok(D.fund_total||0),'억','자금흐름','#f97316')}${kpi(D.n_bacnt||0,'개','계좌','#c084fc')}${kpi((D.hubs||[]).length,'개','거점 IP','#f43f5e')}${kpi(D.n_realname||0,'명','실명 특정','#38bdf8')}
+                ${kpi(D.n_case||0,'건','신고 사건','#f87171')}${kpi(_eok(D.damage_total||0),'억','편취금','#fbbf24')}${kpi(_eok(D.fund_total||0),'억','자금흐름','#f97316')}${kpi(D.n_bacnt||0,'개','계좌','#c084fc')}${kpi((D.hubs||[]).length,'개','거점 IP','#f43f5e')}${kpi(D.n_realname||0,'명','실명 특정(대상IP)','#38bdf8')}
               </div>
               <div style="display:grid;grid-template-columns:1.3fr 1fr;gap:18px">
                 <div>

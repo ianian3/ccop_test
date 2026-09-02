@@ -466,7 +466,12 @@ def graph_briefing():
         D['n_bacnt'] = q1("MATCH (b:vt_bacnt) RETURN count(*)")
         D['damage_total'] = isum(q("MATCH (c:vt_case) WHERE c.damage_amt IS NOT NULL RETURN c.damage_amt"))
         D['fund_total'] = isum(q("MATCH ()-[e:transferred_to]->() WHERE e.total_amount IS NOT NULL RETURN e.total_amount"))
-        D['n_realname'] = q1("MATCH (p:vt_psn) WHERE p.source_id CONTAINS 'naver' RETURN count(*)")
+        # 실명 특정 KPI: 대상 IP 역조회(EP7-045)로 특정된 인물만 — 수사적 의미의 '특정'.
+        # (기존 naver 소스 전체는 EP6 일반 가입자 1,615명까지 포함해 과대계상)
+        D['n_realname'] = q1("MATCH (i)-[e:registered_to]->(p:vt_psn) "
+                             "WHERE e.source_id =~ 'EP7-045.*' RETURN count(DISTINCT p)")
+        if not D['n_realname']:   # EP7-045 없는 그래프 폴백: naver 소스 인물 전체
+            D['n_realname'] = q1("MATCH (p:vt_psn) WHERE p.source_id CONTAINS 'naver' RETURN count(*)")
         D['pierce'] = q1("MATCH (b:vt_bacnt)-[:belongs_to]->(o:vt_org {org_name:'피어스미디어'}) RETURN count(b)")
         D['total_nodes'] = q1("MATCH (n) RETURN count(*)")
         D['total_edges'] = q1("MATCH ()-[r]->() RETURN count(*)")
