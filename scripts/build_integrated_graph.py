@@ -20,7 +20,7 @@ EDGES = ['eg_used_account', 'eg_used_phone', 'eg_used_id', 'has_account', 'victi
          'sourced_from', 'linked_to', 'uses_id', 'uses_email', 'owns_phone', 'sameAs']
 GRAPHS = ['ep1_graph', 'ep2_graph', 'ep3_graph', 'ep4_graph',
           'ep5_graph', 'ep6_graph', 'ep7_graph', 'ep8_graph',
-          'ep10_graph']   # EP9/10: 정형 없음 → 수동 확정 시드(docs/EP910_SEED_DRAFT_20260902.md)
+          'ep9_graph', 'ep10_graph']   # EP9/10: 정형 없음 → 수동 확정 시드(docs/EP910_SEED_DRAFT_20260902.md)
 INTEG = 'ccop_ep_integrated'
 
 
