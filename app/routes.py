@@ -498,6 +498,26 @@ def graph_briefing():
         except Exception:
             D['sameas'] = []
 
+        # 피의자 특정 현황 — 수사 브리핑의 결론부 (EP9/10 시드: suspect_in + 출입국 도피)
+        try:
+            sus = {}
+            for nm, role, birth, addr, case in q(
+                    "MATCH (p:vt_psn)-[:suspect_in]->(c:vt_case) "
+                    "RETURN p.name, p.role, p.birth_partial, p.addr_base, c.flnm"):
+                sus[nm] = {'name': nm, 'role': role or '피의자', 'birth': birth, 'addr': addr,
+                           'case': case, 'depart': None}
+            for nm, dt, dest in q(
+                    "MATCH (m:vt_movement)-[:performed_by]->(p:vt_psn) "
+                    "RETURN p.name, m.mov_dt, m.dest"):
+                if nm in sus:
+                    sus[nm]['depart'] = f"{dt} {dest or ''}".strip()
+            # 주범 먼저, 이후 출국일 순
+            D['suspects'] = sorted(sus.values(),
+                                   key=lambda x: (0 if '주범' in (x['role'] or '') else 1,
+                                                  x['depart'] or 'z'))
+        except Exception:
+            D['suspects'] = []
+
         # PageRank 영향력 Top (scripts/graph_analytics.py --set 후 pagerank 속성이 있을 때만)
         def _toppr(label, kexpr):
             rows = q(f"MATCH (n:{label}) WHERE n.pagerank IS NOT NULL RETURN {kexpr}, n.pagerank")

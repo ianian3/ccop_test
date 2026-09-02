@@ -3304,7 +3304,7 @@ function showTruncateBanner(metas){
             const kpi=(v,u,l,c)=>`<div style="background:#ffffff;border:1px solid #d5dae2;border-top:3px solid ${c};border-radius:10px;padding:12px 14px"><div style="font-size:22px;font-weight:800;font-family:monospace;color:#0b1220">${v}<span style="font-size:11px;color:#4a5568">${u}</span></div><div style="font-size:12px;color:#3a4453;margin-top:3px">${l}</div></div>`;
             const hubRows=(D.hubs||[]).map(h=>`<tr style="border-bottom:1px solid #eef1f6"><td style="padding:7px 6px"><a onclick="briefingFocus('${h.ip}')" style="color:#f87171;font-family:monospace;font-weight:600;cursor:pointer" title="이 거점 그래프로 펼치기">${h.ip} ↗</a></td><td style="padding:7px 6px;color:#3a4453">${h.ep_count}개EP</td><td style="padding:7px 6px;font-size:12px"><span style="color:#c084fc">070·${h.telno}</span> <span style="color:#fbbf24">계정 ${h.accounts}</span></td></tr>`).join('')||'<tr><td style="padding:8px;color:#4a5568">교차 거점 없음(단일 EP 그래프)</td></tr>';
             const fmax=(D.fund_top&&D.fund_top[0]?D.fund_top[0].amt:1)||1;
-            const fundRows=(D.fund_top||[]).map(f=>{const clk=f.from_acct?`onclick="fundFocus('${f.from_acct}')" title="이 계좌 자금흐름 펼치기"`:'';return `<div ${clk} style="display:grid;grid-template-columns:auto 1fr auto;gap:8px;align-items:center;padding:4px 0;font-size:12px${f.from_acct?';cursor:pointer':''}"><span style="color:#3a4453;white-space:nowrap">${f.from} → ${f.to}${f.from_acct?' <span style="color:#f97316">↗</span>':''}</span><span style="height:14px;border-radius:4px;background:linear-gradient(90deg,#fbbf24,#f97316);width:${Math.round(f.amt/fmax*100)}%"></span><span style="font-family:monospace;font-weight:700;color:#0b1220">${_eok(f.amt)}억</span></div>`;}).join('')||'<div style="color:#4a5568;font-size:12px">자금흐름 없음</div>';
+            const fundRows=(D.fund_top||[]).map(f=>{const clk=f.from_acct?`onclick="fundFocus('${f.from_acct}')" title="이 계좌 자금흐름 펼치기"`:'';return `<div ${clk} style="display:grid;grid-template-columns:auto 1fr auto;gap:8px;align-items:center;padding:4px 0;font-size:12px${f.from_acct?';cursor:pointer':''}"><span style="color:#3a4453;white-space:nowrap">${f.from==='?'?'미상':f.from} → ${f.to==='?'?'미상':f.to}${f.from_acct?' <span style="color:#f97316">↗</span>':''}</span><span style="height:14px;border-radius:4px;background:linear-gradient(90deg,#fbbf24,#f97316);width:${Math.round(f.amt/fmax*100)}%"></span><span style="font-family:monospace;font-weight:700;color:#0b1220">${_eok(f.amt)}억</span></div>`;}).join('')||'<div style="color:#4a5568;font-size:12px">자금흐름 없음</div>';
             const saRows=(D.sameas||[]).map(s=>`<span style="display:inline-block;font-size:12px;padding:3px 9px;border-radius:6px;background:#f4f6f9;border:1px solid #d5dae2;color:#3a4453;margin:2px">${s.a} ↔ ${s.b}</span>`).join('')||'<span style="color:#4a5568;font-size:12px">후보 없음</span>';
             const prcard=(t,arr,col)=>`<div style="background:#ffffff;border:1px solid #d5dae2;border-radius:10px;padding:12px"><div style="color:${col};font-size:11px;font-weight:700;margin-bottom:6px">${t}</div>${(arr||[]).map((x,i)=>`<div style="display:flex;justify-content:space-between;font-size:12px;padding:2px 0;color:#3a4453"><span>${i+1}. ${x.k}</span><span style="font-family:monospace;color:#0b1220">${x.pr}</span></div>`).join('')||'<span style="color:#4a5568;font-size:12px">— (graph_analytics 미실행)</span>'}</div>`;
             const inf=D.influence||{};
@@ -3316,8 +3316,20 @@ function showTruncateBanner(metas){
                 <button onclick="closeBriefing()" style="margin-left:auto;background:#f4f6f9;border:1px solid #d5dae2;color:#3a4453;border-radius:8px;padding:5px 12px;cursor:pointer">닫기 ✕</button>
               </div>
               <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:18px">
-                ${kpi(D.n_case||0,'건','신고 사건','#f87171')}${kpi(_eok(D.damage_total||0),'억','편취금','#fbbf24')}${kpi(_eok(D.fund_total||0),'억','자금흐름','#f97316')}${kpi(D.n_bacnt||0,'개','계좌','#c084fc')}${kpi((D.hubs||[]).length,'개','거점 IP','#f43f5e')}${kpi(D.n_realname||0,'명','실명 특정(대상IP)','#38bdf8')}
+                ${kpi(D.n_case||0,'건','신고 사건','#f87171')}${kpi(_eok(D.damage_total||0),'억','신고 피해액','#fbbf24')}${kpi(_eok(D.fund_total||0),'억','자금흐름','#f97316')}${kpi(D.n_bacnt||0,'개','계좌','#c084fc')}${kpi((D.hubs||[]).length,'개','거점 IP','#f43f5e')}${kpi(D.n_realname||0,'명','실명 특정(대상IP)','#38bdf8')}
               </div>
+              ${(D.suspects&&D.suspects.length)?`
+              <div style="margin-bottom:18px">
+                <div style="font-size:12px;font-weight:700;color:#4a5568;text-transform:uppercase;margin-bottom:8px">🚨 피의자 특정 현황 <span style="font-weight:400">— 체포영장 신청(문서 검증) · 클릭 시 그래프 검색</span></div>
+                <div style="background:#ffffff;border:1.5px solid #d63031;border-radius:10px;padding:12px;display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
+                ${D.suspects.map(s=>`
+                  <div onclick="briefingSuspect('${String(s.name).replace(/'/g,"\\'")}')" style="cursor:pointer;padding:8px 10px;border:1px solid ${/주범/.test(s.role||'')?'#d63031':'#d5dae2'};border-radius:8px;background:${/주범/.test(s.role||'')?'#fff5f5':'#f9fafc'}">
+                    <div style="font-weight:800;color:#0b1220;font-size:13px">${s.name} ${/주범/.test(s.role||'')?'<span style="color:#d63031;font-size:10px">● 주범</span>':''}</div>
+                    <div style="font-size:11px;color:#4a5568">${s.role||''}${s.birth?' · '+s.birth:''}</div>
+                    <div style="font-size:11px;color:#d63031;font-weight:600">${s.depart?'✈ 출국 '+s.depart:''}</div>
+                  </div>`).join('')}
+                </div>
+              </div>`:''}
               <div style="display:grid;grid-template-columns:1.3fr 1fr;gap:18px">
                 <div>
                   <div style="font-size:12px;font-weight:700;color:#4a5568;text-transform:uppercase;margin-bottom:8px">핵심 거점 IP <span style="font-weight:400">— 클릭 시 그래프 펼침</span></div>
@@ -3338,6 +3350,11 @@ function showTruncateBanner(metas){
               </div>
               <div style="font-size:11px;color:#4a5568;margin-top:16px;border-top:1px solid #d5dae2;padding-top:12px">결정론 적재(source_id 원본 대조) · 비식별 시나리오 · sameAs 미확정(수사관 검토) · PageRank는 graph_analytics.py 실행 시 갱신</div>
             </div>`;
+        }
+        function briefingSuspect(name){
+            closeBriefing(); switchTab('graph');
+            const inp=document.getElementById('manualInput'); if(inp) inp.value=name;
+            setTimeout(()=>manualSearch(), 200);
         }
         function briefingFocus(ip){
             closeBriefing();
