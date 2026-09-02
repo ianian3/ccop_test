@@ -103,11 +103,20 @@ class GraphAlgoService:
 
     @staticmethod
     def _export(graph):
-        """AgensGraph → NetworkX (id2: nid→(label,key)). 캐시."""
-        if graph in GraphAlgoService._cache:
-            return GraphAlgoService._cache[graph]
+        """AgensGraph → NetworkX (id2: nid→(label,key)).
+        캐시 + fingerprint(노드·엣지 수) 검증 — 그래프 재생성(DROP+build) 시
+        stale export로 옛 결과를 반환하던 문제 방지 (검증 비용 = count 2회)."""
         conn, cur = GraphAlgoService._cur()
         safe_set_graph_path(cur, graph)
+        cur.execute("MATCH (n) RETURN count(n)")
+        n_cnt = cur.fetchone()[0]
+        cur.execute("MATCH ()-[r]->() RETURN count(r)")
+        e_cnt = cur.fetchone()[0]
+        fp = (n_cnt, e_cnt)
+        cached = GraphAlgoService._cache.get(graph)
+        if cached and cached[0] == fp:
+            conn.close()
+            return cached[1], cached[2]
         cur.execute(f"MATCH (n) RETURN id(n), label(n), {KEYEXPR}")
         id2 = {str(nid): (lbl, key) for nid, lbl, key in cur.fetchall()}
         G = nx.DiGraph()
@@ -116,7 +125,7 @@ class GraphAlgoService:
         for a, b in cur.fetchall():
             G.add_edge(str(a), str(b))
         conn.close()
-        GraphAlgoService._cache[graph] = (G, id2)
+        GraphAlgoService._cache[graph] = (fp, G, id2)
         return G, id2
 
     @staticmethod
@@ -225,7 +234,8 @@ class GraphAlgoService:
             raise ValueError("community metric은 community_id/community_lp만")
         conn, cur = GraphAlgoService._cur()
         safe_set_graph_path(cur, graph)
-        cur.execute(f"MATCH (n) WHERE n.{metric}='{cid}' RETURN {KEYEXPR}, label(n)")
+        # P1-B 이후 지표는 숫자 저장 — 문자열 quote 시 타입 불일치로 0건 (검증에서 적발)
+        cur.execute(f"MATCH (n) WHERE n.{metric}={cid} RETURN {KEYEXPR}, label(n)")
         members = [{'key': k, 'label': l} for k, l in cur.fetchall() if k]
         conn.close()
         from collections import Counter

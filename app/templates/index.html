@@ -2909,22 +2909,35 @@ function showTruncateBanner(metas){
 
         // ── 분석 도구 ②: Louvain 조직 군집색 (community_id → 테두리 색; 상위 N개만) ──
         const COMMUNITY_PALETTE = ['#4dabf7', '#f783ac', '#69db7c', '#ffd43b', '#e599f7', '#ff922b', '#63e6be', '#ffa8a8'];
+        function reapplyCommunityColor() {
+            // 가시 노드의 커뮤니티 크기 집계 → 상위 N개만 팔레트, 나머지는 회색(파편 군집)
+            const cnt = {};
+            cy.nodes(':visible').forEach(n => { const c = (n.data('props') || {}).community_id; if (c != null) cnt[c] = (cnt[c] || 0) + 1; });
+            const top = Object.entries(cnt).sort((a, b) => b[1] - a[1]).slice(0, COMMUNITY_PALETTE.length).map(e => e[0]);
+            const colorOf = {}; top.forEach((c, i) => colorOf[c] = COMMUNITY_PALETTE[i]);
+            cy.batch(() => cy.nodes().forEach(n => {
+                const col = colorOf[String((n.data('props') || {}).community_id)];
+                n.style({ 'border-color': col || '#5a6274', 'border-width': col ? 6 : 2 });
+            }));
+            return top.length;
+        }
+        function _reapplyAlgoOrange() {   // 분석 강조는 군집색 위에 우선 표시
+            if (!_algoKeys.length) return;
+            const kset = new Set(_algoKeys);
+            cy.batch(() => cy.nodes().forEach(n => {
+                if (kset.has(_nodeKey(n))) n.style({ 'border-color': '#e17055', 'border-width': 6, 'z-index': 9999 });
+            }));
+        }
         function toggleCommunityColor() {
             _communityOn = !_communityOn;
             document.getElementById('btn-community').classList.toggle('on', _communityOn);
             if (_communityOn) {
-                // 가시 노드의 커뮤니티 크기 집계 → 상위 N개만 팔레트, 나머지는 회색(파편 군집)
-                const cnt = {};
-                cy.nodes(':visible').forEach(n => { const c = (n.data('props') || {}).community_id; if (c != null) cnt[c] = (cnt[c] || 0) + 1; });
-                const top = Object.entries(cnt).sort((a, b) => b[1] - a[1]).slice(0, COMMUNITY_PALETTE.length).map(e => e[0]);
-                const colorOf = {}; top.forEach((c, i) => colorOf[c] = COMMUNITY_PALETTE[i]);
-                cy.batch(() => cy.nodes().forEach(n => {
-                    const col = colorOf[(n.data('props') || {}).community_id];
-                    n.style({ 'border-color': col || '#5a6274', 'border-width': col ? 6 : 2 });
-                }));
-                showToast(`🎨 군집색 ON — 상위 ${top.length}개 조직 군집을 테두리 색으로 구분 (같은 색 = 같은 무리)`, 'info');
+                const n = reapplyCommunityColor();
+                _reapplyAlgoOrange();
+                showToast(`🎨 군집색 ON — 상위 ${n}개 조직 군집을 테두리 색으로 구분 (같은 색 = 같은 무리)`, 'info');
             } else {
                 cy.batch(() => { cy.nodes().removeStyle('border-color'); cy.nodes().removeStyle('border-width'); });
+                _reapplyAlgoOrange();   // 군집색만 끄고 분석 강조는 유지
                 showToast('군집색 OFF — 타입 테두리 색 복원', 'info');
             }
         }
@@ -2962,7 +2975,17 @@ function showTruncateBanner(metas){
         function renderTopResult(d) {
             switchSidebarTab('details');
             const nm = _ALGO_NAME[d.metric] || d.metric;
-            let h = `<div style="font-weight:700;color:#1e4276;margin-bottom:10px;font-size:13px;">🔬 ${nm} 상위 ${d.results.length}<span style="color:#98a2b3;font-weight:400;font-size:11px;"> / 전체 ${d.total}</span></div>`;
+            if (!d.total) {   // 지표 미계산 그래프 가드 (검증 보완)
+                document.getElementById('node-info').innerHTML =
+                    `<div style="font-weight:700;color:#1e4276;margin-bottom:8px;">🔬 ${nm}</div>
+                     <div style="color:#98a2b3;font-size:12px;">이 그래프에 지표가 없습니다 —
+                     <code style="background:#eef1f6;padding:1px 5px;border-radius:4px;">graph_analytics.py --graph &lt;이름&gt; --set</code> 실행 후 재시도.</div>`;
+                showToast(`⚠️ ${nm} 지표 미계산 — analytics --set 필요`, 'warning');
+                return;
+            }
+            let h = `<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+                <span style="font-weight:700;color:#1e4276;font-size:13px;">🔬 ${nm} 상위 ${d.results.length}<span style="color:#98a2b3;font-weight:400;font-size:11px;"> / 전체 ${d.total}</span></span>
+                <button onclick="clearAlgoHighlight();showToast('분석 강조 해제','info')" style="margin-left:auto;background:#fff;border:1px solid #d5dae2;color:#4a5568;padding:2px 8px;border-radius:10px;font-size:10px;cursor:pointer;">강조 해제</button></div>`;
             h += '<table style="width:100%;border-collapse:collapse;font-size:12px;">';
             d.results.forEach(r => {
                 const k = String(r.key).replace(/'/g, "\\'");
@@ -2985,9 +3008,21 @@ function showTruncateBanner(metas){
             highlightAlgoNodes((d.cycles || []).flat().map(x => x.key));
             showToast(`✅ 순환 ${d.count}건 탐지 — 노드 강조`, 'success');
         }
+        let _algoKeys = [];   // 현재 분석 강조 대상 키 (토글·리셋과 협조)
+        function clearAlgoHighlight() {
+            if (!window.cy || !_algoKeys.length) { _algoKeys = []; return; }
+            const kset = new Set(_algoKeys.map(String));
+            cy.batch(() => cy.nodes().forEach(n => {
+                if (kset.has(_nodeKey(n))) { n.removeStyle('border-color'); n.removeStyle('border-width'); n.removeStyle('z-index'); }
+            }));
+            _algoKeys = [];
+            if (_communityOn) reapplyCommunityColor();   // 군집색 켜져 있으면 테두리 복원
+        }
         function highlightAlgoNodes(keys) {
             if (!window.cy) return;
-            const kset = new Set(keys.filter(k => k && String(k).trim()).map(String));
+            clearAlgoHighlight();   // 재실행 누적 방지 — 이전 강조 해제 후 새로 적용
+            _algoKeys = keys.filter(k => k && String(k).trim()).map(String);
+            const kset = new Set(_algoKeys);
             cy.batch(() => {
                 cy.nodes().forEach(n => {
                     const key = _nodeKey(n);
@@ -3402,6 +3437,13 @@ function showTruncateBanner(metas){
             cy.edges().style('opacity', 1);
             activeFilter = null;
             document.querySelectorAll('.legend-item').forEach(item => item.classList.remove('active'));
+            // 분석 도구 상태도 함께 초기화 (검증에서 적발: 오렌지 강조·군집색·크기 잔존)
+            _algoKeys = [];
+            cy.batch(() => { cy.nodes().removeStyle('border-color'); cy.nodes().removeStyle('border-width'); cy.nodes().removeStyle('z-index'); });
+            if (_communityOn) { _communityOn = false; document.getElementById('btn-community').classList.remove('on'); }
+            if (_egoMode) { _egoMode = false; document.getElementById('btn-ego').classList.remove('on'); }
+            cy.batch(() => { cy.nodes().removeStyle('width'); cy.nodes().removeStyle('height'); });
+            if (_centralityOn) applyPagerankSizing();   // 중심성 ON이면 크기 재적용
         }
 
         function updateFilterCounts() {
