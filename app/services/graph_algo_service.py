@@ -158,6 +158,15 @@ class GraphAlgoService:
             except (ValueError, TypeError):
                 pass
         conn.close()
+        # 지표 미계산 그래프 폴백: 즉석 연결수(degree) — analytics --set 없이도
+        # 추천/랭킹이 동작하도록 (콜드스타트 추천 패널·소형 EP 그래프 대응)
+        if not rows:
+            G, id2 = GraphAlgoService._export(graph)
+            deg = G.degree()
+            for nid, (lbl, key) in id2.items():
+                if key and (not label or lbl == label):
+                    rows.append((key, float(deg[nid]), lbl))
+            metric = 'degree_live'
         rows.sort(key=lambda x: -x[1])   # AgensGraph 문자열 정렬 한계 → Python 정렬
         return {'algo': 'top', 'metric': metric, 'label': label, 'total': len(rows),
                 'results': [{'rank': i + 1, 'key': k, 'score': round(s, 6), 'label': l}

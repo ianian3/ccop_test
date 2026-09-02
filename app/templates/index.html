@@ -2965,7 +2965,7 @@ function showTruncateBanner(metas){
         function clearEgo() { cy.batch(() => cy.elements().removeStyle('opacity')); }
 
         // ── 네트워크 분석 알고리즘 UI (CALL ccop.algo.* → /api/graph/algo) ──
-        const _ALGO_NAME = { pagerank: 'PageRank(영향력)', betweenness: '매개중심성(중개허브)', degree_cent: '연결중심성', eigenvector: '고유벡터중심성', kcore: 'k-core(밀집참여)', clustering: '삼각형계수(결속)' };
+        const _ALGO_NAME = { pagerank: 'PageRank(영향력)', betweenness: '매개중심성(중개허브)', degree_cent: '연결중심성', eigenvector: '고유벡터중심성', kcore: 'k-core(밀집참여)', clustering: '삼각형계수(결속)', degree_live: '연결수(즉석 — 지표 미계산 폴백)' };
         function _nodeKey(n) { const p = n.data('props') || {}; return String(p.name || p.account_no || p.telno || p.ip_addr || p.id_val || p.flnm || p.org_name || p.atm_nm || p.email_addr || p.src_name || ''); }
         function runAlgo() {
             const sel = document.getElementById('algoSelect').value;
@@ -3084,7 +3084,10 @@ function showTruncateBanner(metas){
                 body: JSON.stringify({ graph_path: graph, algo:'top', params:{ metric:'pagerank', topN:20 } }) })
                 .then(r=>r.json()).then(d=>{
                     const rows=(d.results||[]).filter(r=>_REC_LABELS[r.label]).slice(0,10);
-                    if (!rows.length) return;   // 지표 미계산 그래프 — 조용히 생략
+                    if (!rows.length) return;
+                    const mname = d.metric==='degree_live' ? '연결수(즉석)' : 'PageRank';
+                    const cap=document.querySelector('#startRecommend div[style*="margin-bottom:12px"]');
+                    if(cap) cap.innerHTML=`처음이라면 아래 핵심 노드에서 시작하세요 — 클릭하면 해당 노드와 연결 관계를 불러옵니다. (${mname} 자동 랭킹)`;
                     document.getElementById('startRecommendList').innerHTML = rows.map((r,i)=>{
                         const k=String(r.key).replace(/'/g,"\\'");
                         return `<div onclick="startFromNode('${k}')" style="cursor:pointer;display:flex;align-items:center;gap:8px;padding:7px 10px;border:1px solid #e6e9ef;border-radius:9px;background:#f9fafc;" onmouseover="this.style.borderColor='#1e4276'" onmouseout="this.style.borderColor='#e6e9ef'">
