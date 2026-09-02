@@ -642,7 +642,7 @@ function showTruncateBanner(metas){
 
             <!-- 그래프 목록 -->
             <div style="background: #ffffff; padding: 15px; border-radius: 6px; margin-bottom: 15px;">
-                <h4 style="color: var(--accent-blue); margin: 0 0 10px 0; font-size: 14px;"><i class="fas fa-list"></i> 그래프 목록</h4>
+                <h4 style="color: #1e4276; margin: 0 0 10px 0; font-size: 14px;"><i class="fas fa-list"></i> 그래프 목록</h4>
                 <div id="graph-list" style="max-height: 200px; overflow-y: auto;">
                     로딩 중...
                 </div>
@@ -654,7 +654,7 @@ function showTruncateBanner(metas){
                     그래프 생성</h4>
                 <div style="display: flex; gap: 10px;">
                     <input type="text" id="newGraphName" placeholder="그래프 이름 (영문/숫자/언더스코어)"
-                        style="flex: 1; background:#e7ecf5; color:white; padding:10px; border:1px solid rgba(255,255,255,0.12); border-radius:4px;">
+                        style="flex: 1; background:#e7ecf5; color:#374151; padding:10px; border:1px solid rgba(255,255,255,0.12); border-radius:4px;">
                     <button onclick="createNewGraph()"
                         style="background:#1e4276; color:white; padding:10px 20px; border:none; border-radius:4px; cursor:pointer;">
                         <i class="fas fa-plus"></i> 생성
@@ -679,7 +679,7 @@ function showTruncateBanner(metas){
         <div class="modal-content" style="max-height: 90vh; overflow-y: auto;">
             <div
                 style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.10); padding-bottom: 10px; margin-bottom: 15px;">
-                <h3 style="margin:0; color: var(--accent-blue);">
+                <h3 style="margin:0; color: #1e4276;">
                     <i class="fas fa-magic"></i> 데이터 적재 마법사 (CSV &rarr; RDB V2)
                 </h3>
                 <button onclick="closeCsvModal()"
@@ -736,7 +736,7 @@ function showTruncateBanner(metas){
                     <i class="fas fa-file-csv"></i> 2. 데이터 파일 선택
                 </label>
                 <input type="file" id="csvFile" accept=".csv" multiple
-                    style="width: 95%; background:#e7ecf5; color:white; padding:10px; border:1px solid rgba(255,255,255,0.12); border-radius:4px;"
+                    style="width: 95%; background:#e7ecf5; color:#374151; padding:10px; border:1px solid rgba(255,255,255,0.12); border-radius:4px;"
                     onchange="handleMultipleFilesWizard()">
 
                 <div id="wizardFileListContent"
@@ -789,7 +789,7 @@ function showTruncateBanner(metas){
                     </label>
                 </div>
                 <input type="text" id="sourceIdInput" placeholder="(선택) 원천 시스템 레코드 ID — 예: kics_evt_20260521_001"
-                    style="width: 95%; margin-top:10px; background:#e7ecf5; color:white; padding:8px; border:1px solid rgba(255,255,255,0.12); border-radius:4px; font-size:12px;">
+                    style="width: 95%; margin-top:10px; background:#e7ecf5; color:#374151; padding:8px; border:1px solid rgba(255,255,255,0.12); border-radius:4px; font-size:12px;">
             </div>
 
             <!-- Step 2.5: AI 컬럼 매핑 검토 (Human-in-the-Loop) -->
@@ -870,7 +870,7 @@ function showTruncateBanner(metas){
                 </div>
                 <div style="display:flex; gap:8px; align-items:center;">
                     <input type="text" id="rdbConvGraphName" placeholder="그래프 이름 (예: tccop_graph_v2)" value="tccop_graph_v2"
-                        style="flex:1; padding:10px; background:#e7ecf5; color:white; border:1px solid rgba(255,255,255,0.12); border-radius:4px; box-sizing:border-box;">
+                        style="flex:1; padding:10px; background:#e7ecf5; color:#374151; border:1px solid rgba(255,255,255,0.12); border-radius:4px; box-sizing:border-box;">
                     <button onclick="convertExistingRdbToGraph()" id="rdbConvBtn"
                         style="background:#6c5ce7; color:#fff; padding:10px 20px; border:none; border-radius:4px; cursor:pointer; font-weight:bold; white-space:nowrap;">
                         <i class="fas fa-sitemap"></i> 그래프 변환
@@ -892,7 +892,7 @@ function showTruncateBanner(metas){
             <!-- 헤더 (공통 모달 셸 표준) -->
             <div
                 style="padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.10);">
-                <h3 style="margin:0; color: var(--accent-blue); font-size: 16px; display:flex; align-items:center; gap:12px;">
+                <h3 style="margin:0; color: #1e4276; font-size: 16px; display:flex; align-items:center; gap:12px;">
                     <span><i class="fas fa-tachometer-alt"></i> 통합 대시보드</span>
                     <!-- DB 선택 드롭다운 -->
                     <div style="display:flex; align-items:center; gap:6px;">
@@ -938,7 +938,7 @@ function showTruncateBanner(metas){
 
                 <!-- RDB 테이블 조회 -->
                 <div style="background: #ffffff; padding: 16px; border-radius: 8px;">
-                    <h4 style="margin: 0 0 12px 0; color: var(--accent-blue); font-size: 14px;">
+                    <h4 style="margin: 0 0 12px 0; color: #1e4276; font-size: 14px;">
                         <i class="fas fa-table"></i> RDB 테이블 데이터 조회
                     </h4>
                     <div id="rdb-table-btn-area" style="display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap;">
@@ -1070,7 +1070,7 @@ function showTruncateBanner(metas){
         <div class="modal-content" style="max-height: 90vh; overflow-y: auto; width: 860px; max-width: 92vw;">
             <div
                 style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.10); padding-bottom: 10px; margin-bottom: 15px;">
-                <h3 style="margin:0; color: var(--accent-blue);">
+                <h3 style="margin:0; color: #1e4276;">
                     <i class="fas fa-gavel"></i> 법률 검색 (RAG)
                     <span id="legal-backend-badge" style="font-size:11px; color:#4a5568; font-weight:normal; margin-left:8px;"></span>
                 </h3>
@@ -1533,7 +1533,7 @@ function showTruncateBanner(metas){
                     onclick="toggleFilter('vt_bacnt')">
                     🏦 계좌 <span class="count" id="count-vt_bacnt">0</span>
                 </span>
-                <span class="filter-tag" data-type="vt_telno" style="border-color: var(--accent-blue);"
+                <span class="filter-tag" data-type="vt_telno" style="border-color: #1e4276;"
                     onclick="toggleFilter('vt_telno')">
                     📱 전화 <span class="count" id="count-vt_telno">0</span>
                 </span>
@@ -1617,7 +1617,7 @@ function showTruncateBanner(metas){
                 <div class="modal-content" style="width: 720px; max-height: 90vh; overflow-y: auto;">
                     <!-- 헤더 (공통 모달 셸) -->
                     <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.10); padding-bottom: 10px; margin-bottom: 15px;">
-                        <h3 style="margin:0; color: var(--accent-blue);">
+                        <h3 style="margin:0; color: #1e4276;">
                             <i class="fas fa-layer-group"></i> V4.0 L1→L5 파이프라인
                             <span style="font-size:11px; color:#6b7280; font-weight:normal; margin-left:8px;">L1 수집 → L2 표준화 → L3 매핑 → L4 그래프 → L5 시각화</span>
                         </h3>
@@ -1634,7 +1634,7 @@ function showTruncateBanner(metas){
                             📁 CSV 파일 (다중 선택 가능)
                         </label>
                         <input type="file" id="v40PipelineFiles" accept=".csv" multiple
-                            style="display:block; width:100%; background:#e7ecf5; color:white; padding:8px; border:1px solid rgba(255,255,255,0.12); border-radius:4px; box-sizing:border-box;">
+                            style="display:block; width:100%; background:#e7ecf5; color:#374151; padding:8px; border:1px solid rgba(255,255,255,0.12); border-radius:4px; box-sizing:border-box;">
                         <div id="v40PipelineFileList" style="font-size:10px; color:#6b7280; margin-top:6px; min-height:16px;"></div>
                     </div>
                     <div style="display:grid; grid-template-columns: 1.5fr 1fr; gap:12px;">
@@ -1643,7 +1643,7 @@ function showTruncateBanner(metas){
                                 🎯 그래프 이름
                             </label>
                             <input type="text" id="v40PipelineGraphName" placeholder="예: my_v40_demo (자동 부여됨)" autocomplete="off"
-                                style="display:block; width:100%; background:#e7ecf5; color:white; padding:8px; border:1px solid rgba(255,255,255,0.12); border-radius:4px; box-sizing:border-box; font-family:inherit; user-select:text; -webkit-user-select:text; pointer-events:auto;">
+                                style="display:block; width:100%; background:#e7ecf5; color:#374151; padding:8px; border:1px solid rgba(255,255,255,0.12); border-radius:4px; box-sizing:border-box; font-family:inherit; user-select:text; -webkit-user-select:text; pointer-events:auto;">
                             <div style="font-size:9px; color:#6b7280; margin-top:4px;">패널 열 때마다 타임스탬프 접미사 자동 부여 — 자유롭게 편집 가능</div>
                         </div>
                         <div>
@@ -1651,7 +1651,7 @@ function showTruncateBanner(metas){
                                 🏷 SOURCE_DOMAIN
                             </label>
                             <select id="v40PipelineSourceDomain"
-                                style="display:block; width:100%; background:#e7ecf5; color:white; padding:8px; border:1px solid rgba(255,255,255,0.12); border-radius:4px; box-sizing:border-box;">
+                                style="display:block; width:100%; background:#e7ecf5; color:#374151; padding:8px; border:1px solid rgba(255,255,255,0.12); border-radius:4px; box-sizing:border-box;">
                                 <option value="KICS">KICS (T1 공식)</option>
                                 <option value="OSINT">OSINT (T4 웹수집)</option>
                                 <option value="DIGITAL">DIGITAL (T2 수사)</option>
@@ -1667,7 +1667,7 @@ function showTruncateBanner(metas){
                 </div>
 
                 <button id="v40PipelineRunBtn" onclick="runV40Pipeline()"
-                    style="display:block; width:100%; padding:12px; background:linear-gradient(135deg,#1e4276,#2a5599); color:#0d1f1c; border:none; border-radius:6px; font-size:13px; font-weight:bold; cursor:pointer; margin-bottom:16px; box-sizing:border-box;">
+                    style="display:block; width:100%; padding:12px; background:linear-gradient(135deg,#1e4276,#2a5599); color:#ffffff; border:none; border-radius:6px; font-size:13px; font-weight:bold; cursor:pointer; margin-bottom:16px; box-sizing:border-box;">
                     🚀 5계층 자동 실행 (L1 → L5)
                 </button>
 
@@ -1862,11 +1862,11 @@ function showTruncateBanner(metas){
                 <div id="rdb-paging"
                     style="padding:6px 12px; border-top:1px solid #333; display:flex; justify-content:space-between; align-items:center;">
                     <button onclick="loadRdbTableData(rdbCurrentPage-1)"
-                        style="background:#e7ecf5; color:white; border:1px solid rgba(255,255,255,0.12); border-radius:4px; padding:4px 10px; cursor:pointer; font-size:11px;">◀
+                        style="background:#e7ecf5; color:#374151; border:1px solid rgba(255,255,255,0.12); border-radius:4px; padding:4px 10px; cursor:pointer; font-size:11px;">◀
                         이전</button>
                     <span id="rdb-page-info" style="color:#4a5568; font-size:11px;">- / -</span>
                     <button onclick="loadRdbTableData(rdbCurrentPage+1)"
-                        style="background:#e7ecf5; color:white; border:1px solid rgba(255,255,255,0.12); border-radius:4px; padding:4px 10px; cursor:pointer; font-size:11px;">다음
+                        style="background:#e7ecf5; color:#374151; border:1px solid rgba(255,255,255,0.12); border-radius:4px; padding:4px 10px; cursor:pointer; font-size:11px;">다음
                         ▶</button>
                 </div>
                 <!-- 다음 버튼 -->
@@ -2002,14 +2002,14 @@ function showTruncateBanner(metas){
                         <div style="display:flex; gap:4px; align-items:center; margin-bottom:4px;">
                             <label style="color:var(--accent-blue); font-size:10px; width:60px; flex-shrink:0;"> 엔티티 컬럼</label>
                             <select id="m1-entity-col"
-                                style="flex:1; background:#e7ecf5; color:white; border:1px solid rgba(255,255,255,0.12); border-radius:3px; padding:3px; font-size:10px;">
+                                style="flex:1; background:#e7ecf5; color:#374151; border:1px solid rgba(255,255,255,0.12); border-radius:3px; padding:3px; font-size:10px;">
                                 <option value="">-- 테이블 선택 필요 --</option>
                             </select>
                         </div>
                         <div style="display:flex; gap:4px; align-items:center; margin-bottom:4px;">
                             <label style="color:var(--accent-blue); font-size:10px; width:60px; flex-shrink:0;">노드 라벨</label>
                             <select id="m1-label"
-                                style="flex:1; background:#e7ecf5; color:white; border:1px solid rgba(255,255,255,0.12); border-radius:3px; padding:3px; font-size:10px;">
+                                style="flex:1; background:#e7ecf5; color:#374151; border:1px solid rgba(255,255,255,0.12); border-radius:3px; padding:3px; font-size:10px;">
                                 <option value="vt_psn">vt_psn (인물)</option>
                                 <option value="vt_case">vt_case (사건)</option>
                                 <option value="vt_bacnt">vt_bacnt (계좌)</option>
@@ -2033,7 +2033,7 @@ function showTruncateBanner(metas){
                             <select id="m2-src-col"
                                 style="flex:1; background:#e7ecf5; color:#e17055; border:1px solid rgba(255,255,255,0.12); border-radius:3px; padding:3px; font-size:10px;"></select>
                             <select id="m2-src-label"
-                                style="width:65px; background:#e7ecf5; color:white; border:1px solid rgba(255,255,255,0.12); border-radius:3px; padding:3px; font-size:10px;">
+                                style="width:65px; background:#e7ecf5; color:#374151; border:1px solid rgba(255,255,255,0.12); border-radius:3px; padding:3px; font-size:10px;">
                                 <option value="vt_psn">인물</option>
                                 <option value="vt_bacnt">계좌</option>
                                 <option value="vt_telno">전화</option>
@@ -2047,7 +2047,7 @@ function showTruncateBanner(metas){
                             <select id="m2-tgt-col"
                                 style="flex:1; background:#e7ecf5; color:var(--accent-green); border:1px solid rgba(255,255,255,0.12); border-radius:3px; padding:3px; font-size:10px;"></select>
                             <select id="m2-tgt-label"
-                                style="width:65px; background:#e7ecf5; color:white; border:1px solid rgba(255,255,255,0.12); border-radius:3px; padding:3px; font-size:10px;">
+                                style="width:65px; background:#e7ecf5; color:#374151; border:1px solid rgba(255,255,255,0.12); border-radius:3px; padding:3px; font-size:10px;">
                                 <option value="vt_bacnt">계좌</option>
                                 <option value="vt_psn">인물</option>
                                 <option value="vt_telno">전화</option>
@@ -6266,7 +6266,7 @@ function showTruncateBanner(metas){
             <div style="margin-bottom: 12px;">
                 <label style="display:block; margin-bottom:5px; color:#4a5568;">종류</label>
                 <select id="mn-label" onchange="renderNodeFields()"
-                    style="width:100%; padding:8px; background:#e7ecf5; color:white; border:1px solid rgba(255,255,255,0.12); border-radius:4px;">
+                    style="width:100%; padding:8px; background:#e7ecf5; color:#374151; border:1px solid rgba(255,255,255,0.12); border-radius:4px;">
                     <optgroup label="개체">
                         <option value="vt_psn">👤 인물 (vt_psn)</option>
                         <option value="vt_bacnt">💳 계좌 (vt_bacnt)</option>
@@ -6291,7 +6291,7 @@ function showTruncateBanner(metas){
             <div id="mn-link-wrap" style="margin-bottom: 12px;">
                 <label style="display:block; margin-bottom:5px; color:#4a5568;">소유자 연결 <span style="color:#4a5568;">(선택)</span></label>
                 <select id="mn-link-owner"
-                    style="width:100%; padding:8px; background:#e7ecf5; color:white; border:1px solid rgba(255,255,255,0.12); border-radius:4px;">
+                    style="width:100%; padding:8px; background:#e7ecf5; color:#374151; border:1px solid rgba(255,255,255,0.12); border-radius:4px;">
                     <option value="">— 연결 안 함 —</option>
                 </select>
                 <div style="font-size:11px; color:#4a5568; margin-top:4px;">선택 시 해당 인물과 자동 연결(계좌=소유, 전화=소유)</div>
@@ -6301,14 +6301,14 @@ function showTruncateBanner(metas){
                 <div style="margin-bottom:10px;">
                     <label id="mn-ev-from-label" style="display:block; margin-bottom:5px; color:#4a5568;">출발</label>
                     <select id="mn-ev-from"
-                        style="width:100%; padding:8px; background:#e7ecf5; color:white; border:1px solid rgba(255,255,255,0.12); border-radius:4px;">
+                        style="width:100%; padding:8px; background:#e7ecf5; color:#374151; border:1px solid rgba(255,255,255,0.12); border-radius:4px;">
                         <option value="">— 선택 —</option>
                     </select>
                 </div>
                 <div style="margin-bottom:10px;">
                     <label id="mn-ev-to-label" style="display:block; margin-bottom:5px; color:#4a5568;">도착</label>
                     <select id="mn-ev-to"
-                        style="width:100%; padding:8px; background:#e7ecf5; color:white; border:1px solid rgba(255,255,255,0.12); border-radius:4px;">
+                        style="width:100%; padding:8px; background:#e7ecf5; color:#374151; border:1px solid rgba(255,255,255,0.12); border-radius:4px;">
                         <option value="">— 선택 —</option>
                     </select>
                 </div>
@@ -6317,9 +6317,9 @@ function showTruncateBanner(metas){
             <div id="mn-advanced" style="display:none; margin-bottom: 12px;">
                 <label style="display:block; margin-bottom:5px; color:#4a5568;">라벨 + 속성(JSON)</label>
                 <input type="text" id="mn-adv-label" placeholder="라벨 (예: vt_ip)"
-                    style="width:100%; padding:8px; margin-bottom:6px; background:#e7ecf5; color:white; border:1px solid rgba(255,255,255,0.12); border-radius:4px;">
+                    style="width:100%; padding:8px; margin-bottom:6px; background:#e7ecf5; color:#374151; border:1px solid rgba(255,255,255,0.12); border-radius:4px;">
                 <textarea id="mn-props" rows="3"
-                    style="width:100%; padding:8px; background:#e7ecf5; color:white; border:1px solid rgba(255,255,255,0.12); border-radius:4px;">{"name": "새로운 객체"}</textarea>
+                    style="width:100%; padding:8px; background:#e7ecf5; color:#374151; border:1px solid rgba(255,255,255,0.12); border-radius:4px;">{"name": "새로운 객체"}</textarea>
             </div>
             <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
                 <button onclick="document.getElementById('manual-node-modal').style.display='none'"
@@ -6347,7 +6347,7 @@ function showTruncateBanner(metas){
             <div style="margin-bottom: 12px;">
                 <label style="display:block; margin-bottom:5px; color:#4a5568;">엣지 라벨 (Relation)</label>
                 <select id="me-label"
-                    style="width:100%; padding:8px; background:#e7ecf5; color:white; border:1px solid rgba(255,255,255,0.12); border-radius:4px;">
+                    style="width:100%; padding:8px; background:#e7ecf5; color:#374151; border:1px solid rgba(255,255,255,0.12); border-radius:4px;">
                     <option value="suspect_in">🔴 suspect_in (피의자→사건)</option>
                     <option value="victim_in">🔵 victim_in (피해자→사건)</option>
                     <option value="has_account">💳 has_account (계좌소유)</option>
@@ -6370,7 +6370,7 @@ function showTruncateBanner(metas){
             <div style="margin-bottom: 12px;">
                 <label style="display:block; margin-bottom:5px; color:#4a5568;">속성 (JSON 형식)</label>
                 <textarea id="me-props" rows="2"
-                    style="width:100%; padding:8px; background:#e7ecf5; color:white; border:1px solid rgba(255,255,255,0.12); border-radius:4px;">{}</textarea>
+                    style="width:100%; padding:8px; background:#e7ecf5; color:#374151; border:1px solid rgba(255,255,255,0.12); border-radius:4px;">{}</textarea>
             </div>
             <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
                 <button onclick="document.getElementById('manual-edge-modal').style.display='none'"
@@ -6576,12 +6576,12 @@ function showTruncateBanner(metas){
                 const id = 'mnf-' + f.key;
                 html += `<div style="margin-bottom:10px;"><label style="display:block; margin-bottom:4px; color:#4a5568;">${f.label}${f.required ? ' <span style="color:#e17055;">*</span>' : ''}</label>`;
                 if (f.type === 'select') {
-                    html += `<select id="${id}" style="width:100%; padding:8px; background:#e7ecf5; color:white; border:1px solid rgba(255,255,255,0.12); border-radius:4px;">` +
+                    html += `<select id="${id}" style="width:100%; padding:8px; background:#e7ecf5; color:#374151; border:1px solid rgba(255,255,255,0.12); border-radius:4px;">` +
                         f.opts.map(([v, t]) => `<option value="${v}">${t}</option>`).join('') + `</select>`;
                 } else if (f.type === 'check') {
                     html += `<label style="display:flex; align-items:center; gap:6px; color:white; cursor:pointer;"><input type="checkbox" id="${id}" style="accent-color:#e17055;"> 예</label>`;
                 } else {
-                    html += `<input type="text" id="${id}" placeholder="${f.ph || ''}" style="width:100%; padding:8px; background:#e7ecf5; color:white; border:1px solid rgba(255,255,255,0.12); border-radius:4px;">`;
+                    html += `<input type="text" id="${id}" placeholder="${f.ph || ''}" style="width:100%; padding:8px; background:#e7ecf5; color:#374151; border:1px solid rgba(255,255,255,0.12); border-radius:4px;">`;
                 }
                 html += `</div>`;
             }
