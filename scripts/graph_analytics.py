@@ -35,7 +35,11 @@ KEYEXPR = ("coalesce(n.name,n.account_no,n.telno,n.ip_addr,n.id_val,n.flnm,"
            "n.org_name,n.atm_nm,n.email_addr,n.src_name,n.mov_id)")
 
 # 정수(범주) 속성 vs 실수(점수) 속성 구분 — SET 포맷용
-INT_METRICS = {'community_id', 'community_lp', 'component', 'kcore'}
+INT_METRICS = {'community_id', 'community_lp', 'component', 'kcore', 'community_person'}
+
+# 인물중심 서브그래프 라벨 — 전체 Louvain은 카톡 IP/ID 클러스터가 부피를 지배해
+# 조직 경계가 흐림 → 사람·돈·조직·전화만의 유도 서브그래프에 별도 Louvain(community_person).
+PERSON_CENTRIC_LABELS = {'vt_psn', 'vt_bacnt', 'vt_org', 'vt_telno'}
 
 
 def esc(v):
@@ -111,7 +115,7 @@ def algo_cycles(G, max_len=6, limit=15):
 # ══════════════════════════════════════════════════════════════════
 #  전역(노드 단위) 알고리즘 — --set 으로 노드 속성에 사전계산
 # ══════════════════════════════════════════════════════════════════
-def compute_node_metrics(G, heavy=False):
+def compute_node_metrics(G, id2, heavy=False):
     """노드별 지표 dict 를 metric→{node:value} 로 반환 + 커뮤니티 리스트."""
     N = G.number_of_nodes()
     Gu = G.to_undirected()
@@ -138,6 +142,12 @@ def compute_node_metrics(G, heavy=False):
     M['community_id'] = {n: i for i, c in enumerate(louvain) for n in c}
     lp = sorted(nx.community.label_propagation_communities(Gu), key=len, reverse=True)
     M['community_lp'] = {n: i for i, c in enumerate(lp) for n in c}
+    # 인물중심 Louvain — 사람·돈·조직·전화 유도 서브그래프 (진짜 조직 경계)
+    pnodes = [n for n in Gu if id2.get(n, ('?',))[0] in PERSON_CENTRIC_LABELS]
+    Gp = Gu.subgraph(pnodes)
+    print(f"[community] 인물중심 서브그래프 — 노드 {Gp.number_of_nodes()} · 엣지 {Gp.number_of_edges()}")
+    louvain_p = sorted(nx.community.louvain_communities(Gp, seed=42), key=len, reverse=True)
+    M['community_person'] = {n: i for i, c in enumerate(louvain_p) for n in c}   # 서브그래프 노드에만 부여
 
     # ── 구조 ──
     print("[structure] 약연결요소·k-core·삼각형계수…")
@@ -146,7 +156,7 @@ def compute_node_metrics(G, heavy=False):
     M['kcore'] = nx.core_number(Gu)
     M['clustering'] = nx.clustering(Gu)
 
-    return M, louvain
+    return M, louvain, louvain_p
 
 
 def report_top(M, id2, metric, labels=('vt_bacnt', 'vt_psn', 'vt_ip', 'vt_org', 'vt_telno'), topn=3):
@@ -191,7 +201,7 @@ def main():
         print(f"[export] {args.graph} — 노드 {G.number_of_nodes()} · 엣지 {G.number_of_edges()}")
 
         # ── 전역 알고리즘 계산 ──
-        M, louvain = compute_node_metrics(G, heavy=args.heavy)
+        M, louvain, louvain_p = compute_node_metrics(G, id2, heavy=args.heavy)
 
         # ── 리포트: 중심성 ──
         print("\n=== ① 중심성 (누가 핵심·영향력자인가) ===")
@@ -200,7 +210,14 @@ def main():
 
         # ── 리포트: 커뮤니티 ──
         print("\n=== ② 커뮤니티 (어떤 무리가 한 조직인가) ===")
-        print(f"  Louvain {len(louvain)}개 (최대 {len(louvain[0])}노드)")
+        print(f"  Louvain(전체) {len(louvain)}개 (최대 {len(louvain[0])}노드) — 카톡 IP/ID 부피 지배")
+        print(f"  Louvain(인물중심) {len(louvain_p)}개 — community_person")
+        for i, cset in enumerate(louvain_p[:6]):
+            labels = Counter(id2.get(n, ('?', ''))[0] for n in cset)
+            persons = [id2[n][1] for n in cset if id2.get(n, ('?', ''))[0] == 'vt_psn' and id2[n][1]][:6]
+            orgs = [id2[n][1] for n in cset if id2.get(n, ('?', ''))[0] == 'vt_org' and id2[n][1]]
+            print(f"    인물조직#{i}: {len(cset)}노드 {dict(labels)}"
+                  + (f" · 조직 {orgs}" if orgs else "") + (f" · 인물 {persons}" if persons else ""))
         for i, c in enumerate(louvain[:5]):
             labels = Counter(id2.get(n, ('?', ''))[0] for n in c)
             persons = [id2[n][1] for n in c if id2.get(n, ('?', ''))[0] == 'vt_psn' and id2[n][1]][:4]
@@ -236,7 +253,9 @@ def main():
                     continue
                 parts = []
                 for m in metrics:
-                    v = M[m].get(nid, 0)
+                    if nid not in M[m]:   # community_person 등 부분 지표는 보유 노드만 SET
+                        continue
+                    v = M[m][nid]
                     # 숫자로 저장(따옴표 없음) — 문자열이면 kcore '14'<'7' 정렬 오류·
                     # WHERE 비교 깨짐 (P1-B, docs/T2C_INTEGRATED_PERF_REVIEW.md)
                     parts.append(f"n.{m}={int(v)}" if m in INT_METRICS else f"n.{m}={float(v):.6f}")

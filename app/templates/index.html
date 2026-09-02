@@ -2917,11 +2917,12 @@ function showTruncateBanner(metas){
         function reapplyCommunityColor() {
             // 가시 노드의 커뮤니티 크기 집계 → 상위 N개만 팔레트, 나머지는 회색(파편 군집)
             const cnt = {};
-            cy.nodes(':visible').forEach(n => { const c = (n.data('props') || {}).community_id; if (c != null) cnt[c] = (cnt[c] || 0) + 1; });
+            cy.nodes(':visible').forEach(n => { const pp = n.data('props') || {}; const c = (pp.community_person != null ? pp.community_person : pp.community_id); if (c != null) cnt[c] = (cnt[c] || 0) + 1; });
             const top = Object.entries(cnt).sort((a, b) => b[1] - a[1]).slice(0, COMMUNITY_PALETTE.length).map(e => e[0]);
             const colorOf = {}; top.forEach((c, i) => colorOf[c] = COMMUNITY_PALETTE[i]);
             cy.batch(() => cy.nodes().forEach(n => {
-                const col = colorOf[String((n.data('props') || {}).community_id)];
+                const pp = n.data('props') || {};
+                const col = colorOf[String(pp.community_person != null ? pp.community_person : pp.community_id)];
                 n.style({ 'border-color': col || '#5a6274', 'border-width': col ? 6 : 2 });
             }));
             return top.length;
@@ -2931,7 +2932,7 @@ function showTruncateBanner(metas){
             document.getElementById('btn-community').classList.toggle('on', _communityOn);
             if (_communityOn) {
                 const n = reapplyCommunityColor();
-                showToast(`🎨 군집색 ON — 상위 ${n}개 조직 군집을 테두리 색으로 구분 (같은 색 = 같은 무리)`, 'info');
+                showToast(`🎨 군집색 ON — 상위 ${n}개 조직 군집(인물중심 Louvain 우선)을 테두리 색으로 구분`, 'info');
             } else {
                 cy.batch(() => { cy.nodes().removeStyle('border-color'); cy.nodes().removeStyle('border-width'); });
                 showToast('군집색 OFF — 타입 테두리 색 복원', 'info');
@@ -2973,9 +2974,11 @@ function showTruncateBanner(metas){
                 if (!selectedNode) { showToast('먼저 그래프에서 기준 노드를 클릭한 뒤 실행하세요', 'warning'); return; }
                 if (sel === 'similar') body = { graph_path: graph, algo: 'similar', params: { node: _nodeKey(selectedNode), topN: 10 } };
                 else {
-                    const cid = (selectedNode.data('props') || {}).community_id;
+                    const pp = selectedNode.data('props') || {};
+                    const useP = pp.community_person != null;   // 인물중심 군집 우선(사람·돈·조직·전화)
+                    const cid = useP ? pp.community_person : pp.community_id;
                     if (cid == null) { showToast('선택 노드에 군집 ID가 없습니다 (analytics --set 필요)', 'warning'); return; }
-                    body = { graph_path: graph, algo: 'community', params: { id: +cid } };
+                    body = { graph_path: graph, algo: 'community', params: { id: +cid, metric: useP ? 'community_person' : 'community_id' } };
                 }
             }
             else body = { graph_path: graph, algo: 'top', params: { metric: sel.split(':')[1], label: document.getElementById('algoLabel').value, topN: 15 } };

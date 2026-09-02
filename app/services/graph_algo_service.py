@@ -27,7 +27,7 @@ KEYEXPR = ("coalesce(n.name,n.account_no,n.telno,n.ip_addr,n.id_val,n.flnm,"
 # 사전계산(--set) 노드 지표 화이트리스트 — SQL injection 방지 + 오타 차단
 ALLOWED_METRICS = {
     'pagerank', 'degree_cent', 'betweenness', 'eigenvector', 'closeness',
-    'community_id', 'community_lp', 'component', 'kcore', 'clustering',
+    'community_id', 'community_lp', 'community_person', 'component', 'kcore', 'clustering',
 }
 GRAPH_RE = re.compile(r'^[a-zA-Z_][a-zA-Z0-9_]*$')
 LABEL_RE = re.compile(r'^[a-zA-Z_][a-zA-Z0-9_]*$')
@@ -230,8 +230,8 @@ class GraphAlgoService:
     def community(graph, params):
         cid = int(params.get('id', 0))
         metric = params.get('metric', 'community_id')
-        if metric not in ('community_id', 'community_lp'):
-            raise ValueError("community metric은 community_id/community_lp만")
+        if metric not in ('community_id', 'community_lp', 'community_person'):
+            raise ValueError("community metric은 community_id/community_lp/community_person만")
         conn, cur = GraphAlgoService._cur()
         safe_set_graph_path(cur, graph)
         # P1-B 이후 지표는 숫자 저장 — 문자열 quote 시 타입 불일치로 0건 (검증에서 적발)
