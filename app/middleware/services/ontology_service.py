@@ -27,11 +27,18 @@ CCOP V4.7 온톨로지 — POLE 정렬 6레이어 아키텍처 (현행 SSOT)
   - V4.7 (2026-08-13): 수사단서 스키마 + 표준 DDL 정합 — represents 엣지(vt_psn→vt_org 법인대표,
           TB_INST_RPRSV_REL_T) + vt_psn.occp_nm(직업, TB_PSN_M.CR_NM) 신설. 표준 컬럼매핑 std_columns
           정착(RPRSV·CR_NM·CALL_HR 시분초변환·VLD_BGNG_DT/VLD_END_DT). 엣지 71→72.
+  - V4.8 (2026-09-02): 2차년도 EP1~8 실적재 전수감사(docs/EP1_EP8_V47_AUDIT_20260902.md) 반영 —
+          도메인 확장 3종: ① contacted Phone|DigitalID↔Phone|DigitalID(카톡 대화상대 4,107건,
+          channel 속성 신설) ② registered_to domain+DigitalID(네이버 실명확인 가입자 1,914건 —
+          uses_id '사용자'와 registered_to '명의자' 구분이 대포계정 표현의 핵심이라 대체 아닌 확장)
+          ③ used_ip domain+BankAccount(계좌 인터넷뱅킹 접속 IP; 시각 레코드 있으면 R8 vt_access
+          reification 우선). + sameAs→same_as 개명(AgensGraph 미인용 식별자 소문자화로 DB 실현명이
+          'sameas'가 되던 문제 — snake_case 전면 통일, DB 4건 마이그레이션). 엣지 수 불변(72).
 노드: 25 | 엣지: 72 (활성 70 + deprecated 2: clusters_with·owns_device) | 추론 규칙: 13종 통합 dict (탐지 9 + enrichment 4)
 """
 
 class KICSCrimeDomainOntology:
-    """KICS 기반 한국형 사이버 범죄 온톨로지 (V4.7 POLE 6레이어 · 72종 엣지[활성 70] · 추론규칙 13종)"""
+    """KICS 기반 한국형 사이버 범죄 온톨로지 (V4.8 POLE 6레이어 · 72종 엣지[활성 70] · 추론규칙 13종)"""
 
     # 엣지 공통 메타속성 스키마 (EDGE_META_SCHEMA)
     EDGE_META_SCHEMA = {
@@ -213,7 +220,7 @@ class KICSCrimeDomainOntology:
         },
         'linked_subject_cnt': {'node': 'vt_ip', 'inputs': ['used_ip(역방향)'],
                                'rule': '이 IP에 붙는 식별자 수(해소 전)', 'recompute': 'used_ip 적재 후'},
-        'linked_entity_cnt':  {'node': 'vt_ip', 'inputs': ['linked_subject_cnt', 'sameAs'],
+        'linked_entity_cnt':  {'node': 'vt_ip', 'inputs': ['linked_subject_cnt', 'same_as'],
                                'rule': 'sameAs 해소 후 고유 실체 수', 'recompute': 'sameAs 해소 후'},
         'role_resolution_stage': {'node': 'vt_ip', 'inputs': ['ip_role'],
                                   'rule': "ip_role 산출 단계('subject'|'entity'|'period') — 'period'=V4.6 구간별 판정", 'recompute': 'ip_role과 동시'},
@@ -339,7 +346,7 @@ class KICSCrimeDomainOntology:
             'trigger':           '두 vt_psn이 동일 전화번호 + 계좌 1개 이상 공유',
             'threshold':         1,
             'confidence':        0.85,
-            'output_edge':       'sameAs',
+            'output_edge':       'same_as',
             'review_required':   True,   # 사람/조직 해소는 human-in-the-loop (자동 확정 금지)
             'legal_basis':       None,
         },
@@ -523,7 +530,7 @@ class KICSCrimeDomainOntology:
         'accomplice_of':      {'color': '#C0392B', 'width': 3, 'arrow': 'triangle-tee', 'style': 'solid'},
         'recruits':           {'color': '#922B21', 'width': 3, 'arrow': 'triangle', 'style': 'solid'},
         'blackmails':         {'color': '#641E16', 'width': 3, 'arrow': 'triangle', 'style': 'solid'},
-        'sameAs':             {'color': '#999999', 'width': 2, 'arrow': 'none',     'style': 'dashed'},
+        'same_as':             {'color': '#999999', 'width': 2, 'arrow': 'none',     'style': 'dashed'},
         'contradicts':        {'color': '#C0392B', 'width': 2, 'arrow': 'tee',      'style': 'dotted'},
         # V4.3 시나리오 직접 엣지 (속성적 연결)
         'knows':              {'color': '#7F8C8D', 'width': 2, 'arrow': 'none',     'style': 'solid'},
@@ -625,7 +632,7 @@ class KICSCrimeDomainOntology:
         'relay_station_network':  {'start': "vt_dev WHERE dev_type='relay_station'",
                                    'hops': [('used_in_device', '<-')], 'end': 'vt_telno',
                                    'description': '중계기 → 연결된 전화번호'},
-        'cross_graph_sameAs':     {'start': 'vt_bacnt (CCOP)', 'hops': [('sameAs', '<->')], 'end': 'vt_bacnt (OSINT)',
+        'cross_graph_sameAs':     {'start': 'vt_bacnt (CCOP)', 'hops': [('same_as', '<->')], 'end': 'vt_bacnt (OSINT)',
                                    'description': '도메인 간 동일 자산 매칭'},
     }
 
@@ -1215,11 +1222,11 @@ class KICSCrimeDomainOntology:
         # ═══════════════════════════════════════════════════════════
         # [ENTITY RESOLUTION] 동일인물/모순 엣지
         # ═══════════════════════════════════════════════════════════
-        'sameAs': {
+        'same_as': {
             'domain': 'Person|DigitalID|Phone',  # V4.5 R5: 전화번호도 동일실체 해소 대상
             'range': 'Person|DigitalID|Phone',
             'source_types': [('person', 'person'), ('user_id', 'user_id')],
-            'semantic_relation': 'sameAs',
+            'semantic_relation': 'same_as',
             'label_ko': '동일실체',
             'meaning': '두 vt_psn 또는 vt_id가 동일 실체로 해소됨 (엔티티 해소; 유사 계정 pokpok1270↔pokpokpok1270 포함)',
             'legal_significance': '신원확인',
@@ -1393,12 +1400,12 @@ class KICSCrimeDomainOntology:
             'properties': ['valid_from', 'valid_to', 'source_id', 'rec_created']  # V4.6 시간순: 계좌 소유/개설 유효구간(E형). 값 백필은 적재 시
         },
         'used_ip': {
-            'domain': 'Person|Phone|DigitalID|Device',  # V4.5 G3/G10: 전화·계정·기기도 IP 사용 주체(고립 IP 방지)
+            'domain': 'Person|Phone|DigitalID|Device|BankAccount',  # V4.5 G3/G10: 전화·계정·기기(고립 IP 방지) / V4.8: 계좌 인터넷뱅킹 접속 IP(EP3 012 ipmac·EP9/10 뱅킹 IP)
             'range': 'NetworkTrace',
-            'source_types': [('person', 'ip'), ('user_id', 'ip')],
+            'source_types': [('person', 'ip'), ('user_id', 'ip'), ('account', 'ip')],
             'semantic_relation': 'usedIPAddress',
             'label_ko': 'IP사용',
-            'meaning': '닉네임/인물이 IP 주소를 사용함',
+            'meaning': '닉네임/인물/계정/계좌(뱅킹 접속)가 IP 주소를 사용함. ※시각별 접속 레코드가 있는 소스는 R8 vt_access(banking)+access_via/accessed_from reification 우선, 요약 관계만 있으면 본 엣지 직결',
             'legal_significance': '디지털증거',
             'properties': ['valid_from', 'valid_to', 'confidence', 'source_id', 'rec_created']  # V4.6 S1: ip_role bitemporal 전제(시간축). 타입은 EDGE_META_SCHEMA 공통정의
         },
@@ -1437,13 +1444,13 @@ class KICSCrimeDomainOntology:
             'inference_confidence': 0.85
         },
         'registered_to': {
-            'domain': 'Phone',           # 수정: 'ContactInfo' → 'Phone'
-            'range': 'Person',
-            'source_types': [('phone', 'owner'), ('phone', 'registrant')],
+            'domain': 'Phone|DigitalID', # V4.8: 포털 계정 실명확인 가입자(네이버 역조회 1,914건) — uses_id '사용자'와
+            'range': 'Person',           #   registered_to '명의자' 구분이 대포계정(명의도용) 표현의 핵심이라 대체 아닌 확장
+            'source_types': [('phone', 'owner'), ('phone', 'registrant'), ('user_id', 'registrant')],
             'semantic_relation': 'registeredOwner',
             'label_ko': '명의자',
-            'meaning': '전화번호의 등록 명의자',
-            'legal_significance': '통신사실확인자료',
+            'meaning': '전화번호/플랫폼 계정의 등록(실명확인) 명의자',
+            'legal_significance': '통신사실확인자료|가입자정보 제공요청(전기통신사업법 83조)',
             'properties': ['valid_from', 'valid_to', 'source_id', 'rec_created']  # V4.6 G5: 명의 등록 유효구간(값 백필은 후속)
         },
         # ═══════════════════════════════════════════════════════════
@@ -1845,14 +1852,14 @@ class KICSCrimeDomainOntology:
             'properties': ['source_id', 'rec_created']
         },
         'contacted': {
-            'domain': 'Phone',
-            'range': 'Phone',
+            'domain': 'Phone|DigitalID',   # V4.8: 카톡 '대화상대 목록'(계정간 연락관계 요약) 4,107건 실적재 반영
+            'range': 'Phone|DigitalID',    #   — 개별 메시지 이벤트가 아닌 집계 관계라 sent/received_msg reification 불가
             'source_types': [],
             'semantic_relation': 'contacted',
             'label_ko': '연락관계',
-            'meaning': '전화번호 간 통화/연락 관계 (vt_call 이벤트의 요약 엣지 성격)',
-            'legal_significance': '통신사실확인자료',
-            'properties': ['source_id', 'rec_created']
+            'meaning': '전화번호/메신저 계정 간 통화·연락 관계 (vt_call·대화상대 목록의 요약 엣지 성격)',
+            'legal_significance': '통신사실확인자료|압수수색(메신저 대화내역)',
+            'properties': ['source_id', 'rec_created', 'channel']  # V4.8: channel='call'|'kakao'|'sms' — 연락 수단 구분
         },
         'impersonates': {
             'domain': 'Person',
@@ -2457,7 +2464,7 @@ class OntologyEnricher:
             'filed_as':       {'semantic_relation': 'filedAs',           'domain_meaning': '진정서 → 사건 전환',       'legal_significance': '수사개시'},
             'clusters_with':  {'semantic_relation': 'clustersWith',      'domain_meaning': '유사 진정서 군집',         'legal_significance': None},
             # ── Person 관계 ──
-            'sameAs':         {'semantic_relation': 'sameAs',            'domain_meaning': '동일인물 해소',            'legal_significance': '신원확인'},
+            'same_as':         {'semantic_relation': 'same_as',            'domain_meaning': '동일인물 해소',            'legal_significance': '신원확인'},
             'contradicts':    {'semantic_relation': 'contradicts',       'domain_meaning': '모순 정보',                'legal_significance': '신원확인'},
             'impersonates':   {'semantic_relation': 'impersonates',      'domain_meaning': '사칭 대상(구)',            'legal_significance': '사기범죄'},
             'represents':     {'semantic_relation': 'represents',        'domain_meaning': '법인 대표',                'legal_significance': '법인등기'},

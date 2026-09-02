@@ -1496,7 +1496,7 @@ def execute_workflow(name):
             "WHERE n.dev_type = 'relay_station' "
             "RETURN id(n), labels(n), properties(n), id(r), type(r), id(m), labels(m), properties(m)",
         'cross_graph_sameAs':
-            "MATCH (n:vt_psn)-[r:sameAs]->(m:vt_psn) "
+            "MATCH (n:vt_psn)-[r:same_as]->(m:vt_psn) "
             "WHERE n.source_domain <> m.source_domain "
             "RETURN id(n), labels(n), properties(n), id(r), type(r), id(m), labels(m), properties(m)",
     }

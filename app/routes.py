@@ -454,7 +454,7 @@ def graph_briefing():
         D['fund_top'] = sorted(ft, key=lambda x: -x['amt'])[:6]
         try:
             D['sameas'] = [{'a': r[0], 'b': r[1], 'm': r[2]}
-                           for r in q("MATCH (p1:vt_psn)-[e:sameAs]->(p2:vt_psn) RETURN p1.name, p2.name, e.method")][:10]
+                           for r in q("MATCH (p1:vt_psn)-[e:same_as]->(p2:vt_psn) RETURN p1.name, p2.name, e.method")][:10]
         except Exception:
             D['sameas'] = []
 
