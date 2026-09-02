@@ -59,7 +59,26 @@
 5) (선택) P2 n-sampling A/B
 ```
 
-## 5. 참고 — 기존 자산
+## 5. 실측 결과 (2026-09-02 — 로드맵 1~3 완료)
+
+| 시점 | 결과 | 평균 latency |
+|---|---|---|
+| 베이스라인 (30문항) | 27/30 (90.0%) | 2.55s |
+| **개선 후 (32문항)** | **32/32 (100.0%)** | **2.09s** |
+
+적용 개선 (전부 서버측·재학습 없음):
+- **읽기전용 가드**(P0 보안): 벤치 F03이 `DETACH DELETE` 실행→통합그래프 전삭제 사고 적발.
+  `execute_cypher` 기본 read-only(wrapper 추출 후 검사) + WRITE_BLOCKED 종결. EP 원본으로 재구축 복원.
+  ※ synthesis에 기존 보안가드가 있었으나 **sLLM 경로가 우회** — 공통 관문(실행층) 가드가 정답.
+- **값 grounding**(E01): `bank_nm='우리은행'`→`'우리'` 실행 직전 결정론 재작성.
+- **P1-A 알고리즘 라우팅**: 중심성/순환 질문 감지(`detect_algo_intent`)→sLLM 생략, CALL 레이어 직행.
+  latency 2.5s→0.0~0.1s, "매개중심성 최고 계좌"=김은희 정답. UI는 renderTopResult 재사용.
+- **P1-B 지표 숫자화**: --set 숫자 저장 — kcore 숫자 정렬·`WHERE pagerank>0.001` 비교 정상화.
+- **비-Cypher 응답 방어**(F04): MATCH/RETURN/SELECT 없는 생성물→GENERAL_CHAT 종결(실행층).
+
+남은 로드맵: 4) v48 시드(통합그래프 실행검증+회귀믹스) — 벤치 100%라 시급성 하락, 신규 실패 유형 축적 시 착수. 5) n-sampling — 현재 불필요.
+
+## 6. 참고 — 기존 자산
 - `scripts/bench_v47_232_langgraph.py` (232벤치, tccop_graph) · `scripts/ab_schema_augment.py` (+5.5p A/B)
 - v47 서빙: 엘리스 vLLM base+LoRA (reference_elice_server.md 레시피) · 터널 8002
 - 앵커 보강: `app/services/langgraph_agent.py::_augment_anchor_node`

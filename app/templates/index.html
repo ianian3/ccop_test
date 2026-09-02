@@ -3854,6 +3854,12 @@ function showTruncateBanner(metas){
                         showToast("AI 분석 실패: " + d.error, "error");
                         return;
                     }
+                    // ALGO 인텐트: 중심성/순환 질문 → CALL 레이어 결과를 분석 UI로 렌더 (P1-A)
+                    if (d.intent === 'ALGO' && d.algo_result) {
+                        if (d.algo_result.algo === 'cycles') renderCyclesResult(d.algo_result);
+                        else renderTopResult(d.algo_result);
+                        return;
+                    }
                     if (d.warnings && d.warnings.length) {
                         showToast("⏱ 시간순: " + d.warnings.length + "개 구간 시간기준 없음(N형)", "warning");
                     }

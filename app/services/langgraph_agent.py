@@ -938,7 +938,16 @@ AS (p agtype);
             if state.get("error_message") == "GENERAL_CHAT":
                 return {"metrics": metrics} # 에러 유지
             return {"error_message": "생성된 쿼리가 없습니다.", "metrics": metrics}
-            
+
+        # 비-Cypher 응답 방어: 모델이 GENERAL: 프리픽스 없이 일반 문장을 낸 경우
+        # (예: '대한민국의 수도는 서울입니다.') → GENERAL_CHAT 종결. sLLM 경로는
+        # synthesis 가드를 우회하므로 공통 관문(실행 노드)에서 검사 (벤치 F04)
+        _cq = state.get('cypher_query') or ''
+        if _cq and not re.search(r'\b(MATCH|RETURN|SELECT)\b', _cq, re.I):
+            logger.info(f"▶ 비-Cypher 응답 감지 → GENERAL 처리: {_cq[:60]}")
+            return {"cypher_query": "", "error_message": "GENERAL_CHAT",
+                    "reflection_log": state.get('reflection_log', []) + [_cq.strip().rstrip(';')]}
+
         # 보안(Guardrail) 에러인 경우 실행하지 않고 통과
         if state.get("error_message") and "보안 정책 위반" in state.get("error_message", ""):
             logger.warning(f"Blocked Execution: {state['error_message']}")
@@ -952,6 +961,13 @@ AS (p agtype);
 
         # 시간순 연속성 주입 (Q2 — config.temporal_continuity=True 시, 실행 직전)
         cypher_to_run = state['cypher_query']
+        # 값 grounding(결정론): 질문의 '우리은행'을 모델이 bank_nm='우리은행'으로 쓰지만
+        # DB 실값은 '우리'(농협/기업/우리/하나/신한/새마을금고) — '…은행' 접미 제거 재작성.
+        # (벤치 E01 적발 — v47은 프롬프트 값 힌트를 무시하므로 실행 직전 서버측 정규화)
+        _g = re.sub(r"(bank_nm\s*[:=]\s*')([^']+?)은행(')", r"\1\2\3", cypher_to_run)
+        if _g != cypher_to_run:
+            logger.info(f"[값 grounding] bank_nm '…은행' 접미 정규화 적용")
+            cypher_to_run = _g
         tc_warnings = []
         if state.get('config', {}).get('temporal_continuity'):
             try:

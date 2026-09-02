@@ -237,7 +237,9 @@ def main():
                 parts = []
                 for m in metrics:
                     v = M[m].get(nid, 0)
-                    parts.append(f"n.{m}='{int(v)}'" if m in INT_METRICS else f"n.{m}='{float(v):.6f}'")
+                    # 숫자로 저장(따옴표 없음) — 문자열이면 kcore '14'<'7' 정렬 오류·
+                    # WHERE 비교 깨짐 (P1-B, docs/T2C_INTEGRATED_PERF_REVIEW.md)
+                    parts.append(f"n.{m}={int(v)}" if m in INT_METRICS else f"n.{m}={float(v):.6f}")
                 cur.execute(f"MATCH (n:{lbl} {{{KP[lbl]}:'{esc(key)}'}}) SET " + ", ".join(parts))
                 cnt += 1
                 if cnt % 3000 == 0:

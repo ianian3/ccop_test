@@ -1321,6 +1321,24 @@ def query_ai():
     graph_path = data.get('graph_path', current_app.config.get('DEFAULT_GRAPH_PATH', 'tccop_graph_v6'))
     session_id = data.get('session_id')
 
+    # P1-A 알고리즘 사전 라우팅: 중심성/순환 질문은 Cypher가 원리적으로 못 푸는 클래스
+    # → sLLM 생성을 건너뛰고 CALL ccop.algo.* 레이어로 직행 (정답률·latency 동시 개선)
+    try:
+        from app.services.graph_algo_service import (GraphAlgoService, detect_algo_intent,
+                                                     format_algo_answer)
+        _algo = detect_algo_intent(question or '')
+        if _algo:
+            algo, params = _algo
+            res = GraphAlgoService.dispatch(graph_path, algo, params)
+            return jsonify({
+                "elements": [], "intent": "ALGO",
+                "cypher": f"CALL ccop.algo.{algo}({json.dumps(params, ensure_ascii=False)})",
+                "algo_result": res, "answer": format_algo_answer(res),
+                "hints": [], "warnings": [], "session_id": session_id, "entity_count": 0,
+            })
+    except Exception as _ae:
+        logger.warning(f"algo 사전 라우팅 실패 — T2C로 폴백: {_ae}")
+
     try:
         sess = _get_or_create_session(session_id, graph_path)
         temporal_continuity = bool(data.get('temporal_continuity', False))  # Q3 [시간순 연속성 적용]

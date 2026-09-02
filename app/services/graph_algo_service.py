@@ -33,6 +33,51 @@ GRAPH_RE = re.compile(r'^[a-zA-Z_][a-zA-Z0-9_]*$')
 LABEL_RE = re.compile(r'^[a-zA-Z_][a-zA-Z0-9_]*$')
 
 
+_METRIC_KW = [  # (우선순위 순) 질문 키워드 → 지표
+    (r'매개\s*중심성|betweenness', 'betweenness'),
+    (r'연결\s*중심성|degree', 'degree_cent'),
+    (r'고유\s*벡터|eigen', 'eigenvector'),
+    (r'k[\- ]?core|케이코어', 'kcore'),
+    (r'삼각형|클러스터링\s*계수|군집\s*계수', 'clustering'),
+    (r'pagerank|페이지\s*랭크|중심성|영향력', 'pagerank'),
+]
+_LABEL_KW = [('계좌', 'vt_bacnt'), ('인물', 'vt_psn'), ('사람', 'vt_psn'), ('조직', 'vt_org'),
+             ('전화', 'vt_telno'), ('아이피', 'vt_ip'), ('ip', 'vt_ip')]
+
+
+def detect_algo_intent(question):
+    """자연어 질문에서 네트워크 분석 인텐트 감지 — (algo, params) 또는 None.
+    Cypher가 원리적으로 못 푸는 클래스(중심성 랭킹·순환)를 CALL 레이어로 사전 라우팅(P1-A)."""
+    q = (question or '').strip()
+    ql = q.lower()
+    if re.search(r'순환|사이클|circular', ql):
+        return 'cycles', {'maxLen': 6, 'limit': 12}
+    metric = next((m for pat, m in _METRIC_KW if re.search(pat, ql)), None)
+    if not metric:
+        return None
+    label = next((v for k, v in _LABEL_KW if k in ql), None)
+    m = re.search(r'(\d+)\s*(개|명|위|건)', q)
+    topn = min(50, int(m.group(1))) if m else 10
+    return 'top', {'metric': metric, 'label': label, 'topN': topn}
+
+
+_METRIC_NAME = {'pagerank': 'PageRank(영향력)', 'betweenness': '매개중심성(중개허브)',
+                'degree_cent': '연결중심성', 'eigenvector': '고유벡터중심성',
+                'kcore': 'k-core(밀집참여)', 'clustering': '삼각형계수(결속)'}
+
+
+def format_algo_answer(res):
+    """알고리즘 결과 → 한 줄 요약 텍스트 (UI answer/로그용)."""
+    if res.get('algo') == 'top':
+        rows = res.get('results', [])
+        head = _METRIC_NAME.get(res.get('metric'), res.get('metric'))
+        body = " · ".join(f"{r['rank']}.{r['key']}({r['score']})" for r in rows[:5])
+        return f"{head} 상위 {len(rows)} — {body}"
+    if res.get('algo') == 'cycles':
+        return f"순환 흐름 {res.get('count', 0)}건 탐지 (자금세탁 typology 후보)"
+    return ''
+
+
 def parse_call(s):
     """`CALL ccop.algo.<name>({...})` → (algo, params). params 는 JSON 객체."""
     m = re.match(r"CALL\s+ccop\.algo\.(\w+)\s*\((.*)\)\s*;?\s*$", (s or '').strip(), re.I | re.S)

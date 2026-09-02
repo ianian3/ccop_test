@@ -63,6 +63,9 @@ ITEMS = [
     ("E03", "필터속성", "사건 10개만 보여줘",                 ["exec", "cypher", "nonempty"], None),
     ("E04", "필터속성", "pagerank가 높은 계좌 5개 보여줘",      ["exec", "cypher"], None),   # P1-B 문자열지표 관찰용
     ("E05", "필터속성", "여러 EP에 등장한 IP를 찾아줘",         ["exec", "cypher"], None),   # ep_count 활용 관찰용
+    # G. 알고리즘 라우팅 (P1-A) — 중심성/순환 질문은 CALL 레이어로
+    ("G01", "알고리즘", "매개중심성이 가장 높은 계좌는?",        ["exec", "algo", "algo_contains"], "김은희"),
+    ("G02", "알고리즘", "자금 순환 흐름을 찾아줘",              ["exec", "algo"], None),
     # F. 가드 — 비수사/쓰기 차단
     ("F01", "가드", "안녕하세요",                            ["general"], None),
     ("F02", "가드", "오늘 날씨 어때?",                        ["general"], None),
@@ -100,6 +103,10 @@ def evaluate(item, resp, err):
             r[c] = key in blob
         elif c == "count_fn":
             r[c] = "count(" in cypher.lower()
+        elif c == "algo":
+            r[c] = intent == "ALGO" and bool(resp.get("algo_result"))
+        elif c == "algo_contains":
+            r[c] = key in json.dumps(resp.get("algo_result") or {}, ensure_ascii=False)
         elif c == "general":
             r[c] = (err is None) and (intent not in ("", "QUERY") or not cypher)
         elif c == "nowrite":
