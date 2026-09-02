@@ -22,7 +22,7 @@ from flask import current_app
 from app.database import safe_set_graph_path
 
 KEYEXPR = ("coalesce(n.name,n.account_no,n.telno,n.ip_addr,n.id_val,n.flnm,"
-           "n.org_name,n.atm_nm,n.email_addr,n.src_name)")
+           "n.org_name,n.atm_nm,n.email_addr,n.src_name,n.mov_id)")
 
 # 사전계산(--set) 노드 지표 화이트리스트 — SQL injection 방지 + 오타 차단
 ALLOWED_METRICS = {

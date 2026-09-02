@@ -30,9 +30,9 @@ from collections import Counter, defaultdict
 
 KP = {'vt_psn': 'name', 'vt_bacnt': 'account_no', 'vt_telno': 'telno', 'vt_ip': 'ip_addr',
       'vt_id': 'id_val', 'vt_case': 'flnm', 'vt_org': 'org_name', 'vt_atm': 'atm_nm',
-      'vt_email': 'email_addr', 'vt_src': 'src_name'}
+      'vt_email': 'email_addr', 'vt_src': 'src_name', 'vt_movement': 'mov_id'}
 KEYEXPR = ("coalesce(n.name,n.account_no,n.telno,n.ip_addr,n.id_val,n.flnm,"
-           "n.org_name,n.atm_nm,n.email_addr,n.src_name)")
+           "n.org_name,n.atm_nm,n.email_addr,n.src_name,n.mov_id)")
 
 # 정수(범주) 속성 vs 실수(점수) 속성 구분 — SET 포맷용
 INT_METRICS = {'community_id', 'community_lp', 'component', 'kcore'}
