@@ -1,7 +1,7 @@
 # CCOP 통합 온톨로지 V4.1 — 전체 설계 명세
 
 **작성일**: 2026-07-31 (V4.0 2026-05-21 → V4.1 정합화)
-**상태**: **현행 SSOT** (Single Source of Truth)
+**상태**: 기준 설계 명세 (**현행 SSOT 버전은 V4.8** — §15 변경 이력·코드 docstring 참조, 2026-09-02)
 **대체 대상**: V4.0 (→ V4.1로 정합화·승격), V3.5 / V3.6 / V3.7 (deprecated)
 **SSOT 코드**: `app/middleware/services/ontology_service.py:KICSCrimeDomainOntology`
 
@@ -487,6 +487,14 @@ Onto.DOMAIN_USAGE['vt_psn']                        # 도메인 사용 dict
 | 2026-03 (추정) | V3.7 | pt_cluster, site_cluster, is_anonymous, relay_station 신설 (25/53) | CCOP 팀 |
 | **2026-05-21** | **V4.0** | **OSINT × V3.7 통합 표준화 + Hub 레이어 신설 + SSOT 메타 격상** | **CCOP 팀** |
 | **2026-07-31** | **V4.0 정합화** | **엣지 카탈로그 이원화 해소(의미↔시각 60 일치, 구 53 명목치 정정) + id 표준을 실 MERGE 키로 정정 + 회귀 테스트** | **CCOP 팀** |
+| 2026-08-03 | V4.3~V4.4 | 시나리오 직접 엣지 3종(knows·linked_id·mentions_id) + reification 확장(access_via 등, 60→66) | CCOP 팀 |
+| 2026-08-06 | V4.5 | 2차년도 실적재 검증 대조 — 신규 5종·확장 5종(66→71) + edge_id·파생속성 등록부 | CCOP 팀 |
+| 2026-08-13 | V4.6~V4.7 | bitemporal 정착(used_ip 등 valid_from/to·ip_role·R8 access_type) → represents·occp_nm·std_columns 표준 DDL 정합(71→72) | CCOP 팀 |
+| **2026-09-02** | **V4.8** | **EP1~8 실적재 전수감사 기반 도메인 확장 3종(contacted·registered_to+DigitalID, used_ip+BankAccount, channel 속성) + sameAs→same_as 개명(AgensGraph 소문자화 정합). 엣지 72 불변 — 감사 위반 0** | **CCOP 팀** |
+
+> **⚠ 현행 버전 안내**: 본 문서는 V4.1 시점의 전체 설계 명세이며, **현행 SSOT는 V4.8**
+> (코드 `ontology_service.py` docstring 버전 이력 + 엑셀 `CCOP_Ontology_V4.8_노드 엣지 속성 정보.xlsx`가 최신 정본).
+> V4.2 이후 변경은 위 표·코드 docstring·`docs/EP1_EP8_V47_AUDIT_20260902.md` 참조.
 
 ---
 

@@ -1,7 +1,7 @@
 """
 온톨로지 기반 그래프 분석 서비스
 
-CCOP V4.7 온톨로지 — POLE 정렬 6레이어 아키텍처 (현행 SSOT)
+CCOP V4.8 온톨로지 — POLE 정렬 6레이어 아키텍처 (현행 SSOT)
 현행 설계 기준: docs/CCOP_ONTOLOGY_V4.1.md (+ 상세: ONTOLOGY_FINAL_ARCHITECTURE_v3.7.md)
 버전 이력:
   - v3.7: pt_cluster/site_cluster 노드(군집 허브 패턴), is_anonymous, used_in_device,
