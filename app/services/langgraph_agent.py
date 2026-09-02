@@ -1002,6 +1002,10 @@ AS (p agtype);
         else:
             logger.warning(f"Query Execution Failed: {result}")
             metrics = {**metrics, f"execution_node_attempt_{state['error_count'] + 1}": time.time() - start_time}
+            # 읽기전용 가드 차단은 종결 — reflection 재시도해도 쓰기 질문이면 또 차단됨
+            if str(result).startswith("WRITE_BLOCKED"):
+                return {"execution_result": [], "error_message": None,
+                        "tc_warnings": [str(result)], "metrics": metrics}
             return {"error_message": str(result), "metrics": metrics}
 
     def reflection_node(self, state: AgentState) -> Dict:

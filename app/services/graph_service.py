@@ -1058,9 +1058,13 @@ class GraphService:
     # 🤖 [Feature 4] AI Text-to-Cypher (AIService 연동)
     # ---------------------------------------------------------
     @staticmethod
-    def execute_cypher(cypher_query, graph_path):
+    def execute_cypher(cypher_query, graph_path, allow_write=False):
         """
-        AgensGraph 네이티브 Cypher 쿼리 실행
+        AgensGraph 네이티브 Cypher 쿼리 실행.
+        기본 읽기 전용(allow_write=False) — T2C/조회 경로에서 LLM이 생성한 쓰기
+        Cypher(DELETE 등) 실행을 서버측에서 차단한다. (프롬프트 규칙만으론 모델이
+        무시 가능 — 실제로 '노드 전부 삭제해줘'가 DETACH DELETE로 실행돼 통합
+        그래프 전삭제 사고 발생, 2026-09-02 벤치 F03에서 적발 후 도입)
         """
         if not cypher_query: return False, "Empty Query"
 
@@ -1081,6 +1085,17 @@ class GraphService:
                     real_query = match.group(1).strip()
                     logger.info(f"▶ [GraphService] SQL Wrapper에서 내부 Cypher 추출 완료")
             
+            # ── 읽기 전용 가드 (wrapper 추출 '후' 검사 — 래핑 우회 차단) ──
+            if not allow_write:
+                import re as _re
+                _w = _re.search(r"\b(DELETE|DETACH|MERGE|CREATE|REMOVE|DROP|SET)\b",
+                                real_query, _re.I)
+                if _w:
+                    logger.warning(f"⛔ [GraphService] WRITE_BLOCKED — 읽기전용 위반"
+                                   f"({_w.group(0)}): {real_query[:100]}")
+                    return False, (f"WRITE_BLOCKED: 읽기 전용 조회 경로에서 쓰기 명령"
+                                   f"({_w.group(0).upper()})은 실행할 수 없습니다.")
+
             logger.info(f"▶ [GraphService] 실행 Cypher: {real_query}")
             cur.execute(real_query)
             
