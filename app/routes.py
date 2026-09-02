@@ -327,14 +327,49 @@ def load_graph_data():
             truncated_meta = None
             logger.info(f"▶ [GraphLoad] graph={graph_path} focus_account={focus_acct}")
         else:
-            cypher_query = f"""
-                MATCH (n)-[r]->(m)
-                RETURN id(n), labels(n), properties(n), id(r), type(r), id(m), labels(m), properties(m)
-                LIMIT {limit}
-            """
-            logger.info(f"▶ [GraphLoad] graph={graph_path} Cypher: MATCH (n)-[r]->(m) RETURN ... LIMIT {limit}")
-        cur.execute(cypher_query)
-        rows = cur.fetchall()
+            # P2 우선순위 샘플링(2026-09-02 감사): 무작위 LIMIT이 대형 그래프에서 서사 핵심
+            # (피의자·사건·계좌·출입국)을 누락하던 문제 — 엣지 타입 3계층으로 예산 배분.
+            #   T1 서사(사건·자금·인물 관계) 70% → T2 통신·명의 대량(owns_phone·contacted·
+            #   registered_to) 20% → T3 접속 로그(used_ip) 잔여. 미지 타입은 T1로(미래 엣지 안전).
+            cypher_query = None
+            T2_TYPES = {'owns_phone', 'contacted', 'registered_to'}
+            T3_TYPES = {'used_ip'}
+            rows = []
+            try:
+                cur.execute("MATCH ()-[r]->() RETURN DISTINCT type(r)")
+                all_types = [t[0] for t in cur.fetchall()]
+                tiers = [
+                    ([t for t in all_types if t not in T2_TYPES and t not in T3_TYPES], int(limit * 0.7)),
+                    ([t for t in all_types if t in T2_TYPES], int(limit * 0.2)),
+                    ([t for t in all_types if t in T3_TYPES], limit),   # 잔여 전부
+                ]
+                seen_rid = set()
+                for types, cap in tiers:
+                    remaining = limit - len(rows)
+                    if remaining <= 0 or not types:
+                        continue
+                    budget = min(cap, remaining)
+                    tlist = ", ".join(f"'{t}'" for t in types)   # 스키마 유래 타입명 — 안전
+                    cur.execute(f"MATCH (n)-[r]->(m) WHERE type(r) IN [{tlist}] "
+                                f"RETURN id(n), labels(n), properties(n), id(r), type(r), "
+                                f"id(m), labels(m), properties(m) LIMIT {budget}")
+                    for row in cur.fetchall():
+                        rid = str(row[3])
+                        if rid not in seen_rid:
+                            seen_rid.add(rid)
+                            rows.append(row)
+                logger.info(f"▶ [GraphLoad] graph={graph_path} 우선순위 샘플링 {len(rows)}엣지 "
+                            f"(T1 서사→T2 통신→T3 로그, limit={limit})")
+            except Exception as _pe:
+                logger.warning(f"우선순위 샘플링 실패 — 기본 LIMIT 폴백: {_pe}")
+                cypher_query = f"""
+                    MATCH (n)-[r]->(m)
+                    RETURN id(n), labels(n), properties(n), id(r), type(r), id(m), labels(m), properties(m)
+                    LIMIT {limit}
+                """
+        if cypher_query:
+            cur.execute(cypher_query)
+            rows = cur.fetchall()
 
         for r in rows:
             if len(r) < 8:
