@@ -14,10 +14,12 @@ import psycopg2
 
 KP = {'vt_bacnt': 'account_no', 'vt_case': 'flnm', 'vt_id': 'id_val', 'vt_psn': 'name',
       'vt_telno': 'telno', 'vt_ip': 'ip_addr', 'vt_org': 'org_name', 'vt_atm': 'atm_nm',
-      'vt_email': 'email_addr', 'vt_src': 'src_name'}
+      'vt_email': 'email_addr', 'vt_src': 'src_name',
+      'vt_movement': 'mov_id'}   # EP9/10 시드: 출입국 이벤트 (V4.8)
 EDGES = ['eg_used_account', 'eg_used_phone', 'eg_used_id', 'has_account', 'victim_in',
          'transferred_to', 'belongs_to', 'registered_to', 'used_ip', 'contacted',
-         'sourced_from', 'linked_to', 'uses_id', 'uses_email', 'owns_phone', 'sameAs']
+         'sourced_from', 'linked_to', 'uses_id', 'uses_email', 'owns_phone', 'same_as',
+         'suspect_in', 'performed_by']   # V4.8: same_as 개명 + EP9/10 시드 엣지
 GRAPHS = ['ep1_graph', 'ep2_graph', 'ep3_graph', 'ep4_graph',
           'ep5_graph', 'ep6_graph', 'ep7_graph', 'ep8_graph',
           'ep9_graph', 'ep10_graph']   # EP9/10: 정형 없음 → 수동 확정 시드(docs/EP910_SEED_DRAFT_20260902.md)
