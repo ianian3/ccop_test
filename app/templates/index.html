@@ -3548,7 +3548,10 @@ function showTruncateBanner(metas){
         }
 
         function updateFilterCounts() {
-            const types = ['vt_psn', 'vt_flnm', 'vt_bacnt', 'vt_telno', 'vt_site', 'vt_ip', 'vt_id', 'vt_atm'];
+            // 필터칩 12종 전체와 1:1 (구라벨 vt_flnm 제거 · 사건/조직/가상자산/이체/통화가
+            // 목록 누락으로 항상 0으로 표시되던 버그 수정 — 2026-09-02 화면기록 검증)
+            const types = ['vt_case', 'vt_psn', 'vt_org', 'vt_bacnt', 'vt_telno', 'vt_ip',
+                           'vt_site', 'vt_crypto', 'vt_id', 'vt_atm', 'vt_transfer', 'vt_call'];
             types.forEach(type => {
                 const count = cy.nodes(`[label="${type}"]`).length;
                 const countEl = document.getElementById(`count-${type}`);
