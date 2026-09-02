@@ -3016,6 +3016,7 @@ function showTruncateBanner(metas){
             });
             h += '</table><div style="margin-top:8px;color:#98a2b3;font-size:10px;">상위 노드는 그래프에서 주황 테두리로 강조 · 행 클릭 시 focus</div>';
             document.getElementById('node-info').innerHTML = h;
+            _lastAlgoHtml = h;
             highlightAlgoNodes(d.results.map(r => r.key));
             showToast(`✅ ${nm} 상위 ${d.results.length} — 사이드바·그래프 표시`, 'success');
         }
@@ -3025,6 +3026,7 @@ function showTruncateBanner(metas){
             (d.cycles || []).forEach((c, i) => { const names = c.map(x => x.key || '?').join(' → '); h += `<div style="padding:6px 4px;border-bottom:1px solid #eef1f6;font-size:12px;color:#16202e;">${i + 1}. ${names} → <span style="color:#1e4276;">${c[0].key}</span></div>`; });
             if (!d.count) h += '<div style="color:#98a2b3;">길이 6 이하 순환 없음</div>';
             document.getElementById('node-info').innerHTML = h;
+            _lastAlgoHtml = h;
             highlightAlgoNodes((d.cycles || []).flat().map(x => x.key));
             showToast(`✅ 순환 ${d.count}건 탐지 — 노드 강조`, 'success');
         }
@@ -3044,6 +3046,7 @@ function showTruncateBanner(metas){
             });
             h += '</table><div style="margin-top:8px;color:#98a2b3;font-size:10px;">유사도 = 공유 이웃 비율 — 동일인·공범·대포 재사용 후보</div>';
             document.getElementById('node-info').innerHTML = h;
+            _lastAlgoHtml = h;
             highlightAlgoNodes([d.node].concat(d.results.map(r => r.key)));
             showToast(`✅ 유사 노드 ${d.results.length} — 기준+후보 강조`, 'success');
         }
@@ -3057,10 +3060,19 @@ function showTruncateBanner(metas){
             h += mem.slice(0, 40).map(m => `<span onclick="focusAlgoNode('${String(m.key).replace(/'/g, "\\'")}')" style="display:inline-block;cursor:pointer;font-size:11px;padding:2px 8px;border-radius:10px;background:#f4f6f9;border:1px solid #d5dae2;color:#16202e;margin:2px;">${m.key}</span>`).join('');
             if (d.size > mem.length) h += `<div style="color:#98a2b3;font-size:10px;margin-top:6px;">표시 ${Math.min(40, mem.length)} / 전체 ${d.size}</div>`;
             document.getElementById('node-info').innerHTML = h;
+            _lastAlgoHtml = h;
             highlightAlgoNodes(mem.map(m => m.key));
             showToast(`✅ 군집 #${d.id} 멤버 ${d.size} — 로드된 노드 강조`, 'success');
         }
         let _algoKeys = [];   // 현재 분석 강조 대상 키 (토글·리셋과 협조)
+        let _lastAlgoHtml = null;   // 마지막 분석 결과 패널(리스트) — 노드 상세에서 '뒤로가기' 복원용
+        function backToAlgoList() {
+            if (!_lastAlgoHtml) return;
+            switchSidebarTab('details');
+            document.getElementById('node-info').innerHTML = _lastAlgoHtml;
+            document.getElementById('node-actions').style.display = 'none';
+            const t = document.getElementById('selected-node-type'); if (t) t.textContent = '분석 결과';
+        }
         let _algoPathWait = false, _algoPathSrc = null;   // 최단경로: 도착 노드 클릭 대기
         function runAlgoPath(src, dst) {
             const graph = document.getElementById('targetGraphInfo').value;
@@ -3080,6 +3092,7 @@ function showTruncateBanner(metas){
             if (!d.path) {
                 h += `<div style="color:#98a2b3;font-size:12px;">'${src}' ↔ '${dst}' 연결 경로 없음${d.note ? ' — ' + d.note : ''}</div>`;
                 document.getElementById('node-info').innerHTML = h;
+                _lastAlgoHtml = h;
                 showToast('연결 경로 없음', 'warning');
                 return;
             }
@@ -3091,6 +3104,7 @@ function showTruncateBanner(metas){
             }).join('');
             h += '<div style="margin-top:8px;color:#98a2b3;font-size:10px;">무방향 최단 연결 — 항목 클릭 시 그래프 focus</div>';
             document.getElementById('node-info').innerHTML = h;
+            _lastAlgoHtml = h;
             highlightAlgoNodes(d.path.map(x => x.key));
             showToast(`✅ ${d.length}-hop 경로 — ${d.path.length}개 노드 강조`, 'success');
         }
@@ -4127,7 +4141,8 @@ function showTruncateBanner(metas){
                 if (ng) h += `<div style="margin-top:6px;"><span style="padding:2px 8px; border-radius:10px; background:${ng[0]}22; border:1px solid ${ng[0]}; color:${ng[0]}; font-size:10px;">${ng[1]}</span></div>`;
             }
 
-            document.getElementById('node-info').innerHTML = h;
+            document.getElementById('node-info').innerHTML =
+                (_lastAlgoHtml ? '<button onclick="backToAlgoList()" style="display:block;width:100%;margin-bottom:10px;background:#eef1f6;border:1px solid #d5dae2;color:#1e4276;padding:6px 10px;border-radius:8px;font-size:11.5px;font-weight:700;cursor:pointer;text-align:left;">← 분석 결과 리스트로</button>' : '') + h;
 
             // 5. 액션 버튼 표시
             document.getElementById('node-actions').style.display = 'block';
