@@ -114,3 +114,6 @@ app/.DS_Store
 docker-compose.override.yml
 tests/node_modules/
 tests/package*.json
+
+# 배포 산출물(zip 등) — 소스만 추적, 패키지는 생성물이라 제외
+docs/*.zip
