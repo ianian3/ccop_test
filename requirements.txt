@@ -37,3 +37,6 @@ psutil==5.9.8
 # Testing
 pytest==7.4.4
 pytest-cov==4.1.0
+
+# 그래프 분석 엔진 (V4.8 — graph_analytics·graph_algo_service)
+networkx==3.2.1
