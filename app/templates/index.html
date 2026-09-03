@@ -1614,16 +1614,21 @@ function showTruncateBanner(metas){
                 </select>
                 <button class="tool-btn" style="--tc:#1e4276;margin-left:4px" onclick="runAlgo()"
                     title="선택한 네트워크 분석 알고리즘 실행 — 결과를 사이드바·그래프에 표시">▶ 분석</button>
-                <!-- ── 시간축 탐색: 기간으로 시간엣지(이체·통화·출입국) 필터 ── -->
-                <span style="width:1px;height:20px;background:#d5dae2;margin:0 6px;display:inline-block;vertical-align:middle;"></span>
-                <span style="font-size:11px;color:#4a5568;font-weight:700;">📅</span>
-                <input type="date" id="tfFrom" onmousedown="event.stopPropagation()" onpointerdown="event.stopPropagation()"
-                    style="border:1px solid #d5dae2;border-radius:10px;padding:3px 6px;font-size:11px;color:#16202e;background:#fff;">
-                <span style="color:#98a2b3;font-size:11px;">~</span>
-                <input type="date" id="tfTo" onmousedown="event.stopPropagation()" onpointerdown="event.stopPropagation()"
-                    style="border:1px solid #d5dae2;border-radius:10px;padding:3px 6px;font-size:11px;color:#16202e;background:#fff;">
-                <button class="tool-btn" style="--tc:#1e4276;margin-left:2px" onclick="applyTimeFilter()" title="기간 내 시간엣지만 표시 (이체·통화·출입국) — 시간정보 없는 관계는 흐리게 유지">기간 적용</button>
-                <button onclick="clearTimeFilter()" style="background:#fff;border:1px solid #d5dae2;color:#4a5568;padding:5px 10px;border-radius:14px;font-size:11px;cursor:pointer;margin-left:2px;">해제</button>
+                <!-- ── 시간축: 버튼 1개 + 팝오버 (적용 기간은 버튼에 표시) ── -->
+                <span style="position:relative;display:inline-block;">
+                <button id="btn-timefilter" class="tool-btn" style="--tc:#0d9488;margin-left:2px"
+                    onmousedown="event.stopPropagation()" onclick="toggleTfPopover()"
+                    title="기간으로 시간엣지(이체·통화·출입국) 필터 — 적용 시 기간이 버튼에 표시">📅 기간</button>
+                <div id="tfPopover" onmousedown="event.stopPropagation()" onpointerdown="event.stopPropagation()"
+                    style="display:none;position:absolute;top:34px;left:0;z-index:300;background:#fff;border:1px solid #d5dae2;border-radius:10px;box-shadow:0 6px 20px rgba(16,24,40,0.15);padding:10px 12px;white-space:nowrap;">
+                    <div style="font-size:11px;font-weight:700;color:#1e4276;margin-bottom:6px;">시간축 필터 <span style="font-weight:400;color:#98a2b3;">이체·통화·출입국</span></div>
+                    <input type="date" id="tfFrom" style="border:1px solid #d5dae2;border-radius:8px;padding:3px 6px;font-size:11px;color:#16202e;">
+                    <span style="color:#98a2b3;font-size:11px;">~</span>
+                    <input type="date" id="tfTo" style="border:1px solid #d5dae2;border-radius:8px;padding:3px 6px;font-size:11px;color:#16202e;">
+                    <button onclick="applyTimeFilter()" style="background:#1e4276;color:#fff;border:none;border-radius:8px;padding:4px 12px;font-size:11px;font-weight:700;cursor:pointer;margin-left:4px;">적용</button>
+                    <button onclick="clearTimeFilter()" style="background:#fff;border:1px solid #d5dae2;color:#4a5568;border-radius:8px;padding:4px 10px;font-size:11px;cursor:pointer;margin-left:2px;">해제</button>
+                </div>
+                </span>
             </div>
             <!-- 콜드스타트 추천: 빈 캔버스에서 어디부터 볼지 — 영향력(PageRank) Top 10 -->
             <div id="startRecommend" style="display:none; position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); z-index:200; width:560px; max-width:calc(100% - 480px); background:rgba(255,255,255,0.98); border:1px solid #d5dae2; border-radius:14px; box-shadow:0 8px 32px rgba(16,24,40,0.14); padding:18px 20px;">
@@ -3136,6 +3141,9 @@ function showTruncateBanner(metas){
                 else { nOut++; if (e.visible()) { e.style('display', 'none'); _tfHidden.push(e.id()); } }
             }));
             _tfOn = true;
+            const btn = document.getElementById('btn-timefilter');
+            if (btn) { btn.textContent = `📅 ${from.slice(5)}~${to.slice(5)}`; btn.classList.add('on'); btn.title = `시간축 필터 적용 중: ${from} ~ ${to}`; }
+            const pop = document.getElementById('tfPopover'); if (pop) pop.style.display = 'none';
             showToast(`📅 ${from} ~ ${to} — 기간 내 시간엣지 ${nIn} 표시 · 기간 밖 ${nOut} 숨김 · 무시간 ${nNo} 흐림`, 'success');
         }
         function clearTimeFilter(silent) {
@@ -3145,7 +3153,16 @@ function showTruncateBanner(metas){
                 _tfDimmed.forEach(id => { const e = cy.getElementById(id); if (e) { e.removeStyle('opacity'); e.removeStyle('width'); } });
             });
             _tfHidden = []; _tfDimmed = []; _tfOn = false;
-            if (!silent) showToast('시간 필터 해제', 'info');
+            const btn = document.getElementById('btn-timefilter');
+            if (btn) { btn.textContent = '📅 기간'; btn.classList.remove('on'); btn.title = '기간으로 시간엣지(이체·통화·출입국) 필터 — 적용 시 기간이 버튼에 표시'; }
+            if (!silent) { const pop = document.getElementById('tfPopover'); if (pop) pop.style.display = 'none'; showToast('시간 필터 해제', 'info'); }
+        }
+        function toggleTfPopover() {
+            const pop = document.getElementById('tfPopover');
+            if (!pop) return;
+            const opening = pop.style.display === 'none' || !pop.style.display;
+            if (opening && window.cy && cy.edges().length) _tfInitRange();   // 열 때 min/max 자동
+            pop.style.display = opening ? 'block' : 'none';
         }
 
         // 앵커 중심 방사형 배치 — 검색/추천 시작 결과의 기본 시각화 (hop 거리별 동심원).
