@@ -26,6 +26,27 @@ except FileNotFoundError:
     T2C_V37_SYSTEM_PROMPT = ""
     logger.warning(f"v3.7 system prompt not found at {_T2C_V37_SYSTEM_PROMPT_PATH}")
 
+# 통합 그래프(ccop_ep_integrated)는 스키마가 다르다 — vt_movement·suspect_in·performed_by·same_as 등
+# EP1~10 병합 산출물은 tccop_graph 프롬프트에 없어 모델이 라벨/속성을 지어냈다(is_suspect·call_time 등).
+# 그래프별로 실측 스키마 프롬프트를 주입해 환각의 원인을 컨텍스트 단계에서 제거한다.
+_integ_path = os.path.join(_prompt_dir, "t2c_integrated_system.txt")
+try:
+    with open(_integ_path, "r", encoding="utf-8") as _f:
+        T2C_INTEGRATED_SYSTEM_PROMPT = _f.read()
+except FileNotFoundError:
+    T2C_INTEGRATED_SYSTEM_PROMPT = ""
+
+
+# 통합 그래프 vt_bacnt.tier 실값 (질문 표현과 달라 부분매칭 완화가 필요)
+_TIER_VALUES = ('1차 사기수취', '3차집금', '4차 해외송금 수취')
+
+
+def _system_prompt_for(graph_path: str) -> str:
+    """그래프별 system 프롬프트 선택 (미지 그래프는 기존 프롬프트 유지)."""
+    if graph_path == 'ccop_ep_integrated' and T2C_INTEGRATED_SYSTEM_PROMPT:
+        return T2C_INTEGRATED_SYSTEM_PROMPT
+    return T2C_V37_SYSTEM_PROMPT
+
 class AgentState(TypedDict):
     """LangGraph 에이전트의 상태 정의"""
     question: str
@@ -829,7 +850,7 @@ AS (p agtype);
                     resp = client.chat.completions.create(
                         model=current_app.config.get('SLLM_MODEL_NAME', 'qwen25_t2c_v37_v2'),
                         messages=[
-                            {"role": "system", "content": T2C_V37_SYSTEM_PROMPT},
+                            {"role": "system", "content": _system_prompt_for(state['graph_path'])},
                             {"role": "user", "content": user_msg},
                         ],
                         temperature=0,
@@ -968,6 +989,26 @@ AS (p agtype);
         if _g != cypher_to_run:
             logger.info(f"[값 grounding] bank_nm '…은행' 접미 정규화 적용")
             cypher_to_run = _g
+
+        # tier 부분값 완화: 실값은 '3차집금'·'1차 사기수취'·'4차 해외송금 수취'인데
+        # 모델은 질문 표현 그대로 tier='3차' 를 쓴다 → 실값의 접두/부분이면 CONTAINS 로 완화.
+        # (등가 비교를 넓히는 방향이라 오탐 없이 공집합만 해소)
+        def _tier_relax(m):
+            val = m.group(2)
+            if any(val != rv and val in rv for rv in _TIER_VALUES):
+                return f"{m.group(1).split('=')[0].rstrip()} CONTAINS '{val}'"
+            return m.group(0)
+        _g2 = re.sub(r"(\b\w+\.tier\s*=\s*')([^']+)(')", _tier_relax, cypher_to_run)
+        if _g2 != cypher_to_run:
+            logger.info("[값 grounding] tier 부분값 → CONTAINS 완화")
+            cypher_to_run = _g2
+
+        # LIMIT 절 위치 교정: 모델이 'MATCH … LIMIT n RETURN …' 순서로 쓰면 문법 오류.
+        # Cypher 규격상 LIMIT 은 RETURN 뒤 — 이동시켜 실행 가능하게 만든다.
+        _m = re.search(r"\sLIMIT\s+(\d+)\s+(RETURN\s+.+?)(?=\s*\$\$|\s*;|$)", cypher_to_run, re.I | re.S)
+        if _m and not re.search(r"RETURN\s+.*\sLIMIT\s+\d+", cypher_to_run, re.I | re.S):
+            cypher_to_run = cypher_to_run.replace(_m.group(0), f" {_m.group(2).rstrip()} LIMIT {_m.group(1)}")
+            logger.info("[문법 교정] LIMIT 절을 RETURN 뒤로 이동")
         tc_warnings = []
         if state.get('config', {}).get('temporal_continuity'):
             try:
