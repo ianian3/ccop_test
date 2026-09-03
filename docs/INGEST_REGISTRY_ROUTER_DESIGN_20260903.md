@@ -37,7 +37,16 @@
                  └──────────────────────────────────────────────┘
 ```
 
-**단일 중간표현(IR)**: 모든 어댑터는 raw를 `NormalizedRecord` 스트림으로 변환한다. 엔진은 이 IR을 표준 테이블에 적재하고, 그래프화는 기존 `transfer_data`가 담당한다. → "무엇을 추출하는가"(어댑터)와 "어디에 쓰는가"(엔진)를 분리.
+**단일 중간표현(IR)**: 모든 어댑터는 raw를 `NormalizedRecord` 스트림으로 변환한다. → "무엇을 추출하는가"(어댑터)와 "어디에 쓰는가"(엔진)를 분리.
+
+**적재 백엔드 2원화** (2026-09-03 검토 반영): IR의 목적지는 rtype에 따라 두 갈래다.
+
+| 백엔드 | 대상 rtype | 경로 |
+|---|---|---|
+| **(a) RDB-경로** | psn·bacnt·telno·case·call·transfer·소유/연루 관계 | 표준테이블 INSERT → `transfer_data` → 그래프 (기존 경로 재사용) |
+| **(b) 그래프-직행 (GraphWriter)** | msg(일 집계)·ip(valid_from/to)·id·src, 집계엣지(`transferred_to`·`contacted`·`linked_to`·`registered_to`) | IR → Cypher MERGE 공용 계층 |
+
+> **근거(코드 실측)**: 집계형 엣지(`transferred_to`/`contacted` 등)는 `transfer_data`에 생성 로직이 없고(개별 이벤트 방식만 존재), 표준테이블 적재기는 9개 테이블만 INSERT 하므로 msg/ip/id/src 수용처가 없다. 기존 파서들이 그래프에 직접 MERGE 한 것은 우회가 아니라 **RDB 수용처 부재** 때문 — 이를 GraphWriter 한 계층으로 수렴시킨다(V4.0 메타·provenance·이스케이프 일괄 처리, 파서별 산재 MERGE 제거). 장기적으로는 표준 DDL 정합(P0) 완료 후 (b)의 일부를 (a)로 이관.
 
 ---
 
@@ -160,7 +169,8 @@ CREATE TABLE ingest_reject (
 |---|---|---|
 | `IngestRegistryService` | `app/services/ingest_registry_service.py` | 지문·등록부·라우팅·검증 오케스트레이션 |
 | 어댑터 | `app/services/format_adapters/*.py` | 기존 파서 추출부 이식 |
-| IR 적재기 | `IngestRegistryService._load_records()` | `NormalizedRecord` → 표준테이블 (내부적으로 `rdb_service` 패턴 재사용) |
+| IR 적재기 (a) | `IngestRegistryService._load_records()` | RDB-경로 rtype → 표준테이블 (내부적으로 `rdb_service` 패턴 재사용) |
+| **GraphWriter (b)** | `app/services/graph_writer.py` | 그래프-직행 rtype/집계엣지 → Cypher MERGE (V4.0 메타·provenance·이스케이프 일괄; 기존 파서 MERGE부 수렴) |
 | 라우트 | `app/routes.py` 또는 신규 `routes_ingest.py` | 업로드/프리뷰/매핑확정/상태 API |
 
 **재활용(수정 없음)**: `rdb_to_graph_service.transfer_data`(표준테이블→v4.8 그래프), `rdb_service.import_predefined_schema_to_rdb`(tbl_* 경로는 그대로 유지 — 등록부는 그 상위 계층).
@@ -218,7 +228,7 @@ POST /api/ingest/to-graph
 | 단계 | 범위 | 산출 | 검증 |
 |---|---|---|---|
 | **P1a** | 어댑터 인터페이스 + IR + 지문 + 등록부 최소구현 + 4종 어댑터 이식(계좌·통화·접수·카톡) | `ingest_registry_service.py`, `format_adapters/` | 4종 원본으로 IR 산출 골든테스트 |
-| **P1b** | IR→표준테이블 적재기 + 검증게이트 + 실패격리 + `/api/ingest/upload,status` | 라우트, ingest_batch/reject | EP1~3 원본 재적재 → 기존 그래프와 노드/엣지 수 대조 |
+| **P1b** | IR 적재기(a: 표준테이블 / b: GraphWriter) + 검증게이트 + 실패격리 + `/api/ingest/upload,status` | 라우트, `graph_writer.py`, ingest_batch/reject | EP1~3 원본 재적재 → 기존 그래프와 노드/엣지 수 대조 |
 | **P1c** | UI 업로드 연결 + `/api/ingest/preview` | index.html 업로드 탭 | 수사관 실사용 |
 | **P1d** | human-in-the-loop 매핑(`/mapping/confirm`) + 등록부 영속화 | 매핑 UI | 미지 양식 1회 확정→재사용 |
 | **P2** | 나머지 5종 어댑터(070·030·031·043·더치트) + 신양식 자동확장 | 어댑터 추가 | 커버리지 확대 |
@@ -237,6 +247,8 @@ POST /api/ingest/to-graph
 | **오매핑 = 증거 오염** | 신양식 자동확정 금지. 확신도 높아도 수사관 확인 필수(human-in-the-loop) |
 | **폐쇄망** | 지문·매핑·정규화 전부 결정론. LLM은 미지 헤더 의미 "제안"에만(선택) |
 | **부분 적재** | 파일 단위 원자 트랜잭션 + 실패행 격리(기존 rdb_service 원자성 패턴 계승) |
+| **search_path public 폴백** — `transfer_data`가 `SET search_path = "{schema}", public`이라 소스 스키마에 없는 테이블 조회가 운영 public 데이터로 조용히 폴백 | 엔진 경유 호출 시 폴백 제거(`SET search_path = "{schema}"`) 또는 쿼리 스키마 명시 접두 — 격리 적재에 운영 데이터 혼입 차단 |
+| **집계 재현 불가** — 카카오 일 집계(G9)·valid_from/to 백필 등은 transfer_data가 재현 못 함 | 해당 로직은 어댑터→GraphWriter 경로(b)에 유지. transfer_data 로 강제 이관하지 않음 |
 
 ---
 
