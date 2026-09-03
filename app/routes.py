@@ -310,7 +310,7 @@ def load_graph_data():
         if focus_ip and re.match(r'^[0-9a-fA-F.:]{3,45}$', focus_ip):
             cypher_query = f"""
                 MATCH (n)-[r]->(m:vt_ip {{ip_addr:'{focus_ip}'}})
-                RETURN id(n), labels(n), properties(n), id(r), type(r), id(m), labels(m), properties(m)
+                RETURN id(n), labels(n), properties(n), id(r), type(r), properties(r), id(m), labels(m), properties(m)
                 LIMIT {limit}
             """
             truncated_meta = None
@@ -321,7 +321,7 @@ def load_graph_data():
             cypher_query = f"""
                 MATCH (n)-[r]->(m)
                 WHERE n.account_no = '{focus_acct}' OR m.account_no = '{focus_acct}'
-                RETURN id(n), labels(n), properties(n), id(r), type(r), id(m), labels(m), properties(m)
+                RETURN id(n), labels(n), properties(n), id(r), type(r), properties(r), id(m), labels(m), properties(m)
                 LIMIT {limit}
             """
             truncated_meta = None
@@ -351,7 +351,7 @@ def load_graph_data():
                     budget = min(cap, remaining)
                     tlist = ", ".join(f"'{t}'" for t in types)   # 스키마 유래 타입명 — 안전
                     cur.execute(f"MATCH (n)-[r]->(m) WHERE type(r) IN [{tlist}] "
-                                f"RETURN id(n), labels(n), properties(n), id(r), type(r), "
+                                f"RETURN id(n), labels(n), properties(n), id(r), type(r), properties(r), "
                                 f"id(m), labels(m), properties(m) LIMIT {budget}")
                     for row in cur.fetchall():
                         rid = str(row[3])
@@ -364,7 +364,7 @@ def load_graph_data():
                 logger.warning(f"우선순위 샘플링 실패 — 기본 LIMIT 폴백: {_pe}")
                 cypher_query = f"""
                     MATCH (n)-[r]->(m)
-                    RETURN id(n), labels(n), properties(n), id(r), type(r), id(m), labels(m), properties(m)
+                    RETURN id(n), labels(n), properties(n), id(r), type(r), properties(r), id(m), labels(m), properties(m)
                     LIMIT {limit}
                 """
         if cypher_query:
@@ -372,10 +372,10 @@ def load_graph_data():
             rows = cur.fetchall()
 
         for r in rows:
-            if len(r) < 8:
+            if len(r) < 9:
                 continue
 
-            n_id, n_labels, n_props, r_id, r_type, m_id, m_labels, m_props = r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7]
+            n_id, n_labels, n_props, r_id, r_type, r_props, m_id, m_labels, m_props = r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8]
 
             # 노드 n 추가
             n_id_str = str(n_id)
@@ -414,7 +414,7 @@ def load_graph_data():
                     "source": n_id_str,
                     "target": m_id_str,
                     "label": str(r_type).replace('"', '') if r_type else "관계",
-                    "props": {}
+                    "props": GraphService.safe_props(r_props if isinstance(r_props, dict) else {})
                 }
             })
 

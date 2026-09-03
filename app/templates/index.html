@@ -1614,6 +1614,16 @@ function showTruncateBanner(metas){
                 </select>
                 <button class="tool-btn" style="--tc:#1e4276;margin-left:4px" onclick="runAlgo()"
                     title="선택한 네트워크 분석 알고리즘 실행 — 결과를 사이드바·그래프에 표시">▶ 분석</button>
+                <!-- ── 시간축 탐색: 기간으로 시간엣지(이체·통화·출입국) 필터 ── -->
+                <span style="width:1px;height:20px;background:#d5dae2;margin:0 6px;display:inline-block;vertical-align:middle;"></span>
+                <span style="font-size:11px;color:#4a5568;font-weight:700;">📅</span>
+                <input type="date" id="tfFrom" onmousedown="event.stopPropagation()" onpointerdown="event.stopPropagation()"
+                    style="border:1px solid #d5dae2;border-radius:10px;padding:3px 6px;font-size:11px;color:#16202e;background:#fff;">
+                <span style="color:#98a2b3;font-size:11px;">~</span>
+                <input type="date" id="tfTo" onmousedown="event.stopPropagation()" onpointerdown="event.stopPropagation()"
+                    style="border:1px solid #d5dae2;border-radius:10px;padding:3px 6px;font-size:11px;color:#16202e;background:#fff;">
+                <button class="tool-btn" style="--tc:#1e4276;margin-left:2px" onclick="applyTimeFilter()" title="기간 내 시간엣지만 표시 (이체·통화·출입국) — 시간정보 없는 관계는 흐리게 유지">기간 적용</button>
+                <button onclick="clearTimeFilter()" style="background:#fff;border:1px solid #d5dae2;color:#4a5568;padding:5px 10px;border-radius:14px;font-size:11px;cursor:pointer;margin-left:2px;">해제</button>
             </div>
             <!-- 콜드스타트 추천: 빈 캔버스에서 어디부터 볼지 — 영향력(PageRank) Top 10 -->
             <div id="startRecommend" style="display:none; position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); z-index:200; width:560px; max-width:calc(100% - 480px); background:rgba(255,255,255,0.98); border:1px solid #d5dae2; border-radius:14px; box-shadow:0 8px 32px rgba(16,24,40,0.14); padding:18px 20px;">
@@ -2810,7 +2820,7 @@ function showTruncateBanner(metas){
         }
 
         // 명시적 전체 로드 ('전체 보기' 버튼 전용 — 대형 그래프는 서버 규모 가드로 잘림 안내)
-        function loadFullGraph() {
+        function loadFullGraph(onDone) {
             const graphName = document.getElementById('targetGraphInfo').value;
             if (!graphName) return;
             if (_layoutLocked) setLayoutLocked(false, true);
@@ -2839,6 +2849,7 @@ function showTruncateBanner(metas){
                         const edgeCount = data.filter(e => e.group === 'edges').length;
                         const collapseMsg = collapsedN > 0 ? ` · 이벤트 ${collapsedN}건 접힘` : '';
                         showToast(`✅ '${graphName}' 로드 완료 — 노드 ${nodeCount}개 · 엣지 ${edgeCount}개${collapseMsg}`, "success");
+                        if (typeof onDone === 'function') setTimeout(onDone, 300);
                     } else {
                         showToast(`'${graphName}' 그래프에 데이터가 없습니다.`, "warning");
                     }
@@ -3085,6 +3096,58 @@ function showTruncateBanner(metas){
             highlightAlgoNodes(mem.map(m => m.key));
             showToast(`✅ 군집 #${d.id} 멤버 ${d.size} — 로드된 노드 강조`, 'success');
         }
+        // ── 시간축 탐색 (P1-2): 시간 보유 엣지를 기간으로 필터 ──
+        // 시간엣지 = transferred_to(first_dlng_dt)·contacted(first_dt)·performed_by(연결 movement.mov_dt)
+        // in-range: 표시+강조 / out-range: 숨김 / 무시간 엣지: 흐리게(맥락 유지). 해제 시 정확 원복.
+        let _tfHidden = [], _tfDimmed = [], _tfOn = false;
+        function _edgeDate(e) {
+            const p = e.data('props') || {};
+            let d = p.first_dlng_dt || p.first_dt || null;
+            if (!d && e.data('label') === 'performed_by') {
+                const mv = [e.source(), e.target()].find(n => n.data('label') === 'vt_movement');
+                d = mv ? (mv.data('props') || {}).mov_dt : null;
+            }
+            if (!d) return null;
+            const m = String(d).replace(/[^0-9]/g, '');
+            return m.length >= 8 ? `${m.slice(0,4)}-${m.slice(4,6)}-${m.slice(6,8)}` : null;
+        }
+        function _tfInitRange() {   // 로드된 엣지에서 min/max로 date input 기본값
+            let lo = null, hi = null;
+            cy.edges().forEach(e => { const d = _edgeDate(e); if (d) { if (!lo || d < lo) lo = d; if (!hi || d > hi) hi = d; } });
+            const f = document.getElementById('tfFrom'), t = document.getElementById('tfTo');
+            if (f && !f.value && lo) f.value = lo;
+            if (t && !t.value && hi) t.value = hi;
+            return { lo, hi };
+        }
+        function applyTimeFilter(fromV, toV) {
+            if (!window.cy || !cy.edges().length) { showToast('그래프를 먼저 불러오세요', 'warning'); return; }
+            _tfInitRange();
+            const from = fromV || document.getElementById('tfFrom').value;
+            const to = toV || document.getElementById('tfTo').value;
+            if (!from || !to) { showToast('시간 정보가 있는 엣지가 없거나 기간 미지정', 'warning'); return; }
+            if (fromV) document.getElementById('tfFrom').value = fromV;
+            if (toV) document.getElementById('tfTo').value = toV;
+            clearTimeFilter(true);
+            let nIn = 0, nOut = 0, nNo = 0;
+            cy.batch(() => cy.edges().forEach(e => {
+                const d = _edgeDate(e);
+                if (!d) { nNo++; if (e.visible()) { e.style('opacity', 0.15); _tfDimmed.push(e.id()); } return; }
+                if (d >= from && d <= to) { nIn++; e.style({ 'width': 3.5, 'opacity': 1 }); _tfDimmed.push(e.id()); }
+                else { nOut++; if (e.visible()) { e.style('display', 'none'); _tfHidden.push(e.id()); } }
+            }));
+            _tfOn = true;
+            showToast(`📅 ${from} ~ ${to} — 기간 내 시간엣지 ${nIn} 표시 · 기간 밖 ${nOut} 숨김 · 무시간 ${nNo} 흐림`, 'success');
+        }
+        function clearTimeFilter(silent) {
+            if (!window.cy) return;
+            cy.batch(() => {
+                _tfHidden.forEach(id => { const e = cy.getElementById(id); if (e) e.removeStyle('display'); });
+                _tfDimmed.forEach(id => { const e = cy.getElementById(id); if (e) { e.removeStyle('opacity'); e.removeStyle('width'); } });
+            });
+            _tfHidden = []; _tfDimmed = []; _tfOn = false;
+            if (!silent) showToast('시간 필터 해제', 'info');
+        }
+
         // 앵커 중심 방사형 배치 — 검색/추천 시작 결과의 기본 시각화 (hop 거리별 동심원).
         // 대형 누적 캔버스(>600노드)나 위치고정 중에는 기존 레이아웃 유지.
         function focusRadial(anchorKey) {
@@ -3518,7 +3581,7 @@ ${snap?sect('7. 그래프 스냅샷 (현재 탐색 화면)')+`<img class="snap" 
             if(!ev.length){m.innerHTML=`<div style="background:#ffffff;border:1px solid #d5dae2;border-radius:16px;padding:24px;color:#3a4453">이벤트(이체·통화 시각) 없음 — <code>${g}</code><br><span style="font-size:12px;color:#4a5568">이체/통화 관계가 있는 그래프(EP3·통합 등)를 선택하세요.</span><div style="margin-top:12px"><button onclick="document.getElementById('timeline-modal').style.display='none'" style="background:#f4f6f9;border:1px solid #d5dae2;color:#3a4453;border-radius:8px;padding:5px 12px;cursor:pointer">닫기</button></div></div>`;return;}
             window._tlData=ev;
             const maxC=Math.max(...ev.map(e=>e.contact_cnt),1), maxA=Math.max(...ev.map(e=>e.transfer_amt),1);
-            const bars=ev.map((e,i)=>`<div onmouseenter="tlTip(event,${i})" onmousemove="tlTip(event,${i})" onmouseleave="tlHide()" style="display:flex;flex-direction:column;justify-content:flex-end;align-items:center;min-width:15px;height:200px;cursor:crosshair">
+            const bars=ev.map((e,i)=>`<div onmouseenter="tlTip(event,${i})" onmousemove="tlTip(event,${i})" onmouseleave="tlHide()" onclick="tlGo(${i})" style="display:flex;flex-direction:column;justify-content:flex-end;align-items:center;min-width:15px;height:200px;cursor:crosshair">
                 <div style="width:5px;height:${Math.round(e.transfer_amt/maxA*150)}px;background:#fbbf24;border-radius:2px 2px 0 0;pointer-events:none"></div>
                 <div style="width:9px;height:${Math.round(e.contact_cnt/maxC*150)}px;background:#c084fc;border-radius:2px 2px 0 0;margin-top:1px;pointer-events:none"></div>
               </div>`).join('');
@@ -3541,6 +3604,20 @@ ${snap?sect('7. 그래프 스냅샷 (현재 탐색 화면)')+`<img class="snap" 
             let x=ev.clientX+14; const y=ev.clientY+14;
             if(x+190>window.innerWidth)x=ev.clientX-190;
             t.style.left=x+'px'; t.style.top=y+'px';
+        }
+        // 타임라인 → 그래프 연동: 막대 클릭 시 해당 날짜 ±3일 기간 필터로 그래프 탐색 (P1-2)
+        function tlGo(i) {
+            const ev = (window._tlData || [])[i];
+            if (!ev) return;
+            const d = new Date(ev.date);
+            const f = new Date(d); f.setDate(d.getDate() - 3);
+            const t = new Date(d); t.setDate(d.getDate() + 3);
+            const iso = x => x.toISOString().slice(0, 10);
+            const m = document.getElementById('timeline-modal'); if (m) m.style.display = 'none';
+            switchTab('graph');
+            const run = () => applyTimeFilter(iso(f), iso(t));
+            if (!window.cy || cy.edges().length === 0) { showToast('그래프 로드 후 기간 적용...', 'info'); loadFullGraph(run); }
+            else run();
         }
         function tlHide(){const t=document.getElementById('tl-tip');if(t)t.style.display='none';}
         // ── 집금 ATM 지도 탭 (Leaflet) ──
