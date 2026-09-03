@@ -112,3 +112,5 @@ node_modules/
 data/*.lock
 app/.DS_Store
 docker-compose.override.yml
+tests/node_modules/
+tests/package*.json
