@@ -145,7 +145,11 @@ def evaluate(item, resp, err):
             r[c] = bool(cypher)
         elif c == "nonempty":
             ar = resp.get("algo_result") or {}
-            r[c] = len(elements) > 0 or bool(ar.get("results") or ar.get("cycles") or ar.get("members"))
+            # 앵커 보강분은 인정하지 않는다 — 모델 Cypher가 0건인데 보강 요소로 통과되면
+            # 성능이 과대평가된다(100문항에서 7건 적발). model_rows 가 있으면 그것을 진실값으로.
+            mr = resp.get("model_rows")
+            n = mr if isinstance(mr, int) else len(elements)
+            r[c] = n > 0 or bool(ar.get("results") or ar.get("cycles") or ar.get("members"))
         elif c == "contains":
             r[c] = key in blob
         elif c == "count_fn":
@@ -166,9 +170,47 @@ def evaluate(item, resp, err):
     return r
 
 
+def integrity_snapshot():
+    """벤치 실행 전후 그래프 무결성 스냅샷.
+
+    가드 문항('전부 지워줘'·'이름 바꿔줘')은 실패 시 **실제 데이터를 변조**한다.
+    2026-09-03 실측: SET 1건이 서버 가드를 통과해 통합 그래프의 주범 이름이
+    '조정모'→'홍길동'으로 바뀌었고, 이후 측정에서 P01/V01 이 조용히 실패했다
+    (평가 결과가 오염된 데이터를 측정하는 최악의 형태). 그래서 스스로 검증한다.
+    """
+    import psycopg2
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    try:
+        from app import create_app
+        from app.database import safe_set_graph_path
+        app = create_app()
+        with app.app_context():
+            conn = psycopg2.connect(**app.config['DB_CONFIG'])
+            conn.autocommit = True
+            cur = conn.cursor()
+            safe_set_graph_path(cur, GRAPH)
+            snap = {}
+            for label in ('vt_psn', 'vt_bacnt', 'vt_telno', 'vt_ip', 'vt_case'):
+                cur.execute(f"MATCH (n:{label}) RETURN count(n)")
+                snap[label] = cur.fetchone()[0]
+            for edge in ('transferred_to', 'contacted', 'suspect_in', 'same_as'):
+                cur.execute(f"MATCH ()-[r:{edge}]->() RETURN count(r)")
+                snap[edge] = cur.fetchone()[0]
+            # 핵심 앵커 존재 여부 — 이름 변조를 잡는다
+            cur.execute("MATCH (p:vt_psn)-[:suspect_in]->() WHERE p.role CONTAINS '주범' RETURN p.name")
+            row = cur.fetchone()
+            snap['주범_name'] = row[0] if row else None
+            conn.close()
+            return snap
+    except Exception as e:
+        print(f"  (무결성 스냅샷 생략: {e})", flush=True)
+        return None
+
+
 def main():
     only = set(sys.argv[1:])
     items = [it for it in ITEMS if not only or it[0] in only]
+    before = integrity_snapshot()
     print(f"통합그래프 T2C 벤치 — {len(items)}문항 · API={API} · graph={GRAPH}", flush=True)
     results = []
     for it in items:
@@ -185,6 +227,22 @@ def main():
         print(f"  {'✅' if ok else '❌'} [{iid}] {q[:34]:36s} {lat:5.1f}s"
               + ("" if ok else f"  실패:{fails}"), flush=True)
 
+    # 무결성 검증 — 가드 문항이 데이터를 변조했으면 점수보다 이 사실이 먼저다.
+    after = integrity_snapshot()
+    integrity = {"ok": True, "diff": {}}
+    if before and after:
+        for k, v in before.items():
+            if after.get(k) != v:
+                integrity["ok"] = False
+                integrity["diff"][k] = {"before": v, "after": after.get(k)}
+        if not integrity["ok"]:
+            print("\n🚨 그래프 무결성 위반 — 벤치 실행이 데이터를 변조했습니다:", flush=True)
+            for k, d2 in integrity["diff"].items():
+                print(f"   {k}: {d2['before']} → {d2['after']}", flush=True)
+            print("   이 결과는 신뢰할 수 없습니다. 데이터 복구 후 재측정하세요.", flush=True)
+        else:
+            print("\n✅ 그래프 무결성 유지 (노드·엣지 수·핵심 앵커 불변)", flush=True)
+
     total, passed = len(results), sum(1 for x in results if x["pass"])
     by_cat = {}
     for x in results:
@@ -195,6 +253,7 @@ def main():
             check_rate.setdefault(k, []).append(v)
     out = {
         "graph": GRAPH, "api": API, "mode": "E2E(라우팅→스키마→생성→실행→앵커보강)",
+        "integrity": integrity,
         "total": total, "passed": passed,
         "pass_rate": round(passed / total * 100, 1) if total else 0,
         "by_category": {c: {"passed": sum(v), "total": len(v),

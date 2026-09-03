@@ -40,6 +40,249 @@ except FileNotFoundError:
 # 통합 그래프 vt_bacnt.tier 실값 (질문 표현과 달라 부분매칭 완화가 필요)
 _TIER_VALUES = ('1차 사기수취', '3차집금', '4차 해외송금 수취')
 
+# 리터럴 값 패턴 — {key: 'val'} 와 key = 'val' 양쪽
+_LITERAL_RE = re.compile(r"(\w+)\s*(?::|=)\s*'([^']{2,})'")
+# 값 검증에서 제외 — 질문 표현과 DB 실값이 원래 다른 정규화 대상
+_LITERAL_SKIP_KEYS = frozenset({'bank_nm', 'tier', 'platform', 'evid_grade', 'role', 'case_type'})
+
+
+# (라벨)-[엣지]->(라벨) 패턴 — 방향 무관하게 양쪽 표기를 잡는다
+_PATH_RE = re.compile(r"\(\s*\w*\s*:\s*(\w+)[^)]*\)\s*(<?)-\[\s*\w*\s*:\s*(\w+)[^\]]*\]-(>?)\s*\(\s*\w*\s*:\s*(\w+)")
+
+
+def _bridge_two_hop(cypher: str, graph_path: str):
+    """목표 라벨이 앵커에 직접 붙지 않을 때, 실제 이웃 라벨을 경유하는 2-hop 쿼리를 만든다.
+
+    EP7형 '위장 뒤 실사용자 특정'이 정확히 이 구조다 — IP에 vt_psn 은 직접 붙지 않고
+    vt_id 83개가 붙어 있으며, 그 vt_id 들이 registered_to 로 vt_psn 에 도달한다(실명 62명).
+    모델은 1-hop 으로 시도해 0건을 내므로, 성찰 LLM 없이 서버가 결정론적으로 브리지한다.
+    (자동 확장은 반드시 경고로 사용자에게 알린다 — 수사관이 원 질의와 구분해야 한다.)
+
+    반환: (재작성된 SQL-Wrapped Cypher, 설명) 또는 (None, "")
+    """
+    import psycopg2
+    from app.database import safe_set_graph_path
+
+    m_in = re.search(r"\$\$(.+?)\$\$", cypher, re.S)
+    inner = m_in.group(1) if m_in else cypher
+    m_ret = re.search(r"RETURN\s+(?:DISTINCT\s+)?(\w+)", inner, re.I)
+    if not m_ret:
+        return None, ""
+    ret_var = m_ret.group(1)
+    m_tgt = re.search(rf"\(\s*{ret_var}\s*:\s*(\w+)", inner)
+    if not m_tgt:
+        return None, ""
+    target = m_tgt.group(1)
+    anchors = [(k, v) for k, v in _LITERAL_RE.findall(inner)
+               if k not in _LITERAL_SKIP_KEYS and len(v) >= 3]
+    if not anchors:
+        return None, ""
+    a_key, a_val = anchors[0]
+    esc = a_val.replace("'", "''")
+
+    conn = None
+    try:
+        conn = psycopg2.connect(**current_app.config['DB_CONFIG'])
+        conn.autocommit = True
+        cur = conn.cursor()
+        safe_set_graph_path(cur, graph_path)
+        # 앵커의 실제 이웃 라벨·엣지(양방향) — 많이 붙은 것부터
+        cur.execute(f"MATCH (n) WHERE n.{a_key} = '{esc}' MATCH (n)<-[r]-(m) "
+                    f"RETURN type(r) AS e, label(m) AS l, count(*) AS c ORDER BY c DESC")
+        nbrs = [('in', str(e).strip('"'), str(l).strip('"'), int(c)) for e, l, c in cur.fetchall()]
+        cur.execute(f"MATCH (n) WHERE n.{a_key} = '{esc}' MATCH (n)-[r]->(m) "
+                    f"RETURN type(r) AS e, label(m) AS l, count(*) AS c ORDER BY c DESC")
+        nbrs += [('out', str(e).strip('"'), str(l).strip('"'), int(c)) for e, l, c in cur.fetchall()]
+        nbrs.sort(key=lambda x: -x[3])
+
+        # ① 목표 라벨이 앵커에 '직접' 붙어 있으면 방향만 틀린 것이다 — 1-hop 반전이 정답이고,
+        #    2-hop 확장보다 항상 우선한다. (same_as 처럼 mid==target 인 관계가 여기 해당:
+        #     '신민우 동일인'을 has_account 경유로 확장하면 '같은 계좌 공유자'라는 그럴듯한 오답이 된다)
+        for direction, edge, mid, _cnt in nbrs:
+            if mid != target:
+                continue
+            hop = (f"(a)<-[r1:{edge}]-(t:{target})" if direction == 'in'
+                   else f"(a)-[r1:{edge}]->(t:{target})")
+            # 앵커 자신은 답이 아니다 — 제외하지 않으면 '최철민→(performed_by)→최철민' 같은
+            # 무의미한 자기참조가 결과로 나온다.
+            # 앵커와 관계까지 함께 반환한다: 목표 노드만 주면 그래프가 끊기고, 수사관이 앵커와의
+            # 연결을 확인할 수 없다(질의한 대상이 화면에서 사라지는 문제).
+            q = (f"MATCH (a) WHERE a.{a_key} = '{esc}' MATCH {hop} WHERE id(t) <> id(a) "
+                 f"RETURN DISTINCT a, r1, t LIMIT 200")
+            cur.execute(q)
+            if cur.fetchall():
+                wrapped = (f"SELECT * FROM cypher('{graph_path}', $$ {q} $$) "
+                           f"AS (a agtype, r1 agtype, t agtype);")
+                arrow = "역방향" if direction == 'in' else "정방향"
+                return wrapped, (f"{a_key}='{a_val}' 와 {target} 은 {edge} 로 {arrow} 연결됩니다 "
+                                 f"(원 쿼리의 관계 방향이 반대였음)")
+
+        # ② 직접 연결이 없을 때만 중간 라벨을 경유한다
+        for direction, edge, mid, _cnt in nbrs[:5]:
+            if mid == target:
+                continue
+            # 중간 라벨 → 목표 라벨 연결 엣지 탐색(양방향)
+            for m2_pat, m2_dir in ((f"(x:{mid})-[r2]->(t:{target})", 'out'),
+                                   (f"(x:{mid})<-[r2]-(t:{target})", 'in')):
+                cur.execute(f"MATCH {m2_pat} RETURN type(r2) AS e, count(*) AS c ORDER BY c DESC")
+                rows = cur.fetchall()
+                if not rows:
+                    continue
+                edge2 = str(rows[0][0]).strip('"')
+                hop1 = (f"(a)<-[r1:{edge}]-(x:{mid})" if direction == 'in'
+                        else f"(a)-[r1:{edge}]->(x:{mid})")
+                hop2 = (f"(x)-[r2:{edge2}]->(t:{target})" if m2_dir == 'out'
+                        else f"(x)<-[r2:{edge2}]-(t:{target})")
+                q = (f"MATCH (a) WHERE a.{a_key} = '{esc}' MATCH {hop1} MATCH {hop2} "
+                     f"WHERE id(t) <> id(a) RETURN DISTINCT a, r1, x, r2, t LIMIT 200")
+                cur.execute(q)
+                if not cur.fetchall():
+                    continue
+                wrapped = (f"SELECT * FROM cypher('{graph_path}', $$ {q} $$) "
+                           f"AS (a agtype, r1 agtype, x agtype, r2 agtype, t agtype);")
+                desc = (f"{a_key}='{a_val}' 에 {target} 이 직접 연결되지 않아 "
+                        f"{mid} 경유({edge}→{edge2}) 2-hop 으로 확장")
+                return wrapped, desc
+    except Exception:
+        return None, ""
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
+    return None, ""
+
+
+def _anchor_neighborhood(cypher: str, graph_path: str) -> str:
+    """쿼리의 앵커 값이 지목한 노드에 '실제로' 붙어 있는 엣지·라벨을 조회해 힌트로 돌려준다.
+
+    라벨 조합 수준 진단으로는 부족하다 — (vt_psn)-[:used_ip]->(vt_ip) 조합은 25건 존재하지만
+    특정 IP를 필터로 잡으면 0건이다(그 IP엔 vt_id 83·vt_telno 2만 붙어 있음). 그래서 조합이
+    아니라 **그 노드의 실제 이웃**을 봐야 한다. EP7형 위장 뚫기가 정확히 이 경우다.
+
+    반환: "ip_addr=122.54.197.66 의 실제 이웃: <-[used_ip]-(vt_id)×83 …" 형태(없으면 빈 문자열)
+    """
+    import psycopg2
+    from app.database import safe_set_graph_path
+
+    lits = [(k, v) for k, v in _LITERAL_RE.findall(cypher)
+            if k not in _LITERAL_SKIP_KEYS and len(v) >= 3][:2]   # 앵커는 보통 1~2개
+    if not lits:
+        return ""
+    out = []
+    conn = None
+    try:
+        # 스칼라 집계이므로 execute_cypher(Cytoscape 변환)를 쓸 수 없다 — 직접 조회.
+        conn = psycopg2.connect(**current_app.config['DB_CONFIG'])
+        conn.autocommit = True
+        cur = conn.cursor()
+        safe_set_graph_path(cur, graph_path)
+        for key, val in lits:
+            esc = val.replace("'", "''")
+            agg = {}
+            for direction, pat in (('in', '(n)<-[r]-(m)'), ('out', '(n)-[r]->(m)')):
+                try:
+                    cur.execute(f"MATCH (n) WHERE n.{key} = '{esc}' MATCH {pat} "
+                                f"RETURN type(r) AS e, label(m) AS l, count(*) AS c")
+                    for e, l, c in cur.fetchall():
+                        e, l = str(e).strip('"'), str(l).strip('"')
+                        if e and l:
+                            agg[(direction, e, l)] = agg.get((direction, e, l), 0) + int(c)
+                except Exception:
+                    safe_set_graph_path(cur, graph_path)   # 실패 시 트랜잭션 복구
+            if not agg:
+                continue
+            top = sorted(agg.items(), key=lambda kv: -kv[1])[:4]
+            desc = " / ".join(
+                (f"<-[{e}]-({l})×{n}" if d == 'in' else f"-[{e}]->({l})×{n}")
+                for (d, e, l), n in top)
+            out.append(f"{key}='{val}' 의 실제 이웃: {desc}")
+    except Exception:
+        return ""
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
+    return " · ".join(out)
+
+
+def _path_diagnosis(cypher: str, graph_path: str) -> str:
+    """쿼리가 쓴 라벨-엣지 조합이 데이터에 실제로 존재하는지 확인하고, 없으면 실제 분포를 알려준다.
+
+    모델은 프롬프트에 광고된 경로를 그대로 쓰지만, 통합 그래프에서 그 조합이 사실상 비어 있는
+    경우가 있다(예: used_ip 는 vt_id 15,197건 / vt_psn 25건 — IP 하나를 잡으면 vt_psn 은 0건).
+    EP7형 '위장 뒤 실사용자 특정'이 바로 이 함정에 걸려 실패하므로, 성찰 루프에 실측 분포를
+    돌려줘 모델이 올바른 경유 라벨(vt_id 등)을 고르게 한다.
+
+    반환: 성찰 힌트 문자열(문제 없으면 빈 문자열)
+    """
+    hints = []
+    for l_left, arrow_l, edge, arrow_r, l_right in _PATH_RE.findall(cypher):
+        src, dst = (l_right, l_left) if arrow_l == '<' else (l_left, l_right)
+        if not arrow_l and not arrow_r:
+            continue                                   # 무방향은 판정 생략
+        try:
+            ok, rows = GraphService.execute_cypher(
+                f"SELECT * FROM cypher('{graph_path}', $$ MATCH (a:{src})-[:{edge}]->(b:{dst}) "
+                f"RETURN a $$) AS (a agtype) LIMIT 1;", graph_path)
+            if ok and rows:
+                continue                               # 조합 실존 → 문제 없음
+            # 조합이 비었다 → 이 엣지를 실제로 쓰는 라벨 분포를 조회해 대안 제시
+            ok2, rows2 = GraphService.execute_cypher(
+                f"SELECT * FROM cypher('{graph_path}', $$ MATCH (a)-[:{edge}]->(b) "
+                f"RETURN label(a) AS s, label(b) AS t $$) AS (s agtype, t agtype) LIMIT 400;",
+                graph_path)
+            combos = {}
+            for el in (rows2 or []):
+                d = el.get('data', {}) if isinstance(el, dict) else {}
+                pair = (str(d.get('s', '')).strip('"'), str(d.get('t', '')).strip('"'))
+                if all(pair):
+                    combos[pair] = combos.get(pair, 0) + 1
+            if combos:
+                top = sorted(combos.items(), key=lambda kv: -kv[1])[:3]
+                alt = " / ".join(f"({s})-[:{edge}]->({t})" for (s, t), _ in top)
+                hints.append(f"({src})-[:{edge}]->({dst}) 조합은 데이터에 없습니다. 실제 사용: {alt}")
+            else:
+                hints.append(f"({src})-[:{edge}]->({dst}) 조합은 데이터에 없습니다.")
+        except Exception:
+            continue
+    return " · ".join(hints[:3])
+
+
+def _ungrounded_literals(cypher: str, question: str, graph_path: str) -> list:
+    """질문에도 없고 DB에도 없는 리터럴 값을 찾아낸다.
+
+    모델은 질문에 구체적 값이 없으면 그럴듯한 값을 지어낸다(telno='07070707070',
+    ip_addr='113.198.232.170' 등 실측 확인). 그 결과는 조용한 0건이고, 수사관에게는
+    '관련 없음'으로 읽혀 틀린 답보다 위험하다 → 근거 없는 값을 명시적으로 지목한다.
+
+    반환: [(key, value), ...] — 근거를 찾지 못한 리터럴만
+    """
+    q_digits = re.sub(r"\D", "", question)
+    bad = []
+    for key, val in _LITERAL_RE.findall(cypher):
+        if key in _LITERAL_SKIP_KEYS:
+            continue
+        if val in question:                       # 질문에 그대로 등장 → 근거 있음
+            continue
+        v_digits = re.sub(r"\D", "", val)
+        if len(v_digits) >= 4 and v_digits in q_digits:   # 하이픈 등 표기차 흡수
+            continue
+        try:                                      # 질문에 없어도 DB 실존값이면 정당
+            ok, rows = GraphService.execute_cypher(
+                f"SELECT * FROM cypher('{graph_path}', $$ MATCH (n) WHERE n.{key} = "
+                f"'{val.replace(chr(39), chr(39) * 2)}' RETURN n $$) AS (n agtype) LIMIT 1;",
+                graph_path)
+            if ok and rows:
+                continue
+        except Exception:
+            continue                              # 검증 자체가 실패하면 판정 보류(오탐 방지)
+        bad.append((key, val))
+    return bad
+
 
 def _system_prompt_for(graph_path: str) -> str:
     """그래프별 system 프롬프트 선택 (미지 그래프는 기존 프롬프트 유지)."""
@@ -1009,6 +1252,20 @@ AS (p agtype);
         if _m and not re.search(r"RETURN\s+.*\sLIMIT\s+\d+", cypher_to_run, re.I | re.S):
             cypher_to_run = cypher_to_run.replace(_m.group(0), f" {_m.group(2).rstrip()} LIMIT {_m.group(1)}")
             logger.info("[문법 교정] LIMIT 절을 RETURN 뒤로 이동")
+
+        # 맵 리터럴 안의 IN 은 문법 오류 — {ip_addr IN ['a','b']} → WHERE 절로 분리.
+        # (다중 앵커 교차 질의 "두 IP 둘 다 접속한 사람"에서 실측 적발)
+        _in = re.search(r"\(\s*(\w+)\s*:\s*(\w+)\s*\{\s*(\w+)\s+IN\s+(\[[^\]]+\])\s*\}\s*\)",
+                        cypher_to_run, re.I)
+        if _in:
+            var, lbl, key, arr = _in.groups()
+            cypher_to_run = cypher_to_run.replace(_in.group(0), f"({var}:{lbl})")
+            _ins = re.search(r"(\$\$\s*MATCH\s.+?)(\sRETURN\s)", cypher_to_run, re.I | re.S)
+            if _ins:
+                joiner = " AND " if re.search(r"\sWHERE\s", _ins.group(1), re.I) else " WHERE "
+                cypher_to_run = cypher_to_run.replace(
+                    _ins.group(0), f"{_ins.group(1)}{joiner}{var}.{key} IN {arr}{_ins.group(2)}")
+                logger.info("[문법 교정] 맵 리터럴 IN → WHERE 절로 이동")
         tc_warnings = []
         if state.get('config', {}).get('temporal_continuity'):
             try:
@@ -1026,7 +1283,53 @@ AS (p agtype);
             # [개선] 결과가 0건일 때 -> 성찰 유도 (Phase 3-B: 엔티티 없어도 첫 시도면 재시도)
             # Sprint 1 — 단순 SELECT (WHERE 절 없음 + entity 컨텍스트 없음) 0건은
             # 진짜 데이터 부재로 판정해 reflection 건너뜀 (-3초)
+            # 0건이면 먼저 '근거 없는 값' 여부를 가린다 — 데이터 부재와 값 환각은 전혀 다른 사건이고,
+            # 후자는 수사관에게 '관련 없음'으로 오독될 수 있어 반드시 표면화해야 한다.
+            ungrounded = []
+            bridge_note = ""
+            if not result:
+                try:
+                    ungrounded = _ungrounded_literals(cypher_to_run, state['question'], state['graph_path'])
+                except Exception as _e:
+                    logger.warning(f"리터럴 검증 실패(무시): {_e}")
+                if ungrounded:
+                    logger.warning(f"[값 환각 탐지] 근거 없는 리터럴 {ungrounded}")
+                else:
+                    # 값은 정상인데 0건 → 목표 라벨이 앵커에 직접 안 붙는 경우가 많다(EP7형).
+                    # 성찰 LLM(OpenAI)이 불가한 환경에서도 동작해야 하므로 서버가 결정론적으로 브리지.
+                    try:
+                        _bq, _bd = _bridge_two_hop(cypher_to_run, state['graph_path'])
+                    except Exception as _e:
+                        _bq, _bd = None, ""
+                        logger.warning(f"2-hop 브리지 실패(무시): {_e}")
+                    if _bq:
+                        _ok2, _res2 = GraphService.execute_cypher(_bq, state['graph_path'])
+                        if _ok2 and _res2:
+                            logger.info(f"[2-hop 자동 확장] {_bd}")
+                            return {
+                                "execution_result": _res2,
+                                "cypher_query": _bq,
+                                "error_message": None,
+                                "metrics": metrics,
+                                "tc_warnings": list(tc_warnings) + [
+                                    f"ℹ 원 질의는 0건이어서 자동 확장했습니다 — {_bd}. "
+                                    f"경로가 의도와 다르면 질문을 구체화하세요."],
+                            }
+
             if not result and state['error_count'] < state.get('config', {}).get('max_retries', 1):  # P1-③: 재시도 예산 설정화
+                if ungrounded:
+                    # 성찰 루프에 정확한 힌트 — 어떤 값이 왜 틀렸는지 알려주면 모델이 고칠 여지가 있다.
+                    hint = ", ".join(f"{k}='{v}'" for k, v in ungrounded)
+                    _um = (f"UNGROUNDED_VALUE: {hint} 는 질문에도 없고 DB에도 없는 값입니다. "
+                           f"값을 임의로 만들지 말고, 질문에 등장한 엔티티를 앵커로 삼아 "
+                           f"관계를 경유해 조회하세요.")
+                    return {
+                        "execution_result": [],
+                        "error_message": _um,
+                        # reflection_log 에 실어야 synthesis 의 [이전 실패 피드백]으로 전달된다.
+                        "reflection_log": state.get('reflection_log', []) + [_um],
+                        "error_count": state["error_count"] + 0.5,
+                    }
                 if self._is_data_absence_likely(state.get('cypher_query', ''),
                                                 state.get('entities')):
                     logger.info("▶ 결과 0건 + 단순 쿼리 + entity 없음 → 데이터 부재로 판정 (reflection skip)")
@@ -1042,19 +1345,39 @@ AS (p agtype);
                 else:
                     err_msg = ("QUERY_ZERO_RESULTS: 결과가 0건입니다. 관계 방향(예: suspect_in은 psn→case), "
                                "라벨 명칭, 속성 키(예: account_no vs actno)를 검토하세요.")
+                # 실측 경로 분포를 힌트로 얹는다 — 일반 지침보다 '이 조합은 데이터에 없고 실제는 X다'가
+                # 훨씬 교정률이 높다(EP7형 vt_psn→used_ip 오선택이 대표 사례).
+                try:
+                    _an = _anchor_neighborhood(cypher_to_run, state['graph_path'])
+                    if _an:
+                        err_msg += (f" [앵커 실측] {_an} — 이 이웃만 존재하므로, 목표 라벨에 직접 붙는 "
+                                    f"관계가 없으면 중간 라벨을 경유해 2-hop 으로 도달하세요.")
+                        logger.info(f"[앵커 이웃 진단] {_an}")
+                    _pd = _path_diagnosis(cypher_to_run, state['graph_path'])
+                    if _pd:
+                        err_msg += f" [실측 경로] {_pd}"
+                        logger.info(f"[경로 진단] {_pd}")
+                except Exception as _e:
+                    logger.warning(f"경로 진단 실패(무시): {_e}")
                 logger.info(f"▶ 결과가 0건 -> 성찰 루프 진입")
                 return {
                     "execution_result": [],
                     "error_message": err_msg,
+                    "reflection_log": state.get('reflection_log', []) + [err_msg],
                     "error_count": state["error_count"] + 0.5,
                 }
             
             metrics = {**metrics, f"execution_node_attempt_{state['error_count'] + 0.5}": time.time() - start_time}
+            if ungrounded:
+                # 재시도까지 소진했는데도 0건 — 조용히 빈 화면을 주면 '무관'으로 오독된다.
+                tc_warnings = list(tc_warnings) + [
+                    f"⚠ 근거 없는 값 사용: {', '.join(f'{k}={v}' for k, v in ungrounded)} — "
+                    f"질문에도 DB에도 없는 값입니다. 0건을 '관련 없음'으로 해석하지 마세요."]
             return {
                 "execution_result": result, # elements list
                 "error_message": None,
                 "metrics": metrics,
-                "tc_warnings": tc_warnings,  # 시간순 연속성 N형 구간 안내 (Q2)
+                "tc_warnings": tc_warnings,  # 시간순 연속성 N형 구간 안내 (Q2) + 값 환각 경고
             }
         else:
             logger.warning(f"Query Execution Failed: {result}")
@@ -1196,9 +1519,25 @@ AS (p agtype);
 
         raw_elements = state['execution_result'] if state['execution_result'] else []
         # 앵커 노드 보강 — v47이 'X 찾아줘'를 관계 노드(계좌 등)만 RETURN하는 편향 보정
+        # 보강 전 행수를 따로 남긴다: 보강은 화면에는 유용하지만, 모델 쿼리가 0건인 실패를
+        # 채워버려 평가에서 '통과'로 오판된다(100문항에서 7건 적발). 두 지표를 분리 노출.
+        n_model_rows = len(raw_elements)
         raw_elements = _augment_anchor_node(raw_elements, state.get('cypher_query', ''), state['graph_path'])
+        n_anchor_added = len(raw_elements) - n_model_rows
         enriched_elements = _enrich_elements_bridge_key(raw_elements)
         result_status = "success" if not state.get("error_message") else "partial_success"
+
+        # 0건은 '데이터 없음'과 '쿼리 경로 오선택'이 구별되지 않는다. 수사 맥락에서 빈 화면은
+        # '관련 없음'으로 읽히므로(틀린 답보다 위험) 무엇을 조회했는지와 한계를 반드시 함께 준다.
+        zero_notice = []
+        if state.get('intent') not in ('GENERAL', 'ALGO'):
+            if not raw_elements:
+                zero_notice = ["⚠ 조회 결과 0건 — '관련 없음'이 아닐 수 있습니다. 사용된 관계 경로·방향이 "
+                               "실제 데이터와 다를 가능성을 검토하세요(아래 유사 노드 힌트 참고)."]
+            elif n_model_rows == 0 and n_anchor_added > 0:
+                # 질의는 0건이고 화면은 앵커 주변만 표시된 상태 — 물어본 대상과 보이는 것이 다르다.
+                zero_notice = [f"⚠ 질의 자체는 0건이며, 화면은 앵커 노드와 주변 {n_anchor_added}개만 "
+                               f"표시한 것입니다. 질문한 대상이 결과에 없을 수 있습니다."]
 
         # 0건 결과 시 유사 노드 힌트 검색
         hints = []
@@ -1245,6 +1584,9 @@ AS (p agtype);
                 "cypher": state['cypher_query'],
                 "elements": enriched_elements,
                 "results_count": len(raw_elements),
+                "model_rows": n_model_rows,          # 모델 Cypher 자체 결과 행수(평가용 진실값)
+                "anchor_added": n_anchor_added,      # 앵커 보강으로 덧붙은 요소 수
+                "warnings": list(state.get("tc_warnings") or []) + zero_notice,
                 "hints": hints,
                 "type": "query",
                 "intent": state['intent'],
@@ -1410,7 +1752,9 @@ AS (p agtype);
         result = self.app.invoke(initial_state)
         fr = result.get("final_response", {"status": "error", "message": "에이전트 응답 생성 실패"})
         if isinstance(fr, dict) and result.get("tc_warnings"):
-            fr["warnings"] = result["tc_warnings"]  # 시간순 연속성 N형 안내 (Q2/Q3 전파)
+            # 덮어쓰지 않고 병합 — data_view 의 0건/값환각 안내가 지워지면 안 된다.
+            _w = list(fr.get("warnings") or [])
+            fr["warnings"] = _w + [x for x in result["tc_warnings"] if x not in _w]
         return fr
 
 
@@ -1469,7 +1813,8 @@ class InvestigationSession:
         result_state = self._agent.app.invoke(initial_state)
         final = result_state.get("final_response", {"status": "error", "message": "에이전트 응답 생성 실패"})
         if isinstance(final, dict) and result_state.get("tc_warnings"):
-            final["warnings"] = result_state["tc_warnings"]  # 시간순 연속성 N형 안내 (Q3)
+            _w = list(final.get("warnings") or [])
+            final["warnings"] = _w + [x for x in result_state["tc_warnings"] if x not in _w]
 
         # 새 결과 엔티티를 누적 컨텍스트에 추가 (중복 제거)
         new_elements = final.get("elements", []) if isinstance(final, dict) else []

@@ -1413,7 +1413,9 @@ def query_ai():
             "cypher": agent_res.get("cypher", ""),
             "intent": agent_res.get("intent", "QUERY"),
             "hints": agent_res.get("hints", []),
-            "warnings": agent_res.get("warnings", []),   # Q3 시간순 연속성 N형 구간 안내
+            "warnings": agent_res.get("warnings", []),   # Q3 시간순 연속성 N형 구간 안내 + 값 환각 경고
+            "model_rows": agent_res.get("model_rows"),     # 앵커 보강 전 — 모델 정확도 평가용
+            "anchor_added": agent_res.get("anchor_added"),  # 보강분(화면 유용성과 모델 정확도 분리)
             "session_id": session_id,
             "entity_count": len(sess.entity_context)
         })
