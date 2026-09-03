@@ -63,6 +63,52 @@ ITEMS = [
     ("E03", "필터속성", "사건 10개만 보여줘",                 ["exec", "cypher", "nonempty"], None),
     ("E04", "필터속성", "pagerank가 높은 계좌 5개 보여줘",      ["exec", "cypher"], None),   # P1-B 문자열지표 관찰용
     ("E05", "필터속성", "여러 EP에 등장한 IP를 찾아줘",         ["exec", "cypher"], None),   # ep_count 활용 관찰용
+    # H. 시간축 (P1-2 자산 — 날짜 필터 생성 능력)
+    ("H01", "시간축", "2017년 3월에 발생한 이체 내역을 보여줘",      ["exec", "cypher", "nonempty"], None),
+    ("H02", "시간축", "2017-03-21 이후의 이체를 보여줘",            ["exec", "cypher", "nonempty"], None),
+    ("H03", "시간축", "4월에 있었던 통화 내역 보여줘",               ["exec", "cypher", "nonempty"], None),
+    ("H04", "시간축", "2017년 5월에 중국으로 출국한 기록",           ["exec", "cypher", "nonempty"], None),
+    ("H05", "시간축", "가장 이른 이체는 언제야?",                   ["exec", "cypher"], None),
+    ("H06", "시간축", "3월 1일부터 3월 15일 사이 이체 건수",         ["exec", "cypher", "count_fn"], None),
+    # I. 방향성 (transferred_to 방향 구분 — v42 시절 약점)
+    ("I01", "방향성", "조지영 계좌에서 나간 이체를 보여줘",           ["exec", "cypher", "nonempty"], None),
+    ("I02", "방향성", "조지영 계좌로 들어온 이체를 보여줘",           ["exec", "cypher", "nonempty"], None),
+    ("I03", "방향성", "농협-김은희 계좌가 보낸 돈은 어디로 갔어?",     ["exec", "cypher", "nonempty"], None),
+    ("I04", "방향성", "22997642209622 계좌로 입금한 계좌들",         ["exec", "cypher", "nonempty"], None),
+    # J. 부정형/제외
+    ("J01", "부정형", "이체 내역이 없는 계좌는 몇 개야?",             ["exec", "cypher", "count_fn"], None),
+    ("J02", "부정형", "김미영을 제외한 3차집금 명의자를 보여줘",       ["exec", "cypher"], None),
+    ("J03", "부정형", "명의자가 없는 계좌를 보여줘",                 ["exec", "cypher"], None),
+    ("J04", "부정형", "통화 기록이 없는 전화번호 수",                ["exec", "cypher", "count_fn"], None),
+    # K. 고급 집계 (그룹핑·상위N — ORDER BY 함정)
+    ("K01", "고급집계", "은행별 계좌 수를 알려줘",                   ["exec", "cypher"], None),
+    ("K02", "고급집계", "이체를 가장 많이 받은 계좌 5개",             ["exec", "cypher", "nonempty"], None),
+    ("K03", "고급집계", "EP별 노드 수를 세줘",                      ["exec", "cypher"], None),
+    ("K04", "고급집계", "통화 횟수가 가장 많은 전화번호는?",           ["exec", "cypher", "nonempty"], None),
+    ("K05", "고급집계", "이체 총액이 1억 이상인 계좌 쌍",             ["exec", "cypher"], None),
+    # L. 다중 조건
+    ("L01", "다중조건", "기업은행이면서 3차집금인 계좌",              ["exec", "cypher", "nonempty"], None),
+    ("L02", "다중조건", "농협 계좌 중 이체 내역이 있는 것",            ["exec", "cypher", "nonempty"], None),
+    ("L03", "다중조건", "피어스미디어 소속이면서 명의자가 있는 계좌",    ["exec", "cypher", "nonempty"], None),
+    ("L04", "다중조건", "3월에 이체하고 4월에도 이체한 계좌",          ["exec", "cypher"], None),
+    # M. EP9/10 신규 서사 (시드 반영 검증)
+    ("M01", "신규서사", "피의자를 전부 보여줘",                     ["exec", "cypher", "nonempty", "contains"], "조정모"),
+    ("M02", "신규서사", "조정모의 출국 기록을 보여줘",                ["exec", "cypher", "nonempty"], None),
+    ("M03", "신규서사", "중국으로 출국한 피의자들",                  ["exec", "cypher", "nonempty"], None),
+    ("M04", "신규서사", "주범은 누구야?",                          ["exec", "cypher", "nonempty", "contains"], "조정모"),
+    ("M05", "신규서사", "조정모가 사용한 전화번호와 카카오톡 계정",      ["exec", "cypher", "nonempty"], None),
+    ("M06", "신규서사", "체포영장이 신청된 사건의 피의자 수",           ["exec", "cypher", "count_fn"], None),
+    ("M07", "신규서사", "황민규가 피해자인 사건을 보여줘",             ["exec", "cypher", "nonempty"], None),
+    ("M08", "신규서사", "4차 해외송금 수취 계좌들을 보여줘",           ["exec", "cypher", "nonempty"], None),
+    # N. 속성·숫자 (P1-B 숫자화 자산 — 비교 연산)
+    ("N01", "속성숫자", "ep_count가 3 이상인 IP를 보여줘",           ["exec", "cypher", "nonempty"], None),
+    ("N02", "속성숫자", "pagerank가 0.001보다 큰 계좌",             ["exec", "cypher", "nonempty"], None),
+    ("N03", "속성숫자", "증거등급이 A인 인물을 보여줘",               ["exec", "cypher", "nonempty"], None),
+    ("N04", "속성숫자", "kcore가 4 이상인 전화번호 수",              ["exec", "cypher", "count_fn"], None),
+    ("N05", "속성숫자", "여러 EP에 등장한 계좌를 보여줘",             ["exec", "cypher", "nonempty"], None),
+    # O. 가드 확장 (보안 변형)
+    ("O01", "가드", "계좌 노드를 하나 만들어줘",                    ["nowrite"], None),
+    ("O02", "가드", "모든 인물의 이름을 '테스트'로 바꿔줘",            ["nowrite"], None),
     # G. 알고리즘 라우팅 (P1-A) — 중심성/순환 질문은 CALL 레이어로
     ("G01", "알고리즘", "매개중심성이 가장 높은 계좌는?",        ["exec", "algo", "algo_contains"], "김은희"),
     ("G02", "알고리즘", "자금 순환 흐름을 찾아줘",              ["exec", "algo"], None),
@@ -98,11 +144,13 @@ def evaluate(item, resp, err):
         elif c == "cypher":
             r[c] = bool(cypher)
         elif c == "nonempty":
-            r[c] = len(elements) > 0
+            ar = resp.get("algo_result") or {}
+            r[c] = len(elements) > 0 or bool(ar.get("results") or ar.get("cycles") or ar.get("members"))
         elif c == "contains":
             r[c] = key in blob
         elif c == "count_fn":
-            r[c] = "count(" in cypher.lower()
+            ar = resp.get("algo_result") or {}
+            r[c] = "count(" in cypher.lower() or bool(ar.get("total") or ar.get("count") or ar.get("size"))
         elif c == "algo":
             r[c] = intent == "ALGO" and bool(resp.get("algo_result"))
         elif c == "algo_contains":

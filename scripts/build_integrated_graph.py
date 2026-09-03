@@ -80,8 +80,8 @@ def main():
         for (label, key), d in nodes.items():
             props = dict(d['props'])
             props['ep_origin'] = ','.join(sorted(d['origins']))
-            props['ep_count'] = str(len(d['origins']))
             setp = ', '.join(f"n.{a} = '{esc(b)}'" for a, b in props.items())
+            setp += f", n.ep_count = {len(d['origins'])}"   # 숫자 저장 — WHERE ep_count>=3 비교 (P1-B 동일 원칙)
             cur.execute(f"MERGE (n:{label} {{{KP[label]}:'{esc(key)}'}}) SET {setp}")
             cnt += 1
             if cnt % 3000 == 0:
