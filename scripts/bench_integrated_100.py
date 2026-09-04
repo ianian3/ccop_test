@@ -61,7 +61,7 @@ ITEMS = [
     # ── R. 통신(전화·통화) (10) ──────────────────────────────────────
     ("R01", "통신", "07078890124 이 번호 통화 상대 다 알려줘", ["exec", "cypher", "nonempty"], None),
     ("R02", "통신", "070 번호로 걸려온 통화 내역 있어?", ["exec", "cypher", "nonempty"], None),
-    ("R03", "통신", "01000952731 누구 명의인지 확인", ["exec", "cypher", "nonempty"], None),
+    ("R03", "통신", "07078891043 누구 명의인지 확인", ["exec", "cypher", "nonempty"], None),  # 실측: 김중섭(registered_to)
     ("R04", "통신", "조정진 명의로 개설된 번호 뭐야", ["exec", "cypher", "nonempty"], None),
     ("R05", "통신", "통화가 제일 많았던 번호 알려줘", ["exec", "cypher", "nonempty"], None),
     ("R06", "통신", "전화번호랑 계좌가 엮인 케이스 보여줘", ["exec", "cypher", "nonempty"], None),

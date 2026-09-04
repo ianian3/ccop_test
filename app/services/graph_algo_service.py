@@ -52,6 +52,14 @@ def detect_algo_intent(question):
     ql = q.lower()
     if re.search(r'순환|사이클|circular', ql):
         return 'cycles', {'maxLen': 6, 'limit': 12}
+    # 군집/커뮤니티 질문 — Cypher 로는 표현 불가(Louvain 결과 속성 기반)하므로 ALGO 로 라우팅.
+    # id 를 명시하지 않은 '같은 군집으로 묶이는 노드' 류는 최대 군집을 기본으로 본다.
+    if re.search(r'군집|커뮤니티|community|같은\s*조직|같은\s*그룹|무리', ql):
+        _m = re.search(r'군집\s*(\d+)|커뮤니티\s*(\d+)', q)
+        _p = {'metric': 'community_person' if re.search(r'인물|사람', ql) else 'community_id'}
+        if _m:
+            _p['id'] = int(_m.group(1) or _m.group(2))
+        return 'community', _p
     metric = next((m for pat, m in _METRIC_KW if re.search(pat, ql)), None)
     if not metric:
         return None
@@ -237,12 +245,20 @@ class GraphAlgoService:
     # ── ⑤ 커뮤니티 멤버 조회 (사전계산 속성) ──
     @staticmethod
     def community(graph, params):
-        cid = int(params.get('id', 0))
         metric = params.get('metric', 'community_id')
         if metric not in ('community_id', 'community_lp', 'community_person'):
             raise ValueError("community metric은 community_id/community_lp/community_person만")
         conn, cur = GraphAlgoService._cur()
         safe_set_graph_path(cur, graph)
+        if params.get('id') is None:
+            # 어느 군집인지 지목되지 않은 질문 → 최대 군집을 대표로 보여준다.
+            # (AgensGraph 는 count alias 로 ORDER BY 가 불안정 — 파이썬에서 집계)
+            from collections import Counter as _C
+            cur.execute(f"MATCH (n) WHERE n.{metric} IS NOT NULL RETURN n.{metric}")
+            _cnt = _C(r[0] for r in cur.fetchall())
+            cid = int(_cnt.most_common(1)[0][0]) if _cnt else 0
+        else:
+            cid = int(params['id'])
         # P1-B 이후 지표는 숫자 저장 — 문자열 quote 시 타입 불일치로 0건 (검증에서 적발)
         cur.execute(f"MATCH (n) WHERE n.{metric}={cid} RETURN {KEYEXPR}, label(n)")
         members = [{'key': k, 'label': l} for k, l in cur.fetchall() if k]

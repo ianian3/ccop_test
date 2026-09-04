@@ -1253,6 +1253,24 @@ AS (p agtype);
             cypher_to_run = cypher_to_run.replace(_m.group(0), f" {_m.group(2).rstrip()} LIMIT {_m.group(1)}")
             logger.info("[문법 교정] LIMIT 절을 RETURN 뒤로 이동")
 
+        # 문자열 날짜에 min()/max() 는 AgensGraph 에서 numeric 캐스팅 에러가 난다
+        # ("cannot cast 2017-03-15 (jsonb string) to numeric"). ORDER BY … LIMIT 1 로 대체.
+        _mm = re.search(r"RETURN\s+(min|max)\s*\(\s*([\w.]+)\s*\)", cypher_to_run, re.I)
+        if _mm:
+            _fn, _expr = _mm.group(1).lower(), _mm.group(2)
+            _dir = "ASC" if _fn == "min" else "DESC"
+            cypher_to_run = cypher_to_run.replace(
+                _mm.group(0), f"RETURN {_expr} AS _agg ORDER BY _agg {_dir} LIMIT 1")
+            cypher_to_run = re.sub(r"AS\s*\(\s*\w+\s+agtype\s*\)", "AS (_agg agtype)", cypher_to_run)
+            logger.info(f"[문법 교정] {_fn}() → ORDER BY {_dir} LIMIT 1 (문자열 날짜)")
+
+        # 집계 조건을 RETURN 뒤 WHERE 로 쓰는 오류 → WITH … WHERE 로 이동
+        _rw = re.search(r"(RETURN\s+.+?)\s+(WHERE\s+.+?)(?=\s*\$\$|\s*;|$)", cypher_to_run, re.I | re.S)
+        if _rw and " WITH " in cypher_to_run.upper():
+            cypher_to_run = cypher_to_run.replace(
+                _rw.group(0), f"{_rw.group(2).rstrip()} {_rw.group(1).rstrip()}")
+            logger.info("[문법 교정] RETURN 뒤 WHERE → RETURN 앞으로 이동")
+
         # 맵 리터럴 안의 IN 은 문법 오류 — {ip_addr IN ['a','b']} → WHERE 절로 분리.
         # (다중 앵커 교차 질의 "두 IP 둘 다 접속한 사람"에서 실측 적발)
         _in = re.search(r"\(\s*(\w+)\s*:\s*(\w+)\s*\{\s*(\w+)\s+IN\s+(\[[^\]]+\])\s*\}\s*\)",
