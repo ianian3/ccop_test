@@ -26,6 +26,13 @@ class _QueryLoggingCursor(psycopg2.extensions.cursor):
         logger.info("[QUERY] %s", " ".join(_q.split()))
         return super().execute(query, vars)
 
+# 쓰기가 허용되는 그래프 화이트리스트.
+# 운영 그래프(ccop_ep_integrated·ep*_graph·tccop_*)는 절대 포함하지 않는다 —
+# LLM 이 생성한 쿼리를 실행하는 경로이므로, 실수로 한 줄 추가되면 데이터가 변조된다
+# (2026-09-04 벤치 가드 문항의 SET 이 통과해 실제로 변조된 전례).
+WRITABLE_GRAPHS = frozenset({'ccop_test_graph'})
+
+
 class GraphService:
 
     # KICS 온톨로지 엣지 방향 — v3.7 POLE 6레이어 기준
@@ -1086,6 +1093,11 @@ class GraphService:
                     logger.info(f"▶ [GraphService] SQL Wrapper에서 내부 Cypher 추출 완료")
             
             # ── 읽기 전용 가드 (wrapper 추출 '후' 검사 — 래핑 우회 차단) ──
+            # 테스트/샌드박스 그래프는 예외: 적재·수정 기능을 시연·시험하려면 쓰기가 필요하다.
+            # 운영 그래프는 앱 가드(여기) + DB 권한(ccop_app_ro 는 운영 스키마에 SELECT만)
+            # 이중으로 막히고, 이 예외는 화이트리스트에 든 그래프에만 적용된다.
+            if graph_path in WRITABLE_GRAPHS:
+                allow_write = True
             if not allow_write:
                 import re as _re
                 _w = _re.search(r"\b(DELETE|DETACH|MERGE|CREATE|REMOVE|DROP|SET)\b",

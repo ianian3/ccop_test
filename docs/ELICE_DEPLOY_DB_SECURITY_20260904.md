@@ -174,3 +174,48 @@ Subject: [경찰청 CyberCOP 과제] DB 접속(5333/10022) 방화벽 오픈 대�
 관련: `docs/T2C_GROUNDING_GUARD_20260903.md`(값 환각·평가 신뢰성) ·
 `docs/INVESTIGATOR_QUERY_RESEARCH_20260903.md`(실무 질문 조사) ·
 `docs/T2C_V48_SEED_DESIGN.md`(v48 학습·게이트)
+
+---
+
+## 10. 테스트 그래프 — 쓰기 가능 샌드박스 (2026-09-07)
+
+운영 그래프가 읽기 전용으로 잠겨 적재·수정 기능을 시연·시험할 수 없어, **`ccop_test_graph`**
+하나만 쓰기 가능한 샌드박스로 분리했다.
+
+### 권한 구조 — 이중 경계
+| 계층 | 운영 그래프 | 테스트 그래프 |
+|---|---|---|
+| **DB 권한** (`ccop_app_ro`) | `pg_read_all_data` = SELECT만 | 스키마 한정 `GRANT ALL` |
+| **앱 가드** (`WRITABLE_GRAPHS`) | WRITE_BLOCKED | 통과 |
+
+- 라벨(스키마) 생성은 **그래프 소유자만** 가능 → 관리 계정(`ccop`)이 미리 생성, 앱 계정은
+  **데이터만** 조작. `ALTER DEFAULT PRIVILEGES` 로 이후 생성 테이블에도 자동 적용.
+- 앱 화이트리스트는 `app/services/graph_service.py` 의 `WRITABLE_GRAPHS`
+  (**운영 그래프는 절대 넣지 않는다** — LLM 생성 쿼리가 실행되는 경로다).
+- 검증: `ccop_test_graph` MERGE **허용** / `ccop_ep_integrated` MERGE **WRITE_BLOCKED**.
+
+### 시드 데이터 (`scripts/seed_test_graph.py`) — 노드 35 · 엣지 44
+실존 정보 혼입을 막기 위한 원칙:
+- **IP**: RFC 5737 문서화 전용 대역(`192.0.2.0/24`) — 인터넷에 실존하지 않음
+- **전화번호**: `010-0000-XXXX` 미할당 번호대 · **계좌**: `TEST-` 접두
+- 전 노드에 `source_id='TEST-SEED'`, `is_test='true'` 표시
+- 시나리오(창작): 피해자 5 → 1차 수취 3 → 집금 1 → 해외송금 1 · 피의자 4(주범 1·공범 3) ·
+  콜센터 IP 1 · 메신저 계정 4 · 출국 2. **EP7형 '위장 뒤 실사용자' 2-hop 구조**
+  (`vt_id -[used_ip]-> vt_ip` + `vt_id -[registered_to]-> vt_psn`)도 재현했다.
+- **연도는 2017년으로 맞췄다** — 모델이 학습·운영 데이터를 따라 `'2017-03'` 을 생성하므로,
+  2026년으로 두면 "3월 이체" 같은 질의가 0건이 된다(실측 후 조정).
+- 프롬프트: `_system_prompt_for()` 에서 테스트 그래프도 **통합 프롬프트**를 쓰도록 했다
+  (같은 V4.8 스키마 — 구 프롬프트를 받으면 주범 조회 등이 실패).
+
+### 동작 확인 (엘리스)
+| 질의 | 결과 |
+|---|---|
+| 3월 이체 내역 | 9 |
+| 주범 특정 | 1 |
+| `192.0.2.10` IP 사용자 | 1 |
+| 피의자 전부 | 5 |
+| 4차 해외송금 수취 계좌 | 1 |
+| (운영) 조지영 계좌 | 5 — 읽기 전용 유지 |
+
+재시드: `python3 scripts/seed_test_graph.py` (멱등 MERGE).
+쓰기 계정이 필요하면 `SEED_DB_USER` / `SEED_DB_PASSWORD` 로 override.

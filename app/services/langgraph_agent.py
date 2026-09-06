@@ -286,7 +286,8 @@ def _ungrounded_literals(cypher: str, question: str, graph_path: str) -> list:
 
 def _system_prompt_for(graph_path: str) -> str:
     """그래프별 system 프롬프트 선택 (미지 그래프는 기존 프롬프트 유지)."""
-    if graph_path == 'ccop_ep_integrated' and T2C_INTEGRATED_SYSTEM_PROMPT:
+    # 테스트 그래프는 통합 그래프와 같은 V4.8 스키마로 시드되므로 같은 프롬프트를 쓴다.
+    if graph_path in ('ccop_ep_integrated', 'ccop_test_graph') and T2C_INTEGRATED_SYSTEM_PROMPT:
         return T2C_INTEGRATED_SYSTEM_PROMPT
     return T2C_V37_SYSTEM_PROMPT
 
