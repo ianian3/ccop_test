@@ -597,7 +597,14 @@
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
         ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
-    </style>
+    
+        /* 환경 배지 — 공개용(테스트 데이터)과 개발용(운영 데이터)을 한눈에 구분한다.
+           둘을 혼동하면 운영 수사데이터를 외부에 노출하거나, 반대로 시연에서 빈 화면을 보게 된다. */
+        .env-badge{font-size:11px;font-weight:700;padding:2px 8px;border-radius:3px;
+                   vertical-align:middle;margin-left:8px;letter-spacing:.3px}
+        .env-badge.env-public{background:#ffb020;color:#3a2a00}
+        .env-badge.env-dev{background:#2e7d32;color:#fff}
+</style>
   <script>window.DEFAULT_GRAPH_PATH = "{{ default_graph_path }}";
 // P0 대량 시각화 가드: 서버가 보내는 meta(잘림 신호)를 분리하고 배너로 안내
 function splitMeta(data){
@@ -1361,7 +1368,7 @@ function showTruncateBanner(metas){
         <div class="header-top">
             <div class="logo">
                 <div>
-                    <div class="logo-title">CYBER <span class="logo-accent">C.O.P</span></div>
+                    <div class="logo-title">CYBER <span class="logo-accent">C.O.P</span>{% if env_badge %} <span class="env-badge env-{{ env_badge.kind }}">{{ env_badge.label }}</span>{% endif %}</div>
                     <div class="logo-sub">사이버범죄 수사지원 통합분석·추론 시스템</div>
                 </div>
             </div>

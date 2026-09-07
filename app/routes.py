@@ -167,7 +167,12 @@ def index():
     # 하드코딩 키 없이 세션 쿠키로 호출할 수 있게 함.
     session['ui_authorized'] = True
     session.permanent = True
+    # 공개용(테스트 그래프만 노출)과 개발용(전 그래프)을 화면에서 즉시 구분한다 —
+    # 혼동하면 운영 수사데이터를 외부에 노출하거나 시연에서 빈 화면을 보게 된다.
+    env_badge = ({'kind': 'public', 'label': '공개용 · 테스트 데이터'} if _ALLOWED_GRAPHS
+                 else {'kind': 'dev', 'label': '개발용 · 운영 데이터'})
     return render_template('index.html',
+                           env_badge=env_badge,
                            default_graph_path=current_app.config.get('DEFAULT_GRAPH_PATH', 'tccop_graph_v6'))
 
 # ------------------------------
