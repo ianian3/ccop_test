@@ -219,3 +219,65 @@ Subject: [경찰청 CyberCOP 과제] DB 접속(5333/10022) 방화벽 오픈 대�
 
 재시드: `python3 scripts/seed_test_graph.py` (멱등 MERGE).
 쓰기 계정이 필요하면 `SEED_DB_USER` / `SEED_DB_PASSWORD` 로 override.
+
+---
+
+## 11. 외부 URL 공개 구성 — 테스트 전용 잠금 (2026-09-07)
+
+### 터널 이전: 콘솔 없이 대상만 바꿨다
+엘리스 HTTPS 터널 설정은 `/opt/elice/command_fetcher.py` 가 콘솔 명령을 받아오는 구조라
+**서버에서 변경할 수 없다**. 대신 터널이 바라보는 앱서버 5001 을 GPU박스 5002 로 포워딩해
+URL은 그대로 두고 대상만 옮겼다.
+
+```
+브라우저 → https://rgfqdkgemgpeygqd.tunnel.elice.io
+        → 엘리스 터널 → 앱서버:5001 → [SSH -L] → GPU박스:5002
+                                                  (최신 코드·운영DB·v48)
+```
+앱서버 gunicorn 은 중지(이 서버는 DB 미승인 IP `.62` 라 어차피 조회 불가).
+되돌리려면 `c8_watchdog.sh.bak.20260907` 복원 후 재기동.
+
+### 🔴 발견: 포워딩 직후 **인증이 사라졌다**
+앱서버에는 Basic Auth 가 있었지만 GPU박스 앱에는 없어서, 포워딩하자마자 URL이
+**인증 없이 열렸다**(curl 200). 수사 데이터를 담은 앱이 인터넷에 무방비 노출된 상태였다.
+GPU박스 `.env` 에 동일 자격을 넣어 즉시 차단(인증 없이 401 / 자격 포함 200).
+※ 초기에 URL에서 본 401 을 "엘리스 인증 게이트"로 판단했던 것은 **오판**이다 —
+   그것은 앱의 Basic Auth 였고, **엘리스 터널 자체에는 인증이 없다**. 앱 인증이 유일한 방어선.
+
+### 테스트 전용 잠금 — `ALLOWED_GRAPHS`
+운영 그래프(실명 피의자·계좌번호)가 외부 URL로 나가지 않도록 잠갔다.
+**목록에서 감추는 것만으로는 부족하다** — API 에 `graph_path` 를 직접 넣으면 우회되므로
+요청 진입점(`before_request`)에서 함께 막는다.
+
+```
+ALLOWED_GRAPHS=ccop_test_graph      # 콤마 구분. 미설정이면 제한 없음(로컬·내부 운영 무영향)
+DEFAULT_GRAPH_PATH=ccop_test_graph
+```
+검증(외부 URL): 그래프 목록 = `ccop_test_graph` 하나 · 테스트 질의 정상 ·
+운영 그래프 직접 지정 → **403**.
+
+### ⚠️ 함정: 인증을 켜면 watchdog 이 앱을 죽인다
+두 watchdog 모두 health check 가 `curl -sf` 였는데 **`-f` 는 4xx 를 실패로 처리**한다.
+Basic Auth 적용 후 앱이 정상인데도 401 을 반환하자, watchdog 이 "죽었다"로 오판해
+**정상 앱을 계속 죽이고 재기동**했다(27초 주기). 그 사이 포트가 비어 502 가 나고
+브라우저에는 "서버 연결 실패"로 보였다. **보안 조치가 가용성을 깨뜨린 사례.**
+
+수정 — HTTP 응답이 오기만 하면 살아 있는 것으로 판정:
+```bash
+CODE=$(curl -s -m 5 -o /dev/null -w "%{http_code}" http://localhost:5002/)
+if [ -z "$CODE" ] || [ "$CODE" = "000" ]; then  재기동  fi   # 401 은 정상
+```
+앱서버 쪽은 `502` 도 재수립 조건에 포함(포워딩 끊김 감지).
+스크립트는 `scripts/deploy/` 에 보관(`gpu_box_watchdog.sh`·`app_server_watchdog.sh`·`gpu_box_start_app.sh`).
+
+### 최종 공개 구성
+```
+https://rgfqdkgemgpeygqd.tunnel.elice.io   (Basic Auth)
+├─ 노출 데이터 : 가상 테스트 그래프만 (노드 35·엣지 44)
+├─ 운영 수사데이터 : 403 차단
+├─ 쓰기       : 테스트 그래프만 (DB 권한 + 앱 화이트리스트 이중)
+└─ 안정성     : 80초 5회 연속 200, 재기동 루프 없음
+```
+
+**남은 권고**: Basic Auth 비밀번호가 약하다(`ccop-demo-2026!`). 제3자 공유 전 교체 권장.
+운영 데이터가 이 URL로 나가지 않게 되어 §6 의 평문 전송 위험은 테스트 데이터에 한정된다.
