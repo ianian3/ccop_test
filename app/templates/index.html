@@ -1564,6 +1564,10 @@ function showTruncateBanner(metas){
                     onclick="toggleFilter('vt_atm')">
                     🏧 ATM <span class="count" id="count-vt_atm">0</span>
                 </span>
+                <span class="filter-tag" data-type="vt_loc" style="border-color: #00b894;"
+                    onclick="toggleFilter('vt_loc')">
+                    📍 위치 <span class="count" id="count-vt_loc">0</span>
+                </span>
                 <!-- L6: Event -->
                 <span class="filter-tag" data-type="vt_transfer" style="border-color: #e17055;"
                     onclick="toggleFilter('vt_transfer')">
@@ -2383,7 +2387,7 @@ function showTruncateBanner(metas){
                 { selector: 'node[label="vt_atm"]', style: { 'background-image': '/static/images/atm.png', 'background-fit': 'cover', 'border-color': '#fdcb6e', 'border-width': 3, 'label': function (ele) { const p = ele.data('props') || {}; return p.atm_id || 'ATM'; } } },
 
                 // ══ Layer 5 (Location) — 초록 ══
-                { selector: 'node[label="vt_loc"]', style: { 'width': '65px', 'height': '65px', 'shape': 'diamond', 'background-color': '#aeb6c2', 'border-color': '#00b894', 'border-width': 4, 'label': function (ele) { const p = ele.data('props') || {}; return '📍 ' + (p.loc_nm || p.addr || '위치'); }, 'text-wrap': 'wrap' } },
+                { selector: 'node[label="vt_loc"]', style: { 'width': '65px', 'height': '65px', 'shape': 'diamond', 'background-color': '#aeb6c2', 'border-color': '#00b894', 'border-width': 4, 'label': function (ele) { const p = ele.data('props') || {}; return '📍 ' + (p.address || p.loc_id || p.bsst_addr || p.loc_nm || p.addr || '위치'); }, 'text-wrap': 'wrap' } },
 
                 // ══ Layer 6 (Event) — 금색/청색 계열 ══
                 { selector: 'node[label="vt_transfer"]', style: { 'width': '70px', 'height': '70px', 'background-color': '#c4cad4', 'border-color': '#e17055', 'border-width': 3, 'label': function (ele) { const p = ele.data('props') || {}; return '💸 이체\n' + (p.amount ? Number(p.amount).toLocaleString() + '원' : ''); }, 'text-wrap': 'wrap' } },
@@ -3799,7 +3803,8 @@ ${snap?sect('7. 그래프 스냅샷 (현재 탐색 화면)')+`<img class="snap" 
             // 필터칩 12종 전체와 1:1 (구라벨 vt_flnm 제거 · 사건/조직/가상자산/이체/통화가
             // 목록 누락으로 항상 0으로 표시되던 버그 수정 — 2026-09-02 화면기록 검증)
             const types = ['vt_case', 'vt_psn', 'vt_org', 'vt_bacnt', 'vt_telno', 'vt_ip',
-                           'vt_site', 'vt_crypto', 'vt_id', 'vt_atm', 'vt_transfer', 'vt_call'];
+                           'vt_site', 'vt_crypto', 'vt_id', 'vt_atm', 'vt_loc',
+                           'vt_transfer', 'vt_call'];   // 13종 — vt_loc(기지국·거래점) 2026-09-09
             types.forEach(type => {
                 const count = cy.nodes(`[label="${type}"]`).length;
                 const countEl = document.getElementById(`count-${type}`);
@@ -3905,7 +3910,13 @@ ${snap?sect('7. 그래프 스냅샷 (현재 탐색 화면)')+`<img class="snap" 
             // 누적인데 새로 추가된 게 없으면(전부 중복) 재배치 생략 — 화면 흔들림 방지 · 위치 고정 시 항상 생략
             if ((!additive || safe.length > 0) && !_layoutLocked && !(opts && opts.skipLayout)) {
                 const layoutEles = isEventCollapseMode() ? cy.elements(':visible') : cy.elements();
-                layoutEles.layout({ name: 'dagre', rankDir: 'LR', nodeSep: 50, rankSep: 100, animate: true, fit: true }).run();
+                // 엣지 없는 노드 목록(기지국 전체 등)은 dagre 가 세로 한 줄로 쌓는다 → grid 로
+                // 희소 판정: 노드 대비 엣지가 15% 미만이면 목록성 결과(연결 거의 없음)로 본다
+                const _hasEdges = layoutEles.edges().length >= Math.max(1, layoutEles.nodes().length * 0.15);
+                const _lo = _hasEdges
+                    ? { name: 'dagre', rankDir: 'LR', nodeSep: 50, rankSep: 100, animate: true, fit: true }
+                    : { name: 'grid', avoidOverlap: true, padding: 60, animate: true, fit: true };
+                layoutEles.layout(_lo).run();
             }
             return (added && added.nodes) ? added.nodes().length : 0;
         }

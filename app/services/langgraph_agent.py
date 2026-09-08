@@ -1293,10 +1293,15 @@ AS (p agtype);
         # 백엔드 크래시(전 연결 강제 종료 + 복구모드)를 일으킨다 — 2026-09-08 실측, 재현 2회 후 중단.
         # 같은 조건을 WHERE 절로 옮기면 정상 동작하므로, 엣지가 포함된 MATCH 절에서만
         # 노드 맵리터럴을 WHERE 로 이동한다(단일 노드 MATCH 는 문제없어 보존 — 행동 변화 최소화).
+        _LOC_PARTIAL_KEYS = ('bsst_addr', 'loc_id', 'address')   # 주소류 — 부분값이 일상적
+
         def _maps_to_where(m):
             clause = m.group(0)
-            if '-[' not in clause and ']-' not in clause:
-                return clause                     # 경로 없음 — 그대로
+            # 경로가 있거나(크래시 회피), 주소류 키가 있으면(부분값 CONTAINS 완화) 변환
+            has_path = '-[' in clause or ']-' in clause
+            has_loc = any(k in clause for k in _LOC_PARTIAL_KEYS)
+            if not has_path and not has_loc:
+                return clause                     # 단순 맵(name 등)은 그대로 — 정상 동작 보존
             conds = []
             _anon = [0]
 
@@ -1306,7 +1311,8 @@ AS (p agtype);
                     _anon[0] += 1
                     var = f"_mw{_anon[0]}"
                 for k, v in re.findall(r"(\w+)\s*:\s*'((?:[^']|'')*)'", props):
-                    conds.append(f"{var}.{k} = '{v}'")
+                    op = 'CONTAINS' if k in _LOC_PARTIAL_KEYS else '='
+                    conds.append(f"{var}.{k} {op} '{v}'")
                 return f"({var}:{lbl})"
 
             body = re.sub(r"\(\s*(\w*)\s*:\s*(\w+)\s*\{([^{}]*)\}\s*\)", _node, clause)
@@ -1344,6 +1350,15 @@ AS (p agtype);
             cypher_to_run = cypher_to_run.replace(
                 _rw.group(0), f"{_rw.group(2).rstrip()} {_rw.group(1).rstrip()}")
             logger.info("[문법 교정] RETURN 뒤 WHERE → RETURN 앞으로 이동")
+
+        # vt_loc 주소/이름 부분값 완화: 질문의 '포천시'를 모델이 bsst_addr='포천시' 등호로 쓰지만
+        # 실값은 '경기도 포천시' — 위치 속성 등호를 CONTAINS 로 완화(공집합만 해소, 오탐 없음).
+        _lr = re.sub(r"\b(bsst_addr|loc_id|address)(\s*[:=]\s*)'([^']{2,})'",
+                     lambda m: f"{m.group(1)} CONTAINS '{m.group(3)}'" if m.group(2).strip() == '=' else m.group(0),
+                     cypher_to_run)
+        if _lr != cypher_to_run:
+            logger.info("[값 grounding] vt_loc 주소 부분값 → CONTAINS 완화")
+            cypher_to_run = _lr
 
         # 맵 리터럴 안의 IN 은 문법 오류 — {ip_addr IN ['a','b']} → WHERE 절로 분리.
         # (다중 앵커 교차 질의 "두 IP 둘 다 접속한 사람"에서 실측 적발)
