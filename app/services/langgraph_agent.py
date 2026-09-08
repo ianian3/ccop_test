@@ -50,6 +50,37 @@ _LITERAL_SKIP_KEYS = frozenset({'bank_nm', 'tier', 'platform', 'evid_grade', 'ro
 _PATH_RE = re.compile(r"\(\s*\w*\s*:\s*(\w+)[^)]*\)\s*(<?)-\[\s*\w*\s*:\s*(\w+)[^\]]*\]-(>?)\s*\(\s*\w*\s*:\s*(\w+)")
 
 
+def _crashy_traversal_cond(cypher: str):
+    """운영 AgensGraph 2.16-devel(PG16beta2) 크래시 형태 감지.
+
+    실측(2026-09-08, 재현 3회 후 중단): '경로 순회 + 비앵커 노드의 속성 조건' 조합이
+    백엔드 segfault → DB 전체 복구모드(전 연결 강제종료)를 일으킨다. 맵리터럴이든
+    WHERE 절이든 동일하게 죽는다. 앵커(첫 노드) 조건·엣지 변수 조건은 정상 동작 실측.
+    반환: 문제 변수명 또는 None. AGENS_TRAVERSAL_COND_GUARD=1 환경에서만 사용.
+    """
+    m = re.search(r"\$\$(.+?)\$\$", cypher, re.S)
+    inner = m.group(1) if m else cypher
+    edge_vars = set(re.findall(r"\[\s*(\w+)\s*:", inner))
+    non_first = set()
+    for cl in re.findall(r"\bMATCH\b(.+?)(?=\bMATCH\b|\bWHERE\b|\bRETURN\b|\bWITH\b|$)",
+                         inner, re.S | re.I):
+        if '-[' not in cl and ']-' not in cl:
+            continue
+        nodes = re.findall(r"\(\s*(\w+)\s*[:)\{]", cl)
+        non_first.update(nodes[1:])
+    non_first -= edge_vars
+    if not non_first:
+        return None
+    for var, _op in re.findall(r"\b(\w+)\.\w+\s*(=~|>=|<=|<>|=|>|<|CONTAINS|STARTS|ENDS|IN\b)",
+                               inner, re.I):
+        if var in non_first:
+            return var
+    for var in re.findall(r"\(\s*(\w+)\s*:\s*\w+\s*\{[^{}]*'", inner):
+        if var in non_first:
+            return var
+    return None
+
+
 def _bridge_two_hop(cypher: str, graph_path: str):
     """목표 라벨이 앵커에 직접 붙지 않을 때, 실제 이웃 라벨을 경유하는 2-hop 쿼리를 만든다.
 
@@ -1239,8 +1270,12 @@ AS (p agtype);
         # (등가 비교를 넓히는 방향이라 오탐 없이 공집합만 해소)
         def _tier_relax(m):
             val = m.group(2)
-            if any(val != rv and val in rv for rv in _TIER_VALUES):
-                return f"{m.group(1).split('=')[0].rstrip()} CONTAINS '{val}'"
+            flat = val.replace(' ', '')
+            for rv in _TIER_VALUES:
+                if flat == rv.replace(' ', '') and val != rv:
+                    return f"{m.group(1)}{rv}{m.group(3)}"          # 공백 변형 → 실값 치환
+            if any(val != rv and flat in rv.replace(' ', '') for rv in _TIER_VALUES):
+                return f"{m.group(1).split('=')[0].rstrip()} CONTAINS '{flat}'"
             return m.group(0)
         _g2 = re.sub(r"(\b\w+\.tier\s*=\s*')([^']+)(')", _tier_relax, cypher_to_run)
         if _g2 != cypher_to_run:
@@ -1253,6 +1288,44 @@ AS (p agtype);
         if _m and not re.search(r"RETURN\s+.*\sLIMIT\s+\d+", cypher_to_run, re.I | re.S):
             cypher_to_run = cypher_to_run.replace(_m.group(0), f" {_m.group(2).rstrip()} LIMIT {_m.group(1)}")
             logger.info("[문법 교정] LIMIT 절을 RETURN 뒤로 이동")
+
+        # 운영 AgensGraph(2.16-devel/PG16beta2)에서 '경로 패턴 + 노드 맵리터럴 필터' 조합이
+        # 백엔드 크래시(전 연결 강제 종료 + 복구모드)를 일으킨다 — 2026-09-08 실측, 재현 2회 후 중단.
+        # 같은 조건을 WHERE 절로 옮기면 정상 동작하므로, 엣지가 포함된 MATCH 절에서만
+        # 노드 맵리터럴을 WHERE 로 이동한다(단일 노드 MATCH 는 문제없어 보존 — 행동 변화 최소화).
+        def _maps_to_where(m):
+            clause = m.group(0)
+            if '-[' not in clause and ']-' not in clause:
+                return clause                     # 경로 없음 — 그대로
+            conds = []
+            _anon = [0]
+
+            def _node(nm):
+                var, lbl, props = nm.group(1), nm.group(2), nm.group(3)
+                if not var:
+                    _anon[0] += 1
+                    var = f"_mw{_anon[0]}"
+                for k, v in re.findall(r"(\w+)\s*:\s*'((?:[^']|'')*)'", props):
+                    conds.append(f"{var}.{k} = '{v}'")
+                return f"({var}:{lbl})"
+
+            body = re.sub(r"\(\s*(\w*)\s*:\s*(\w+)\s*\{([^{}]*)\}\s*\)", _node, clause)
+            if not conds:
+                return clause
+            joined = ' AND '.join(conds)
+            wm = re.search(r"\bWHERE\b", body, re.I)
+            if wm:
+                body = body[:wm.end()] + f" {joined} AND" + body[wm.end():]
+            else:
+                body = f"{body.rstrip()} WHERE {joined} "
+            return body
+
+        _new = re.sub(r"\bMATCH\s+[^A-Z]*?(?=\b(?:WHERE|RETURN|WITH|MATCH|ORDER|LIMIT)\b|\s*\$\$|\s*;|$)"
+                      r"(?:\bWHERE\b[^A-Z]*?(?=\b(?:RETURN|WITH|MATCH|ORDER|LIMIT)\b|\s*\$\$|\s*;|$))?",
+                      lambda m: _maps_to_where(m), cypher_to_run, flags=re.S)
+        if _new != cypher_to_run:
+            logger.info("[크래시 회피] 경로 내 맵리터럴 → WHERE 이동")
+            cypher_to_run = _new
 
         # 문자열 날짜에 min()/max() 는 AgensGraph 에서 numeric 캐스팅 에러가 난다
         # ("cannot cast 2017-03-15 (jsonb string) to numeric"). ORDER BY … LIMIT 1 로 대체.
@@ -1294,6 +1367,21 @@ AS (p agtype);
                     logger.info(f"[시간순 연속성] N형 구간 {len(tc_warnings)}개: {tc_warnings}")
             except Exception as _e:
                 logger.warning(f"시간순 주입 실패(원쿼리 유지): {_e}")
+
+        # 운영 DB 엔진 결함 가드 — 크래시 형태는 실행하지 않는다(공유 DB 보호)
+        if os.getenv('AGENS_TRAVERSAL_COND_GUARD') == '1':
+            _cv = _crashy_traversal_cond(cypher_to_run)
+            if _cv:
+                logger.warning(f"⛔ [엔진결함 가드] 경로 대상 노드({_cv}) 속성 조건 — 실행 차단")
+                return {
+                    "execution_result": [],
+                    "error_message": None,
+                    "metrics": metrics,
+                    "tc_warnings": list(tc_warnings) + [
+                        f"⚠ DB 엔진 결함 회피로 실행하지 않았습니다: 경로의 대상 노드({_cv})에 속성 조건을 "
+                        f"거는 형태가 현재 운영 DB(AgensGraph 2.16-devel)를 중단시킵니다. "
+                        f"조건을 시작(앵커) 노드로 옮겨 질문하거나, DB 엔진 패치 후 재시도하세요."],
+                }
 
         # GraphService.execute_cypher 재사용 (Cytoscape 포맷 파싱 포함)
         success, result = GraphService.execute_cypher(cypher_to_run, state['graph_path'])

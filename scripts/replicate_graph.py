@@ -105,6 +105,17 @@ def replicate(graph):
             d.commit(); print(f"  엣지 {cnt:,}…")
     d.commit()
 
+    # _src_id property index 제거 — 남기면 운영에 잔재 인덱스가 쌓인다
+    # (2026-09-08 실측: 이전 복제들의 *_src_id_idx 85개 잔존 발견 — DROP PROPERTY INDEX 필요)
+    for lb in sorted(set(l for l, _ in nodes_by_label.items())) if isinstance(nodes_by_label, dict) else []:
+        pass
+    dc.execute("SELECT indexname FROM pg_indexes WHERE schemaname=%s AND indexname LIKE '%%_src_id_idx'", (g,))
+    for (ix,) in dc.fetchall():
+        try:
+            dc.execute(f'DROP PROPERTY INDEX "{ix}"')
+        except Exception:
+            pass
+
     # _src_id 제거
     for lb in vlabels:
         dc.execute(f"MATCH (n:{lb}) REMOVE n._src_id")

@@ -15,11 +15,12 @@ import psycopg2
 KP = {'vt_bacnt': 'account_no', 'vt_case': 'flnm', 'vt_id': 'id_val', 'vt_psn': 'name',
       'vt_telno': 'telno', 'vt_ip': 'ip_addr', 'vt_org': 'org_name', 'vt_atm': 'atm_nm',
       'vt_email': 'email_addr', 'vt_src': 'src_name',
-      'vt_movement': 'mov_id'}   # EP9/10 시드: 출입국 이벤트 (V4.8)
+      'vt_movement': 'mov_id',  # EP9/10 시드: 출입국 이벤트 (V4.8)
+      'vt_loc': 'loc_id'}        # EP5-030-ibk: 거래점 위치 (located_at)
 EDGES = ['eg_used_account', 'eg_used_phone', 'eg_used_id', 'has_account', 'victim_in',
          'transferred_to', 'belongs_to', 'registered_to', 'used_ip', 'contacted',
          'sourced_from', 'linked_to', 'uses_id', 'uses_email', 'owns_phone', 'same_as',
-         'suspect_in', 'performed_by']   # V4.8: same_as 개명 + EP9/10 시드 엣지
+         'suspect_in', 'performed_by', 'located_at']   # V4.8: same_as 개명 + EP9/10 시드 + 거래점 위치
 GRAPHS = ['ep1_graph', 'ep2_graph', 'ep3_graph', 'ep4_graph',
           'ep5_graph', 'ep6_graph', 'ep7_graph', 'ep8_graph',
           'ep9_graph', 'ep10_graph']   # EP9/10: 정형 없음 → 수동 확정 시드(docs/EP910_SEED_DRAFT_20260902.md)
@@ -90,8 +91,19 @@ def main():
 
         # ── 엣지 MERGE ──
         cnt, skip = 0, 0
+        NUM_EDGE_PROPS = {'total_amount', 'txn_count', 'tx_count', 'wd_count', 'dep_count',
+                          'msg_count', 'call_count', 'total_dur_sec'}  # 문자열이면 >=/ORDER BY 깨짐
+
+        def _eset(k2, v2):
+            if k2 in NUM_EDGE_PROPS:
+                try:
+                    return f"e.{k2} = {int(float(v2))}"
+                except (TypeError, ValueError):
+                    pass
+            return f"e.{k2} = '{esc(v2)}'"
+
         for el, (fl, fk), (tl, tk), pr in edges:
-            sp = ', '.join(f"e.{k2} = '{esc(v2)}'" for k2, v2 in pr.items() if v2 not in (None, ''))
+            sp = ', '.join(_eset(k2, v2) for k2, v2 in pr.items() if v2 not in (None, ''))
             q = (f"MATCH (a:{fl} {{{KP[fl]}:'{esc(fk)}'}}), (b:{tl} {{{KP[tl]}:'{esc(tk)}'}}) "
                  f"MERGE (a)-[e:{el}]->(b)" + (f" SET {sp}" if sp else ""))
             try:
