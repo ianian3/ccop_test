@@ -50,6 +50,57 @@ _LITERAL_SKIP_KEYS = frozenset({'bank_nm', 'tier', 'platform', 'evid_grade', 'ro
 _PATH_RE = re.compile(r"\(\s*\w*\s*:\s*(\w+)[^)]*\)\s*(<?)-\[\s*\w*\s*:\s*(\w+)[^\]]*\]-(>?)\s*\(\s*\w*\s*:\s*(\w+)")
 
 
+def _anchor_first_rewrite(cypher: str, var: str):
+    """크래시 형태를 '조건 노드를 앵커로 선행'하는 동등 쿼리로 재작성한다.
+
+    운영 AgensGraph 2.16-devel 은 '경로 순회 + 비앵커 노드 속성 조건'에서 죽지만,
+    같은 조건을 **첫 MATCH 에 두면 정상 동작**한다(2026-09-10 운영 1회 검증: 5행 OK).
+        전: MATCH (a:vt_atm)-[:located_at]->(l:vt_loc) WHERE l.sigungu_nm='고양시' RETURN a,l
+        후: MATCH (l:vt_loc) WHERE l.sigungu_nm='고양시' MATCH (a:vt_atm)-[:located_at]->(l) RETURN a,l
+    결과 집합은 동일하다(같은 패턴·같은 조건, 평가 순서만 다름).
+
+    반환: 재작성된 SQL-Wrapped Cypher 또는 None(형태를 못 다루면 차단으로 넘긴다)
+    """
+    m = re.search(r"\$\$(.+?)\$\$", cypher, re.S)
+    if not m:
+        return None
+    inner = m.group(1).strip()
+    # 단일 MATCH + (선택)WHERE + RETURN 구조만 다룬다 — 그 이상은 위험하니 손대지 않음
+    mm = re.match(r"^\s*MATCH\s+(?P<pat>.+?)"
+                  r"(?:\s+WHERE\s+(?P<where>.+?))?"
+                  r"\s+(?P<tail>RETURN\s+.+)$", inner, re.S | re.I)
+    if not mm or re.search(r"\bMATCH\b", mm.group('pat'), re.I):
+        return None
+    pat, where, tail = mm.group('pat').strip(), (mm.group('where') or '').strip(), mm.group('tail').strip()
+
+    # 대상 노드의 라벨을 패턴에서 찾고, 그 노드는 패턴에서 라벨만 남긴다
+    lm = re.search(rf"\(\s*{re.escape(var)}\s*:\s*(\w+)\s*(\{{[^{{}}]*\}})?\s*\)", pat)
+    if not lm:
+        return None
+    label = lm.group(1)
+    conds = []
+    if lm.group(2):                                  # 맵 리터럴 조건 → WHERE 로
+        for k, v in re.findall(r"(\w+)\s*:\s*'((?:[^']|'')*)'", lm.group(2)):
+            conds.append(f"{var}.{k} = '{v}'")
+    pat2 = pat[:lm.start()] + f"({var})" + pat[lm.end():]
+
+    # WHERE 를 대상변수 조건 / 나머지로 분리(AND 결합만 다룬다)
+    rest = []
+    if where:
+        if re.search(r"\bOR\b", where, re.I):
+            return None                              # OR 는 분리 시 의미가 바뀔 수 있어 제외
+        for c in re.split(r"\s+AND\s+", where, flags=re.I):
+            (conds if re.match(rf"^\s*{re.escape(var)}\.", c) else rest).append(c.strip())
+    if not conds:
+        return None
+
+    q = f"MATCH ({var}:{label}) WHERE {' AND '.join(conds)} MATCH {pat2}"
+    if rest:
+        q += f" WHERE {' AND '.join(rest)}"
+    q += f" {tail}"
+    return cypher[:m.start(1)] + f" {q} " + cypher[m.end(1):]
+
+
 def _crashy_traversal_cond(cypher: str):
     """운영 AgensGraph 2.16-devel(PG16beta2) 크래시 형태 감지.
 
@@ -61,14 +112,18 @@ def _crashy_traversal_cond(cypher: str):
     m = re.search(r"\$\$(.+?)\$\$", cypher, re.S)
     inner = m.group(1) if m else cypher
     edge_vars = set(re.findall(r"\[\s*(\w+)\s*:", inner))
-    non_first = set()
+    non_first, anchors = set(), set()
     for cl in re.findall(r"\bMATCH\b(.+?)(?=\bMATCH\b|\bWHERE\b|\bRETURN\b|\bWITH\b|$)",
                          inner, re.S | re.I):
+        nodes = re.findall(r"\(\s*(\w+)\s*[:)\{]", cl)
+        if nodes:
+            anchors.add(nodes[0])          # 각 절의 첫 노드는 앵커로 바인딩된다
         if '-[' not in cl and ']-' not in cl:
             continue
-        nodes = re.findall(r"\(\s*(\w+)\s*[:)\{]", cl)
         non_first.update(nodes[1:])
-    non_first -= edge_vars
+    # 앞선 절에서 이미 앵커로 바인딩된 변수는 안전하다 — 이것을 빼지 않으면
+    # 앵커 선행 재작성 결과를 다시 '크래시 형태'로 오판해 재작성이 채택되지 않는다.
+    non_first -= edge_vars | anchors
     if not non_first:
         return None
     for var, _op in re.findall(r"\b(\w+)\.\w+\s*(=~|>=|<=|<>|=|>|<|CONTAINS|STARTS|ENDS|IN\b)",
@@ -1293,7 +1348,8 @@ AS (p agtype);
         # 백엔드 크래시(전 연결 강제 종료 + 복구모드)를 일으킨다 — 2026-09-08 실측, 재현 2회 후 중단.
         # 같은 조건을 WHERE 절로 옮기면 정상 동작하므로, 엣지가 포함된 MATCH 절에서만
         # 노드 맵리터럴을 WHERE 로 이동한다(단일 노드 MATCH 는 문제없어 보존 — 행동 변화 최소화).
-        _LOC_PARTIAL_KEYS = ('bsst_addr', 'loc_id', 'address')   # 주소류 — 부분값이 일상적
+        _LOC_PARTIAL_KEYS = ('bsst_addr', 'loc_id', 'address', 'place_name',
+                     'sido_nm', 'sigungu_nm')   # 위치류 — 부분값이 일상적('경기'/'경기도')
 
         def _maps_to_where(m):
             clause = m.group(0)
@@ -1353,7 +1409,7 @@ AS (p agtype);
 
         # vt_loc 주소/이름 부분값 완화: 질문의 '포천시'를 모델이 bsst_addr='포천시' 등호로 쓰지만
         # 실값은 '경기도 포천시' — 위치 속성 등호를 CONTAINS 로 완화(공집합만 해소, 오탐 없음).
-        _lr = re.sub(r"\b(bsst_addr|loc_id|address)(\s*[:=]\s*)'([^']{2,})'",
+        _lr = re.sub(r"\b(bsst_addr|loc_id|address|place_name|sido_nm|sigungu_nm)(\s*[:=]\s*)'([^']{2,})'",
                      lambda m: f"{m.group(1)} CONTAINS '{m.group(3)}'" if m.group(2).strip() == '=' else m.group(0),
                      cypher_to_run)
         if _lr != cypher_to_run:
@@ -1386,6 +1442,17 @@ AS (p agtype);
         # 운영 DB 엔진 결함 가드 — 크래시 형태는 실행하지 않는다(공유 DB 보호)
         if os.getenv('AGENS_TRAVERSAL_COND_GUARD') == '1':
             _cv = _crashy_traversal_cond(cypher_to_run)
+            if _cv:
+                # 차단보다 먼저: 조건 노드를 앵커로 선행하는 동등 쿼리로 재작성(운영 검증됨)
+                _rw = None
+                try:
+                    _rw = _anchor_first_rewrite(cypher_to_run, _cv)
+                except Exception as _e:
+                    logger.warning(f"앵커 선행 재작성 실패(무시): {_e}")
+                if _rw and not _crashy_traversal_cond(_rw):
+                    logger.info(f"[엔진결함 회피] 대상 노드({_cv}) 조건을 앵커로 선행 재작성")
+                    cypher_to_run = _rw
+                    _cv = None
             if _cv:
                 logger.warning(f"⛔ [엔진결함 가드] 경로 대상 노드({_cv}) 속성 조건 — 실행 차단")
                 return {
