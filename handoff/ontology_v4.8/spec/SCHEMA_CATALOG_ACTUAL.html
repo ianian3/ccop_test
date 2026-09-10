@@ -1,0 +1,464 @@
+<title>CCOP 2차년도 스키마 — 노드 12 · 엣지 19종</title>
+<style>
+:root{
+  --bg:#f6f7f9; --card:#ffffff; --ink:#1f2733; --muted:#5b6472; --line:#dde1e7;
+  --navy:#1a2b4a; --warn-bg:#fff7e0; --warn-line:#e8d48a;
+  --new-bg:#e8f6ef; --new-ink:#0b6e4f; --chip:#eef1f5;
+  --canvas:#fcfcfd; --edge:#b9c0cc; --edge-hi:#1a2b4a; --dim:.10;
+  --sel:#ff8f00;
+}
+@media (prefers-color-scheme: dark){
+  :root{ --bg:#14181f; --card:#1c2230; --ink:#e8ecf2; --muted:#9aa4b2; --line:#313a4a;
+         --navy:#9db4dd; --warn-bg:#3a3320; --warn-line:#6b5c2a;
+         --new-bg:#173328; --new-ink:#7fd4ae; --chip:#242c3c;
+         --canvas:#191f2a; --edge:#46516a; --edge-hi:#c8d6ef; --dim:.09; }
+}
+:root[data-theme="dark"]{ --bg:#14181f; --card:#1c2230; --ink:#e8ecf2; --muted:#9aa4b2; --line:#313a4a;
+  --navy:#9db4dd; --warn-bg:#3a3320; --warn-line:#6b5c2a; --new-bg:#173328; --new-ink:#7fd4ae;
+  --chip:#242c3c; --canvas:#191f2a; --edge:#46516a; --edge-hi:#c8d6ef; --dim:.09; }
+:root[data-theme="light"]{ --bg:#f6f7f9; --card:#ffffff; --ink:#1f2733; --muted:#5b6472; --line:#dde1e7;
+  --navy:#1a2b4a; --warn-bg:#fff7e0; --warn-line:#e8d48a; --new-bg:#e8f6ef; --new-ink:#0b6e4f;
+  --chip:#eef1f5; --canvas:#fcfcfd; --edge:#b9c0cc; --edge-hi:#1a2b4a; --dim:.10; }
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Malgun Gothic",Segoe UI,sans-serif;
+     line-height:1.55;margin:0;padding:0 16px 60px}
+.wrap{max-width:1120px;margin:0 auto}
+header{padding:34px 0 10px}
+h1{font-size:26px;margin:0 0 6px;letter-spacing:-.3px;text-wrap:balance}
+.sub{color:var(--muted);font-size:14px;margin:0}
+.meta{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+.chip{background:var(--chip);border:1px solid var(--line);border-radius:4px;padding:3px 10px;
+      font-size:12.5px;color:var(--muted)}
+.chip b{color:var(--ink);font-variant-numeric:tabular-nums}
+h2{font-size:17px;margin:34px 0 10px;color:var(--navy)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:18px 20px}
+.scroll{overflow-x:auto}
+
+/* ── 인터랙티브 스키마 ── */
+.viz{display:grid;grid-template-columns:1fr 316px;gap:14px;align-items:start}
+@media (max-width:880px){ .viz{grid-template-columns:1fr} }
+.stage{background:var(--canvas);border:1px solid var(--line);border-radius:8px;padding:4px}
+svg#g{width:100%;height:auto;display:block;touch-action:manipulation}
+.hint{font-size:12.5px;color:var(--muted);margin:8px 2px 0;display:flex;gap:10px;
+      align-items:center;flex-wrap:wrap}
+button.reset{background:var(--card);border:1px solid var(--line);color:var(--ink);
+      border-radius:4px;padding:4px 11px;font-size:12.5px;cursor:pointer;font-family:inherit}
+button.reset:hover{background:var(--navy);color:#fff;border-color:var(--navy)}
+button.reset:focus-visible{outline:2px solid var(--sel);outline-offset:2px}
+
+.node{cursor:pointer}
+.node circle{transition:opacity .16s, stroke-width .16s}
+.node text{font-size:11.5px;font-weight:600;pointer-events:none;fill:var(--ink);
+     stroke:var(--canvas);stroke-width:3.6px;paint-order:stroke fill;stroke-linejoin:round}
+.node text.cnt{font-size:9.5px;font-weight:500;fill:var(--muted);stroke-width:3px}
+.node:focus{outline:none}
+.node:focus-visible circle{stroke:var(--sel);stroke-width:4}
+.node.sel circle{stroke:var(--sel);stroke-width:4.5}
+.dimmed{opacity:var(--dim)}
+path.edge{fill:none;stroke:var(--edge);stroke-width:1.4;transition:opacity .16s,stroke .16s,stroke-width .16s}
+path.edge.on{stroke:var(--edge-hi);stroke-width:2.6}
+text.elabel{font-size:9.5px;fill:var(--muted);pointer-events:none;opacity:0;
+     stroke:var(--canvas);stroke-width:3.4px;paint-order:stroke fill;stroke-linejoin:round}
+text.elabel.on{opacity:1;fill:var(--edge-hi);font-weight:700}
+
+/* ── 상세 패널 ── */
+.panel{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:14px 16px;
+       font-size:13px;position:sticky;top:14px;max-height:76vh;overflow:auto}
+.panel h3{margin:0 0 3px;font-size:15px;color:var(--navy)}
+.panel .pmeta{color:var(--muted);font-size:12px;margin:0 0 12px}
+.panel .empty{color:var(--muted);font-size:12.5px;line-height:1.7}
+.grp{font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.03em;
+     margin:14px 0 6px;padding-bottom:3px;border-bottom:1px solid var(--line)}
+.grp:first-of-type{margin-top:4px}
+.er{padding:7px 0;border-bottom:1px solid var(--line)}
+.er:last-child{border-bottom:none}
+.er .top{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.er .et{font-family:"SF Mono",Menlo,Consolas,monospace;font-size:12px;color:var(--ink);font-weight:600}
+.er .n{color:var(--muted);font-variant-numeric:tabular-nums;font-size:11.5px;white-space:nowrap}
+.er .tgt{font-size:11.5px;color:var(--muted);margin-top:1px}
+.er .tgt b{color:var(--ink);font-weight:600}
+.er .pr{font-size:11px;color:var(--muted);margin-top:3px;font-family:"SF Mono",Menlo,Consolas,monospace;
+        word-break:break-word}
+.selfnote{font-size:11px;color:var(--muted)}
+
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th{font-size:12px;color:var(--muted);text-align:left;border-bottom:2px solid var(--line);
+   padding:8px 10px;white-space:nowrap}
+td{border-bottom:1px solid var(--line);padding:9px 10px;vertical-align:top}
+td.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+tr:last-child td{border-bottom:none}
+tr.rowhit{background:var(--new-bg)}
+code{background:var(--chip);border-radius:3px;padding:1px 5px;font-size:12.5px;
+     font-family:"SF Mono",Menlo,Consolas,monospace}
+.path{font-family:"SF Mono",Menlo,Consolas,monospace;font-size:12px;color:var(--muted)}
+.badge{display:inline-block;font-size:11px;font-weight:700;border-radius:3px;padding:1px 7px;
+       vertical-align:1px;margin-left:6px}
+.badge.new{background:var(--new-bg);color:var(--new-ink)}
+.badge.warn{background:var(--warn-bg);color:#8a6d1a;border:1px solid var(--warn-line)}
+:root[data-theme="dark"] .badge.warn{color:#e3c96a}
+.note{background:var(--warn-bg);border:1px solid var(--warn-line);border-radius:8px;
+      padding:12px 16px;font-size:13.5px;margin:14px 0}
+.q{color:var(--muted);font-size:12px;display:block;margin-top:2px}
+footer{color:var(--muted);font-size:12px;margin-top:40px;border-top:1px solid var(--line);padding-top:12px}
+@media (prefers-reduced-motion:reduce){ *{transition:none!important} }
+</style>
+
+<div class="wrap">
+<header>
+  <h1>CCOP 2차년도 스키마 카탈로그</h1>
+  <p class="sub">EP1~EP10 통합 그래프(<code>ccop_ep_integrated</code>) 실측 — 설계 정의가 아니라 <b>실제 적재된 것만</b> 담았다</p>
+  <div class="meta">
+    <span class="chip">노드 <b>12</b>라벨 · <b>24,720</b>개</span>
+    <span class="chip">엣지 <b>19</b>종 · <b>26,089</b>건</span>
+    <span class="chip">라벨쌍 경로 <b>29</b></span>
+    <span class="chip">V4.8 정의 72종 중 사용 <b>27%</b></span>
+    <span class="chip">측정 2026-09-10</span>
+  </div>
+</header>
+
+<h2>① 스키마 그래프 — 노드를 클릭하면 연결된 엣지만 보입니다</h2>
+<div class="viz">
+  <div>
+    <div class="stage"><svg id="g" viewBox="0 -22 760 646" role="img"
+      aria-label="CCOP 스키마 그래프: 노드 12 라벨과 경로 29개. 노드를 선택하면 연결 엣지를 볼 수 있습니다."></svg></div>
+    <div class="hint">
+      <button class="reset" id="rst">전체 보기</button>
+      <span>노드 클릭 · Tab/Enter 로도 선택 · 원 크기 = 노드 수(로그)</span>
+    </div>
+  </div>
+  <aside class="panel" id="panel" aria-live="polite"></aside>
+</div>
+
+<h2>② 엣지 19종 카탈로그 — 의미 · 방향 · 속성 실측</h2>
+<div class="card scroll">
+<table id="cat">
+<thead><tr>
+  <th>엣지</th><th>경로 (domain → range)</th><th>의미 · 대표 질문</th>
+  <th>속성(실측)</th><th style="text-align:right">건수</th><th>EP</th>
+</tr></thead>
+<tbody>
+<tr data-edge="used_ip"><td><code>used_ip</code></td>
+  <td class="path">vt_id·vt_bacnt·vt_psn·vt_telno → vt_ip</td>
+  <td>접속 흔적. 위장 뒤 실사용자 특정의 축(EP7: IP 1개→실명 64명)
+    <span class="q">"122.54.197.66 이 아이피 누가 썼어?"</span></td>
+  <td class="path">source_id<br><b>IBK 103건만</b> tx_count·first/last_dt<br>⚠ 로그분 15,245건 <b>시각 없음</b></td>
+  <td class="num">15,348</td><td>3~8,10</td></tr>
+<tr data-edge="contacted"><td><code>contacted</code></td>
+  <td class="path">vt_telno↔vt_telno · vt_id↔vt_id</td>
+  <td>통화·카톡 대화(쌍당 집계). 날짜는 대부분 vt_id 쪽
+    <span class="q">"4월에 있었던 통화 내역"</span></td>
+  <td class="path">channel·source_id·first/last_dt(76%)<br>카톡 msg_count · 통화 call_count·total_dur_sec</td>
+  <td class="num">4,867</td><td>3,4,6,7,8</td></tr>
+<tr data-edge="registered_to"><td><code>registered_to</code><span class="badge warn">혼동주의</span></td>
+  <td class="path">vt_id·vt_telno → vt_psn</td>
+  <td><b>명의 등록</b>(가입자). owns_phone(실보유)과 방향·의미가 다르다 — 대포폰 도메인의 핵심 구분
+    <span class="q">"이 번호 명의자 누구야?"</span></td>
+  <td class="path">source_id</td>
+  <td class="num">2,112</td><td>3,4,6,7</td></tr>
+<tr data-edge="owns_phone"><td><code>owns_phone</code><span class="badge warn">혼동주의</span></td>
+  <td class="path">vt_psn → vt_telno</td>
+  <td><b>실보유 회선</b>(사용 주체). 명의와 불일치하면 대포폰 신호
+    <span class="q">"조정모가 쓰는 전화"</span></td>
+  <td class="path">source_id</td>
+  <td class="num">1,872</td><td>5,6,7,10</td></tr>
+<tr data-edge="transferred_to"><td><code>transferred_to</code></td>
+  <td class="path">vt_bacnt → vt_bacnt</td>
+  <td>이체(쌍당 집계). 자금흐름 추적의 축
+    <span class="q">"이체 총액 1억 이상인 거래"</span></td>
+  <td class="path">first/last_dlng_dt·total_amount(숫자)·txn_count(숫자)·source_id</td>
+  <td class="num">617</td><td>3,4,5,7</td></tr>
+<tr data-edge="eg_used_account"><td><code>eg_used_account</code></td>
+  <td class="path">vt_case → vt_bacnt</td>
+  <td>사건에 사용된 계좌. 허브 탐지의 근거(EP1: 계좌 1개←사건 40건)
+    <span class="q">"가장 많은 사건에 등장한 계좌"</span></td>
+  <td class="path">source_id · 시드 9건 role·verified</td>
+  <td class="num">220</td><td>1,2,9,10</td></tr>
+<tr data-edge="victim_in"><td><code>victim_in</code></td>
+  <td class="path">vt_psn → vt_case</td>
+  <td>피해자→사건 <span class="q">"황민규가 피해자인 사건"</span></td>
+  <td class="path">source_id</td>
+  <td class="num">215</td><td>1,2,10</td></tr>
+<tr data-edge="eg_used_phone"><td><code>eg_used_phone</code></td>
+  <td class="path">vt_case → vt_telno</td>
+  <td>사건에 사용된 전화(070 인터넷전화 포함) <span class="q">"사건에 쓰인 전화번호들"</span></td>
+  <td class="path">source_id</td>
+  <td class="num">191</td><td>1,2</td></tr>
+<tr data-edge="has_account"><td><code>has_account</code></td>
+  <td class="path">vt_psn → vt_bacnt</td>
+  <td>계좌 명의 보유(계좌 전용 — 전화에는 쓰지 않음) <span class="q">"조지영의 계좌"</span></td>
+  <td class="path">source_id</td>
+  <td class="num">151</td><td>1~5,7,10</td></tr>
+<tr data-edge="eg_used_id"><td><code>eg_used_id</code></td>
+  <td class="path">vt_case → vt_id</td>
+  <td>사건에 사용된 계정 <span class="q">"사건에서 사용된 아이디"</span></td>
+  <td class="path">source_id</td>
+  <td class="num">145</td><td>1,2</td></tr>
+<tr data-edge="sourced_from"><td><code>sourced_from</code></td>
+  <td class="path">vt_atm·vt_telno·vt_bacnt → vt_src</td>
+  <td>증거 출처(provenance — 더치트 등). 원본 대조 가능성 담보
+    <span class="q">"출처가 기록된 증거"</span></td>
+  <td class="path">source_id</td>
+  <td class="num">121</td><td>1,2,5</td></tr>
+<tr data-edge="located_at"><td><code>located_at</code><span class="badge new">9월 신규</span></td>
+  <td class="path">vt_telno·vt_bacnt·vt_atm → vt_loc</td>
+  <td>위치 3계열 — <b>기지국 53</b>(<code>cell_tower</code>, 발신자 회선 귀속 주의) +
+    <b>ATM 46</b>(<code>atm_loc</code>, 집금 ATM 지점) + <b>거래점 27</b>(<code>poi</code>, 출금 = 인출책 거점)
+    <span class="q">"고양시에 있는 ATM" · "01004385874 번호가 잡힌 기지국"</span></td>
+  <td class="path">source_id · 기지국 first/last_dt·call_count<br>거래점 tx_count·wd_count·dep_count · ATM creation_method</td>
+  <td class="num">126</td><td>3,5</td></tr>
+<tr data-edge="linked_to"><td><code>linked_to</code></td>
+  <td class="path">vt_bacnt ↔ vt_telno</td>
+  <td>계좌↔전화 연계 단서(더치트 OSINT 확장) <span class="q">"전화번호랑 계좌가 엮인 케이스"</span></td>
+  <td class="path">via·victims·source_id·damage(14)</td>
+  <td class="num">57</td><td>1,2</td></tr>
+<tr data-edge="belongs_to"><td><code>belongs_to</code></td>
+  <td class="path">vt_bacnt → vt_org</td>
+  <td>법인 계좌 소속(피어스미디어 집금망 등) <span class="q">"피어스미디어 소속 계좌"</span></td>
+  <td class="path">source_id</td>
+  <td class="num">26</td><td>3,4,5</td></tr>
+<tr data-edge="suspect_in"><td><code>suspect_in</code><span class="badge new">9월 신규</span></td>
+  <td class="path">vt_psn → vt_case</td>
+  <td>피의자→사건(role: 주범·공범) <span class="q">"주범으로 특정된 사람"</span></td>
+  <td class="path">source_id·verified·rec_created·creation_method</td>
+  <td class="num">6</td><td>10</td></tr>
+<tr data-edge="performed_by"><td><code>performed_by</code><span class="badge new">9월 신규</span></td>
+  <td class="path">vt_movement → vt_psn</td>
+  <td>출입국 이동이벤트의 주체(출국 6건 전건 중국) <span class="q">"5월에 출국한 피의자"</span></td>
+  <td class="path">source_id·verified·rec_created·creation_method</td>
+  <td class="num">6</td><td>10</td></tr>
+<tr data-edge="same_as"><td><code>same_as</code><span class="badge new">9월 신규</span></td>
+  <td class="path">vt_psn → vt_psn</td>
+  <td>동일인 후보(candidate_only·verified=false — 확정 아님). 통합 정밀화 산출
+    <span class="q">"김미영과 동일인으로 판단된 사람"</span></td>
+  <td class="path">conf·method·verified·traversal_policy·source_id</td>
+  <td class="num">4</td><td>통합 산출</td></tr>
+<tr data-edge="uses_id"><td><code>uses_id</code></td>
+  <td class="path">vt_psn → vt_id</td>
+  <td>인물의 사용 계정(수동 실증분) <span class="q">"조정모가 사용한 카카오 계정"</span></td>
+  <td class="path">source_id·creation_method</td>
+  <td class="num">3</td><td>5,10</td></tr>
+<tr data-edge="uses_email"><td><code>uses_email</code></td>
+  <td class="path">vt_psn → vt_email</td>
+  <td>인물의 사용 이메일 <span class="q">"이메일 주소 확보된 것"</span></td>
+  <td class="path">source_id·creation_method</td>
+  <td class="num">2</td><td>5,10</td></tr>
+</tbody>
+</table>
+</div>
+
+<h2>③ 판독 주의 4가지</h2>
+<div class="note"><b>① owns_phone vs registered_to</b> — 중복이 아니라 <b>실사용 vs 명의</b>의 구분(대포폰 수사의 핵심).
+단, 방향이 반대(인물→전화 vs 전화→인물)라 질의 생성 시 혼동 1순위 — 100문항 벤치 R03/R04 실패의 원인이었고
+프롬프트에 의미를 명시해 해소.</div>
+<div class="note"><b>② used_ip 편중(전체의 59%)</b> — EP6~8 접속로그의 로그 알갱이. 교차 실증의 원천이라 유지하되,
+UI 는 우선순위 샘플링·군집 분석은 인물중심 서브그래프로 분리 대응 중. 3차년도 로그 증가 시 쌍당 집계 전환 검토.</div>
+<div class="note"><b>③ 시간은 전부 '첫/마지막' 집계다</b> — 관계는 쌍당 1엣지로 접고 <code>first_dt/last_dt</code>(+건수·합계)만
+남긴다. <b>건별 시각은 그래프에 없다</b> — 원본·표준 RDB(TB_TELNO_CALL_D 등)가 담당할 층. 노드 쪽 예외는
+vt_movement.mov_dt · vt_case.occrn_dt. 실측 갭: <b>used_ip 로그분 15,245건은 시각 속성이 아예 없다</b>(EP6~8
+적재 시 미수집) — 시간축 IP 분석이 필요해지면 재적재 후보.</div>
+<div class="note"><b>④ 위치(vt_loc)는 loc_type 으로 3계열이 갈린다</b> —
+<code>cell_tower</code> 34(기지국) · <code>atm_loc</code> 46(집금 ATM) · <code>poi</code> 27(은행 영업점).
+같은 <code>located_at</code> 엣지를 쓰므로 <b>loc_type 으로 구분</b>해야 한다.
+<br>· <b>기지국 값의 귀속 주의</b>: EP3 기지국은 <b>착신 통화의 발신자(상대방)</b> 회선 위치다 —
+대상 회선의 동선이 아니다. 거래점·ATM 은 거래/인출이 발생한 지점(= 인출책 위치).
+<br>· ATM 63개 중 <b>17개는 주소가 원본에 없어</b> 위치 노드를 만들지 않았다(지점명만 보유).
+'포항농협'→포항시 식 추정은 근거 없는 위치를 만들므로 하지 않았다.
+<br>· 정밀도 차이: ATM·거래점은 <b>도로명·동 단위</b>, 기지국은 <b>시·군 단위</b>(비식별화로 절삭).</div>
+
+<footer>
+CCOP · 2차년도 EP1~EP10 통합 그래프 실측 (2026-09-10, 로컬 5434 = 운영 5333 동일) ·
+V4.8 온톨로지 SoT: app/middleware/services/ontology_service.py ·
+쿼리: MATCH (a)-[r]-&gt;(b) RETURN label(a), type(r), label(b), count(r)
+</footer>
+</div>
+
+<script>
+/* ── 실측 데이터 (ccop_ep_integrated, 2026-09-09) ───────────────────────── */
+const N = [
+  { id:'vt_psn',      ko:'인물',    n:1958,  c:'#c0392b', f:'#f5c8c8' },
+  { id:'vt_case',     ko:'사건',    n:215,   c:'#5b6472', f:'#d9dde3' },
+  { id:'vt_bacnt',    ko:'계좌',    n:535,   c:'#2f6bab', f:'#c9ddf2' },
+  { id:'vt_org',      ko:'조직',    n:2,     c:'#b03a6e', f:'#f3cede' },
+  { id:'vt_loc',      ko:'위치',    n:107,   c:'#0b9673', f:'#c6ebdf' },
+  { id:'vt_telno',    ko:'전화',    n:2599,  c:'#2e8b60', f:'#c9e9d8' },
+  { id:'vt_src',      ko:'출처',    n:2,     c:'#8c8c8c', f:'#e6e6e6' },
+  { id:'vt_atm',      ko:'ATM',    n:63,    c:'#c2a02c', f:'#faedc4' },
+  { id:'vt_ip',       ko:'IP',     n:13244, c:'#6d4fa8', f:'#ddd2ef' },
+  { id:'vt_id',       ko:'계정',    n:5987,  c:'#b57718', f:'#f4e0c2' },
+  { id:'vt_email',    ko:'이메일',  n:2,     c:'#948d6f', f:'#e3e0d5' },
+  { id:'vt_movement', ko:'출입국',  n:6,     c:'#0e7c8c', f:'#c4e3e8' },
+];
+// [source, edge, target, count]
+const T = [
+  ['vt_id','used_ip','vt_ip',15197], ['vt_id','contacted','vt_id',4107],
+  ['vt_id','registered_to','vt_psn',1914], ['vt_psn','owns_phone','vt_telno',1872],
+  ['vt_telno','contacted','vt_telno',760], ['vt_bacnt','transferred_to','vt_bacnt',617],
+  ['vt_case','eg_used_account','vt_bacnt',220], ['vt_psn','victim_in','vt_case',215],
+  ['vt_telno','registered_to','vt_psn',198], ['vt_case','eg_used_phone','vt_telno',191],
+  ['vt_psn','has_account','vt_bacnt',151], ['vt_case','eg_used_id','vt_id',145],
+  ['vt_bacnt','used_ip','vt_ip',108], ['vt_atm','sourced_from','vt_src',63],
+  ['vt_telno','located_at','vt_loc',53], ['vt_atm','located_at','vt_loc',46],
+  ['vt_bacnt','linked_to','vt_telno',32],
+  ['vt_telno','sourced_from','vt_src',31], ['vt_bacnt','located_at','vt_loc',27],
+  ['vt_bacnt','sourced_from','vt_src',27], ['vt_bacnt','belongs_to','vt_org',26],
+  ['vt_psn','used_ip','vt_ip',25], ['vt_telno','linked_to','vt_bacnt',25],
+  ['vt_telno','used_ip','vt_ip',18], ['vt_psn','suspect_in','vt_case',6],
+  ['vt_movement','performed_by','vt_psn',6], ['vt_psn','same_as','vt_psn',4],
+  ['vt_psn','uses_id','vt_id',3], ['vt_psn','uses_email','vt_email',2],
+];
+// 엣지별 속성(실측) — 패널 표시용
+const P = {
+  used_ip:'source_id · (IBK 103건만) tx_count·first/last_dt',
+  contacted:'channel·source_id·first/last_dt · msg_count | call_count·total_dur_sec',
+  registered_to:'source_id', owns_phone:'source_id',
+  transferred_to:'first/last_dlng_dt·total_amount·txn_count·source_id',
+  eg_used_account:'source_id · (시드 9건) role·verified',
+  victim_in:'source_id', eg_used_phone:'source_id', has_account:'source_id',
+  eg_used_id:'source_id', sourced_from:'source_id',
+  located_at:'source_id · 기지국 first/last_dt·call_count | 거래점 tx_count·wd_count·dep_count | ATM creation_method',
+  linked_to:'via·victims·source_id·damage(14)', belongs_to:'source_id',
+  suspect_in:'source_id·verified·rec_created·creation_method',
+  performed_by:'source_id·verified·rec_created·creation_method',
+  same_as:'conf·method·verified·traversal_policy·source_id',
+  uses_id:'source_id·creation_method', uses_email:'source_id·creation_method',
+};
+const KO = Object.fromEntries(N.map(d => [d.id, d.ko]));
+const fmt = v => v.toLocaleString('ko-KR');
+
+/* ── 배치: 원형(엣지 교차가 적도록 인접 축을 이웃에 둔 수동 순서) ────────── */
+const SVG = document.getElementById('g');
+const NS = 'http://www.w3.org/2000/svg';
+const W = 760, H = 600, CX = W / 2, CY = H / 2 + 4, R = 208;
+const pos = {};
+N.forEach((d, i) => {
+  const a = (i / N.length) * Math.PI * 2 - Math.PI / 2;
+  pos[d.id] = { x: CX + R * Math.cos(a), y: CY + R * Math.sin(a), a };
+  d.r = 15 + Math.log10(d.n + 1) * 7.2;          // 로그 스케일 반지름
+});
+const el = (t, at) => { const e = document.createElementNS(NS, t);
+  for (const k in at) e.setAttribute(k, at[k]); return e; };
+
+// 화살표 마커 2종(기본/강조)
+const defs = el('defs', {});
+[['ar', 'var(--edge)'], ['arOn', 'var(--edge-hi)']].forEach(([id, col]) => {
+  const m = el('marker', { id, viewBox:'0 0 10 10', refX:9, refY:5,
+    markerWidth:5.4, markerHeight:5.4, orient:'auto-start-reverse' });
+  m.appendChild(el('path', { d:'M0,0 L10,5 L0,10 z', fill:col }));
+  defs.appendChild(m);
+});
+SVG.appendChild(defs);
+const gEdge = el('g', {}), gLbl = el('g', {}), gNode = el('g', {});
+SVG.append(gEdge, gLbl, gNode);
+
+/* 엣지 path — 자기루프는 노드 바깥 원호, 일반은 완만한 곡선 */
+const edgeEls = [];
+T.forEach(([s, t, o, n], i) => {
+  const A = pos[s], B = pos[o], ra = N.find(d => d.id === s).r, rb = N.find(d => d.id === o).r;
+  let d, mid;
+  if (s === o) {
+    const ox = Math.cos(A.a) * 30, oy = Math.sin(A.a) * 30;
+    d = `M ${A.x - 9} ${A.y - ra + 2} C ${A.x - 34 + ox} ${A.y - ra - 40 + oy},
+         ${A.x + 34 + ox} ${A.y - ra - 40 + oy}, ${A.x + 9} ${A.y - ra + 2}`;
+    mid = { x: A.x + ox, y: A.y - ra - 26 + oy };
+  } else {
+    const dx = B.x - A.x, dy = B.y - A.y, L = Math.hypot(dx, dy);
+    const ux = dx / L, uy = dy / L;
+    const x1 = A.x + ux * (ra + 2), y1 = A.y + uy * (ra + 2);
+    const x2 = B.x - ux * (rb + 7), y2 = B.y - uy * (rb + 7);
+    const bow = 0.13 + (i % 3) * 0.035;            // 겹침 완화용 미세 변주
+    const cx = (x1 + x2) / 2 - dy * bow, cy = (y1 + y2) / 2 + dx * bow;
+    d = `M ${x1} ${y1} Q ${cx} ${cy} ${x2} ${y2}`;
+    const tq = 0.34 + (i % 5) * 0.055;                             // 중앙보다 출발점 쪽 — 수신 노드 라벨과 충돌 완화
+    const bx = (1-tq)*(1-tq)*x1 + 2*(1-tq)*tq*cx + tq*tq*x2;
+    const by = (1-tq)*(1-tq)*y1 + 2*(1-tq)*tq*cy + tq*tq*y2;
+    mid = { x: bx, y: by };
+  }
+  const p = el('path', { class:'edge', d, 'marker-end':'url(#ar)' });
+  gEdge.appendChild(p);
+  const lb = el('text', { class:'elabel', x:mid.x, y:mid.y, 'text-anchor':'middle' });
+  lb.textContent = `${t} ${fmt(n)}`;
+  gLbl.appendChild(lb);
+  edgeEls.push({ p, lb, s, o, t, n });
+});
+
+/* 노드 */
+const nodeEls = {};
+N.forEach(d => {
+  const { x, y } = pos[d.id];
+  const g = el('g', { class:'node', tabindex:0, role:'button',
+    'aria-label':`${d.ko} ${d.id}, 노드 ${fmt(d.n)}개` });
+  g.appendChild(el('circle', { cx:x, cy:y, r:d.r, fill:d.f, stroke:d.c, 'stroke-width':2.2 }));
+  const out = y > CY + 40;                          // 아래쪽 노드는 라벨을 아래로
+  const t1 = el('text', { x, y: out ? y + d.r + 16 : y - d.r - 19, 'text-anchor':'middle' });
+  t1.textContent = d.ko;
+  const t2 = el('text', { class:'cnt', x, y: out ? y + d.r + 28 : y - d.r - 7, 'text-anchor':'middle' });
+  t2.textContent = fmt(d.n);
+  g.append(t1, t2);
+  gNode.appendChild(g);
+  nodeEls[d.id] = g;
+  const pick = e => { e.preventDefault(); select(d.id); };
+  g.addEventListener('click', pick);
+  g.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') pick(e); });
+});
+
+/* 선택 상태 */
+const panel = document.getElementById('panel');
+let cur = null;
+
+function select(id) {
+  cur = (cur === id) ? null : id;
+  const on = new Set();
+  edgeEls.forEach(({ p, lb, s, o }) => {
+    const hit = cur && (s === cur || o === cur);
+    p.classList.toggle('on', !!hit);
+    p.setAttribute('marker-end', hit ? 'url(#arOn)' : 'url(#ar)');
+    lb.classList.toggle('on', !!hit);
+    p.classList.toggle('dimmed', !!cur && !hit);
+    if (hit) { on.add(s); on.add(o); }
+  });
+  N.forEach(d => {
+    const g = nodeEls[d.id];
+    g.classList.toggle('sel', cur === d.id);
+    g.classList.toggle('dimmed', !!cur && !on.has(d.id));
+  });
+  // 카탈로그 표 연동
+  const types = new Set(edgeEls.filter(e => cur && (e.s === cur || e.o === cur)).map(e => e.t));
+  document.querySelectorAll('#cat tbody tr').forEach(tr =>
+    tr.classList.toggle('rowhit', types.has(tr.dataset.edge)));
+  paint();
+}
+
+function paint() {
+  if (!cur) {
+    panel.innerHTML = `<h3>노드를 선택하세요</h3>
+      <p class="pmeta">라벨 12 · 경로 29</p>
+      <p class="empty">노드를 클릭하면 그 라벨에 <b>나가는 엣지</b>와 <b>들어오는 엣지</b>가
+      방향·건수·속성과 함께 표시되고, 아래 카탈로그 표에서 해당 엣지 행이 강조됩니다.
+      <br><br>가장 넓게 쓰인 축은 <b>인물</b>과 <b>계좌</b>이고, 건수는 <b>IP</b>(접속로그)에 몰려 있습니다.</p>`;
+    return;
+  }
+  const d = N.find(x => x.id === cur);
+  const outs = edgeEls.filter(e => e.s === cur && e.o !== cur);
+  const ins  = edgeEls.filter(e => e.o === cur && e.s !== cur);
+  const selfs = edgeEls.filter(e => e.s === cur && e.o === cur);
+  const tot = [...outs, ...ins, ...selfs].reduce((a, e) => a + e.n, 0);
+  const row = (e, dir) => `<div class="er">
+      <div class="top"><span class="et">${e.t}</span><span class="n">${fmt(e.n)}건</span></div>
+      <div class="tgt">${dir} <b>${KO[dir === '→' ? e.o : e.s]}</b>
+        <span class="path">${dir === '→' ? e.o : e.s}</span></div>
+      <div class="pr">${P[e.t] || ''}</div></div>`;
+  let h = `<h3>${d.ko} <span class="path">${d.id}</span></h3>
+    <p class="pmeta">노드 ${fmt(d.n)}개 · 연결 엣지 ${outs.length + ins.length + selfs.length}종 · ${fmt(tot)}건</p>`;
+  if (selfs.length) h += `<div class="grp">자기 관계</div>` +
+    selfs.map(e => row(e, '↺') + `<div class="selfnote">같은 라벨끼리 — 쌍당 1엣지로 집계</div>`).join('');
+  if (outs.length) h += `<div class="grp">나가는 엣지 (${d.ko} →)</div>` + outs.map(e => row(e, '→')).join('');
+  if (ins.length)  h += `<div class="grp">들어오는 엣지 (→ ${d.ko})</div>` + ins.map(e => row(e, '←')).join('');
+  if (!outs.length && !ins.length && !selfs.length) h += `<p class="empty">연결된 엣지가 없습니다.</p>`;
+  panel.innerHTML = h;
+}
+
+document.getElementById('rst').addEventListener('click', () => { cur = null; select(null); });
+SVG.addEventListener('click', e => { if (e.target === SVG) { cur = null; select(null); } });
+paint();
+</script>
