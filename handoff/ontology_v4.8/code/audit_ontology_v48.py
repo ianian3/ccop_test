@@ -35,28 +35,32 @@ except ImportError:
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from ccop_ontology_v48 import KICSCrimeDomainOntology as O   # noqa: E402
 
-# 라벨별 canonical key — 정의에서 뽑되, 없으면 관례명으로 보완
-KEY_HINT = {
-    'vt_psn': 'name', 'vt_bacnt': 'account_no', 'vt_telno': 'telno', 'vt_ip': 'ip_addr',
-    'vt_id': 'id_val', 'vt_case': 'flnm', 'vt_org': 'org_name', 'vt_email': 'email_addr',
-    'vt_atm': 'atm_nm', 'vt_src': 'src_name', 'vt_movement': 'mov_id', 'vt_loc': 'loc_id',
-}
-DEPRECATED = {k for k, v in O.RELATIONSHIPS.items()
-              if isinstance(v, dict) and v.get('deprecated')}
+DEPRECATED = {k for k in O.RELATIONSHIPS if k not in O.active_relationships()}
+
+# 키 속성은 스펙(NODE_ID_STANDARD.canonical_field)에서 파생한다.
+# 관례명 테이블을 손으로 들고 있으면, 스펙이 선언한 키가 적재에서 0% 여도
+# 대체 이름으로 조회돼 '정상' 으로 보인다 — 정확히 이 감사가 잡아야 할 상황이 가려진다.
+label_of = O.label_of
+# 전 노드·엣지에 공통으로 붙는 메타 — 식별자 진단 힌트에서 제외한다
+COMMON_META = set(O.EDGE_META_SCHEMA) | {'rec_created', 'verified', 'confidence', 'is_anonymous'}
 
 
-def canon_key(label):
-    ent = O.ENTITIES.get(O.GDB_LABEL_MAP_REVERSE.get(label, label), {}) \
-        if hasattr(O, 'GDB_LABEL_MAP_REVERSE') else {}
-    props = ent.get('properties') if isinstance(ent, dict) else None
-    if props:
-        return props[0]
-    return KEY_HINT.get(label)
+def key_fields(label):
+    """라벨의 키 속성 목록. 복합키는 여러 개를 돌려준다.
 
-
-def label_of(concept_or_label):
-    """개념명(Person) → 라벨(vt_psn) 변환. 이미 라벨이면 그대로."""
-    return O.GDB_LABEL_MAP.get(concept_or_label, concept_or_label)
+    주의: 스펙의 canonical_field 는 복합키를 사람이 읽는 문자열로 적어둔 곳이 있다
+    (vt_id → '(platform, id_val)'). 그대로 쓰면 속성명으로 조회돼 문법 오류가 나므로
+    괄호 표기를 풀어서 개별 속성으로 만든다.
+    """
+    k = O.key_field(label)
+    if not k:
+        return []
+    if isinstance(k, (list, tuple)):
+        return [str(x).strip() for x in k]
+    s = str(k).strip()
+    if s.startswith('(') and s.endswith(')'):
+        return [p.strip() for p in s[1:-1].split(',') if p.strip()]
+    return [s]
 
 
 def allowed_labels():
@@ -126,21 +130,43 @@ def main():
             print('  domain/range 준수')
         violations += len(dr_bad)
 
-        # ⑤ 키 충전율
+        # ⑤ 키 충전율 — 스펙이 선언한 canonical_field 기준
         low = []
         for l in labels:
-            k = canon_key(l)
-            if not k:
+            ks = key_fields(l)
+            if not ks:
                 continue
             cur.execute(f'MATCH (n:{l}) RETURN count(n)')
             tot = cur.fetchone()[0] or 0
             if not tot:
                 continue
-            cur.execute(f'MATCH (n:{l}) WHERE n.{k} IS NOT NULL RETURN count(n)')
-            has = cur.fetchone()[0] or 0
-            if has / tot < args.min_key_fill:
-                low.append(f'{l}.{k} {has}/{tot} ({has/tot:.0%})')
-        print('  키 충전율: ' + ('정상' if not low else '⚠ ' + ' · '.join(low)))
+            for k in ks:
+                if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', k):
+                    continue
+                cur.execute(f'MATCH (n:{l}) WHERE n.{k} IS NOT NULL RETURN count(n)')
+                has = cur.fetchone()[0] or 0
+                if has / tot >= args.min_key_fill:
+                    continue
+                msg = f'{l}.{k} {has}/{tot} ({has/tot:.0%})'
+                # 진단 힌트: 선언된 다른 속성 중 실제로 채워진 것을 찾아 알려준다
+                # (적재가 다른 이름을 식별자로 썼다면 그게 스펙↔적재 불일치 지점이다)
+                ent = O.ENTITIES.get(O.concept_of(l)) or {}
+                for alt in (ent.get('attributes') or [])[:12]:
+                    # 공통 메타(source_id·rec_created 등)는 설계상 모든 노드에 있어 힌트가 못 된다
+                    if alt == k or alt in COMMON_META \
+                            or not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', alt):
+                        continue
+                    cur.execute(f'MATCH (n:{l}) WHERE n.{alt} IS NOT NULL RETURN count(n)')
+                    if (cur.fetchone()[0] or 0) / tot >= 0.99:
+                        msg += f' → 실제 채워진 속성: {alt}'
+                        break
+                low.append(msg)
+        if low:
+            print('  ⚠ 키 충전율 미달(스펙 canonical_field 기준):')
+            for x in low:
+                print(f'      {x}')
+        else:
+            print('  키 충전율: 정상')
 
         # ⑥ provenance
         cur.execute('MATCH (n) RETURN count(n)')

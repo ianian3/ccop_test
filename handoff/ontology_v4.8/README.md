@@ -44,20 +44,38 @@ uses_id 3 · uses_email 2
 
 ---
 
-## 2. 정의 SoT — `code/ccop_ontology_v48.py`
+## 2. 정의 스펙 — `code/ccop_ontology_v48.py`
 
 **외부 의존이 0입니다.** 표준 라이브러리조차 import 하지 않는 순수 선언(dict)이라,
 Python 환경에 그대로 두고 참조하거나 JSON으로 덤프해 타 언어에서 쓸 수 있습니다.
 
+당사 운영본에서 **외부에 필요한 정의만 추린 것**입니다(당사 UI 렌더링 값, Text2Cypher 어휘
+매핑, 미구현 추론 로드맵 등은 제외 — 제외 항목과 이유는 파일 첫 주석에 그대로 적혀 있습니다).
+
 ```python
 from ccop_ontology_v48 import KICSCrimeDomainOntology as O
 
-O.ENTITIES          # 25 — 노드 정의(layer·properties·attributes·description)
-O.RELATIONSHIPS     # 72 — 엣지 정의(domain·range·semantic_relation·label_ko·meaning)
-O.GDB_LABEL_MAP     # 개념명(Person) ↔ 그래프 라벨(vt_psn)
-O.STANDARD_TABLE_MAP  # 온톨로지 ↔ RDB 표준테이블(TB_*) 매핑
-O.COLUMN_PATTERNS   # 원본 컬럼명 → 표준 속성 추론 규칙
+# ── 정의 본체 ──
+O.LAYERS / O.LAYERS_GDB   # 4계층 골격
+O.ENTITIES                # 25 — 노드 정의(layer·properties(키)·attributes(전속성)·legal_category)
+O.RELATIONSHIPS           # 72 — 엣지 정의(domain·range·properties·meaning·legal_significance)
+O.GDB_LABEL_MAP           # 개념명(Person) → 라벨(vt_psn)   / O.CONCEPT_LOOKUP 은 역방향
+O.LABEL_KO_MAP            # 라벨 → 한글명(보고서·UI 표기)
+O.EDGE_META_SCHEMA        # 전 엣지 공통 메타 속성과 타입
+O.NODE_ID_STANDARD        # 노드 식별자 규약 — canonical_field·정규화·해시 (적재 멱등성의 근거)
+O.STANDARD_TABLE_MAP      # RDB 표준테이블 크로스워크
+# ── 부록(전처리 힌트) ──
+O.COLUMN_PATTERNS / O.COLUMN_TYPE_TO_RDB
+
+# ── 헬퍼 (스펙에서 바로 파생되는 것만) ──
+O.active_relationships()  # deprecated 제외한 70종
+O.label_of('Person')      # 'vt_psn'      · O.concept_of('vt_psn') → 'Person'
+O.key_field('vt_bacnt')   # 'account_no'  · 라벨의 식별 속성명
 ```
+
+> **엣지 라벨은 `RELATIONSHIPS` 의 키를 그대로 쓰십시오.** 당사 내부 정의에는 RDF식
+> camelCase 별칭(`suspectIn` 등)이 함께 있었으나, AgensGraph가 미인용 식별자를 소문자화해
+> 라벨로 오인해 쓰면 깨지므로 전달본에서 제외했습니다.
 
 JSON 덤프가 필요하면:
 ```bash
@@ -92,16 +110,29 @@ DB_HOST=... DB_PORT=... DB_NAME=... DB_USER=... DB_PASSWORD=... \
 검사: ①정경 외 라벨 ②정경 외 엣지 ③deprecated 사용 ④domain/range 위반
 ⑤키 속성 충전율 ⑥`source_id` 보유율(원본 대조 가능성).
 
-당사 통합 그래프 기준 출력 예 — **이 상태를 목표로 하십시오**:
+당사 통합 그래프 기준 실제 출력 — **정경·domain/range·provenance 는 이 상태를 목표로**:
 ```
 ══ ccop_ep_integrated ══
   노드 라벨 12종 · 정경 준수
   엣지 19종 · 정경 준수
   domain/range 준수
-  키 충전율: 정상
+  ⚠ 키 충전율 미달(스펙 canonical_field 기준):
+      vt_atm.atm_id  0/63   (0%)
+      vt_src.src_id  1/2   (50%)
+      vt_org.org_id  0/2    (0%) → 실제 채워진 속성: org_name
+      vt_psn.psn_id  0/1958 (0%) → 실제 채워진 속성: name
   source_id 보유: 24,719/24,720 (100%)
 ✅ 위반 0
 ```
+
+### 이 ⚠ 는 숨기지 않고 그대로 둡니다 — 알려진 스펙↔적재 불일치
+`NODE_ID_STANDARD` 는 인물 식별자를 `psn_id` 로 선언하지만, **2차년도 데이터는
+비식별화본이라 인물에 부여된 ID가 없어** 당사 적재는 `name` 을 식별자로 씁니다
+(ATM·기관도 동형: `atm_nm`·`org_name`). 정경·관계 구조는 스펙과 일치하고 식별 속성만
+다릅니다. 귀사 데이터에 인물 ID가 있다면 `psn_id` 를 채우는 편이 스펙에 맞습니다.
+
+`vt_id` 의 `canonical_field` 는 복합키를 사람이 읽는 표기(`'(platform, id_val)'`)로 적어둔
+문자열입니다. 기계적으로 쓰려면 괄호를 풀어 두 속성으로 다루십시오(감사 도구는 그렇게 처리).
 
 ---
 
@@ -188,9 +219,12 @@ handoff/ontology_v4.8/
 │   ├── CYBERCOP_STANDARD_TABLE_DDL.sql        RDB 표준 51테이블
 │   └── PARTNER_DATA_STANDARD.md               협력기관 데이터 표준 가이드
 └── code/
-    ├── ccop_ontology_v48.py                   정의 SoT (외부 의존 0)
+    ├── ccop_ontology_v48.py                   정의 스펙 (외부 의존 0 · 1,215행)
     └── audit_ontology_v48.py                  정합 감사 도구 (CI 게이트 가능)
 ```
+
+검증: 이 패키지의 `code/` 두 파일만 빈 디렉터리에 복사한 상태에서 import·JSON 덤프·
+실 DB 감사가 모두 동작함을 확인했습니다(레포·프레임워크 없이 단독 실행 가능).
 
 ## 8. 미포함 항목
 
