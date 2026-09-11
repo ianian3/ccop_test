@@ -6,7 +6,7 @@ EP마다 가명이 달라도 물리 식별자(계좌/전화/IP/ID)가 겹치면 
 각 노드에 ep_origin='ep3,ep6,ep7' 을 부여해 어느 EP들에서 공유되는지(콜센터 IP 등) 추적.
 멱등(MERGE). 실행: python3 scripts/build_integrated_graph.py
 """
-import sys, os
+import sys, os, re
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from app import create_app
 from app.database import safe_set_graph_path
@@ -32,6 +32,20 @@ def esc(v):
 
 
 def main():
+    # 통합 대상·산출 그래프를 인자로 받는다(기본값은 종전과 동일 — EP1~10 → ccop_ep_integrated).
+    # 협력기관 납품본처럼 새 출처를 합칠 때 --graphs 에 추가하면 된다. 같은 물리 식별자
+    # (계좌·전화·IP·계정)를 쓰면 기존 EP 데이터와 자동으로 교차 연결된다.
+    import argparse
+    ap = argparse.ArgumentParser()
+    ap.add_argument('--graphs', nargs='+', default=GRAPHS, help='통합할 원본 그래프들')
+    ap.add_argument('--target', default=INTEG, help='산출 통합 그래프')
+    a = ap.parse_args()
+    src_graphs, integ = a.graphs, a.target
+    for g in src_graphs + [integ]:
+        if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', g):
+            sys.exit(f'invalid graph name: {g}')
+    print(f"[대상] {', '.join(src_graphs)} → {integ}", flush=True)
+
     app = create_app()
     with app.app_context():
         conn = psycopg2.connect(**app.config['DB_CONFIG']); conn.autocommit = True
@@ -39,7 +53,7 @@ def main():
         nodes = {}   # (label,key) -> {'props':{}, 'origins':set()}
         edges = []   # (el, (la,fk), (lb,tk), props)
         # ── 수집 ──
-        for g in GRAPHS:
+        for g in src_graphs:
             gs = g.replace('_graph', '')
             safe_set_graph_path(cur, g)
             for label, kp in KP.items():
@@ -67,9 +81,9 @@ def main():
         print(f"[수집] 노드 {len(nodes)} · 엣지 {len(edges)}", flush=True)
 
         # ── 통합 그래프 생성 ──
-        cur.execute(f"DROP GRAPH IF EXISTS {INTEG} CASCADE;")
-        cur.execute(f"CREATE GRAPH IF NOT EXISTS {INTEG};")
-        safe_set_graph_path(cur, INTEG)
+        cur.execute(f"DROP GRAPH IF EXISTS {integ} CASCADE;")
+        cur.execute(f"CREATE GRAPH IF NOT EXISTS {integ};")
+        safe_set_graph_path(cur, integ)
         for vl in KP:
             cur.execute(f"CREATE VLABEL IF NOT EXISTS {vl};")
         for el in sorted(set(e[0] for e in edges)):
@@ -113,7 +127,7 @@ def main():
             if cnt % 3000 == 0:
                 conn.commit(); print(f"  엣지 {cnt}/{len(edges)}", flush=True)
         conn.commit(); print(f"[엣지 완료] {cnt} (스킵 {skip})", flush=True)
-        print(f"[통합 완료] {INTEG}", flush=True)
+        print(f"[통합 완료] {integ}", flush=True)
         conn.close()
 
 
