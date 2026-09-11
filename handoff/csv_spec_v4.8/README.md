@@ -3,8 +3,8 @@
 > 2026-08-27 배포본(`CCOP_CSV_적재규격_배포패키지`)의 후속. **기존 9종 파일은 그대로 쓰시면 됩니다.**
 > V4.8에서 달라지는 것은 *추가 컬럼*과 *신규 파일 종류*이고, 기존 컬럼은 이름·의미가 그대로입니다.
 >
-> 동봉: 예제 CSV 16종(`examples/`) · CSV 검증 도구(`validate_csv_v48.py`) ·
-> **적재 참조 구현**(`load_csv_to_graph.py`)
+> 동봉: **빈 템플릿 13종**(`templates/`) · 작성 예제 16종(`examples/`) ·
+> CSV 검증 도구(`validate_csv_v48.py`) · 적재 참조 구현(`load_csv_to_graph.py`)
 
 ### 도구 3종을 순서대로 쓰시면 됩니다
 
@@ -34,15 +34,39 @@ python3 load_csv_to_graph.py <CSV폴더> --graph <그래프명>
 
 ---
 
-## 0-1. 파일이 16종으로 늘어난 것처럼 보입니다만
+## 0-1. 만드실 파일은 **13종**입니다 (필수 9 + 선택 4)
 
-**새로 만드셔야 하는 파일은 없습니다.** 예제를 16종 넣은 것은 *모든 컬럼과 신규 종류의 작성법을
-보여주기 위해서*이고, 실제로 제출하실 파일은 **지금 만들고 계신 9종 그대로**입니다.
-예제 폴더도 그렇게 나눠 뒀습니다.
+`templates/` 에 **헤더만 들어 있는 빈 CSV 13개**를 넣어 뒀습니다. 그대로 열어 값을 채우시면 됩니다
+(UTF-8 BOM으로 저장돼 있어 Excel에서 바로 열어도 한글이 깨지지 않습니다).
+
+| | 파일 | 비고 |
+|---|---|---|
+| **필수 9** | `tbl_vt_psn` · `tbl_vt_telno` · `tbl_vt_bacnt` · `tbl_eg_case` · `tbl_eg_case_prsn` · `tbl_eg_telno_poss` · `tbl_eg_bactno_poss` · `tbl_eg_call` · `tbl_eg_rmt` | **지금 만들고 계신 9종 그대로** |
+| **선택 4** | `tbl_eg_ip_use` · `tbl_eg_id_use` · `tbl_eg_id_msg` · `tbl_eg_loc_use` | IP·메신저·ATM위치 자료가 **있을 때만** |
+
+컬럼은 **왼쪽부터 중요한 순서**(필수 → 선택 → `source_id`)로 배치했습니다. 채울 수 없는 칸은
+비워두시면 됩니다 — 빈 칸이 있어도 나머지는 정상 적재됩니다.
+
+> 선택 4종 중 **`tbl_eg_ip_use`는 가급적 채워주십시오.** IP 접속은 2차년도 통합 그래프에서
+> 15,348건으로 가장 많이 쓰인 관계이고, 서로 다른 사건을 잇는 단서가 대부분 여기서 나옵니다.
+
+### 템플릿에서 뺀 3종
+
+앞선 예제에 있던 `tbl_vt_ip` · `tbl_vt_id` · `tbl_vt_loc`(IP·계정·위치의 **노드** 파일)는
+템플릿에서 제외했습니다. 관계 파일이 이 노드들을 자동으로 만들기 때문에 대개 불필요합니다.
+ASN·국가·계정 별명처럼 **노드 자체의 속성**을 따로 갖고 계시면 말씀해 주십시오 — 템플릿을 드리겠습니다.
+
+---
+
+## 0-2. 예제가 16종인 이유
+
+예제(`examples/`)는 **값이 채워진 견본**이라 템플릿보다 3종 많습니다. 노드 파일까지 포함해
+모든 작성법을 보여드리려는 것이고, 실제 제출은 위 13종이면 충분합니다.
 
 ```
-examples/core/      9종  ← 지금 만드시는 것. 이것만 주셔도 적재됩니다
-examples/optional/  7종  ← 해당 데이터가 있을 때만. 없으면 안 만드셔도 됩니다
+templates/          13종  ← 빈 헤더. 여기에 값을 채우시면 됩니다
+examples/core/       9종  ← 필수 9종을 채운 견본
+examples/optional/   7종  ← 선택 파일을 채운 견본(노드 파일 3종 포함)
 ```
 
 `core/` 9종만으로 적재하면 노드 14·엣지 16이 만들어지고, `optional/` 까지 넣으면 노드 18·엣지 23이
@@ -88,16 +112,20 @@ examples/optional/  7종  ← 해당 데이터가 있을 때만. 없으면 안 �
 | `tbl_eg_bactno_poss` | `flnm`★ · `actno`★ | `prsn_id` · `bank_cd` · `valid_from` · `valid_to` · `source_id`★ |
 | `tbl_eg_rmt` | `se`★ · `actno`★ · `bank` · `dpstr` · `rlt_actno`★ · `rlt_bank` · `rlt_dpstr` · `rmt_ymdhm` · `dpst_amt` · `tkmny_amt` | `bank_cd` · `rlt_bank_cd` · `ip_addr` · `brnch_nm` · `source_id`★ |
 
-### 신규 파일 7종 (선택 — 해당 데이터가 있을 때만)
+### 신규 파일 4종 (선택 — 해당 데이터가 있을 때만)
 
 2차년도 실적재에서 **가장 많이 쓰인 관계가 IP 접속(15,348건)** 인데 기존 9종으로는 표현할 수 없었습니다.
 
 | 신규 파일 | 담는 것 | 만들어지는 그래프 |
 |---|---|---|
-| `tbl_vt_ip` / `tbl_eg_ip_use` | IP와 그 사용 주체 | `vt_ip` / `used_ip` |
-| `tbl_vt_id` / `tbl_eg_id_use` | 메신저·포털 계정과 소유자 | `vt_id` / `uses_id` |
+| `tbl_eg_ip_use` | IP와 그 사용 주체(인물·전화·계좌·계정) | `vt_ip` + `used_ip` |
+| `tbl_eg_id_use` | 메신저·포털 계정과 소유자 | `vt_id` + `uses_id` |
 | `tbl_eg_id_msg` | 계정 간 메시지 | `contacted`(channel=kakao 등) |
-| `tbl_vt_loc` / `tbl_eg_loc_use` | 기지국·ATM·영업점 위치 | `vt_loc` / `located_at` |
+| `tbl_eg_loc_use` | ATM 등 통화·이체 파일로 안 들어오는 위치 | `vt_loc` + `located_at` |
+
+관계 파일이 대상 노드(`vt_ip`·`vt_id`·`vt_loc`)까지 함께 만들기 때문에 **별도 노드 파일은 필요 없습니다.**
+IP의 ASN·국가, 계정 별명처럼 노드 자체의 속성을 갖고 계실 때만 `tbl_vt_ip`·`tbl_vt_id`·`tbl_vt_loc`를
+쓰시면 됩니다(예제 `examples/optional/` 에 작성법이 있습니다).
 
 ---
 
@@ -222,7 +250,10 @@ python3 validate_csv_v48.py examples/
 
 ---
 
-## 7. 예제 파일 (`examples/`)
+## 7. 동봉 파일 (`templates/` · `examples/`)
+
+`templates/` 13종은 헤더만 있는 빈 파일입니다. `examples/` 는 값이 채워진 견본입니다.
+
 
 16종 모두 **같은 시나리오로 연결**돼 있어, 그대로 적재하면 하나의 작은 사건 그래프가 만들어집니다
 (인물 3 · 전화 3 · 계좌 2 · 사건 2 · IP 2 · 계정 2 · 위치 2). 컬럼 채우는 방식의 참고용입니다.
