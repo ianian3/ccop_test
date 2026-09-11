@@ -1,0 +1,3 @@
+incdnt_no,incdnt_nm,incdnt_typ_cd,occrn_dt,damage_amt,crime_site,incdnt_smry_cn,source_id
+2026-00123,중고거래 사기,FRD01,2026-03-11,1500000,중고나라,피해자가 계좌이체 후 물품 미수령,DOC-007
+2026-00124,보이스피싱,FRD02,2026-03-14,8200000,전화,기관 사칭 편취,DOC-007

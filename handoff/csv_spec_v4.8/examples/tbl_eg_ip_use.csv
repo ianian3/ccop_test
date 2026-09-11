@@ -1,0 +1,4 @@
+subj_type,subj_id,ip_addr,valid_from,valid_to,access_type,source_id
+psn,P-2026-0001,203.0.113.45,2026-03-11 15:02:00,,web,DOC-004
+telno,010-1234-5678,203.0.113.77,2026-03-12 11:20:00,,mobile,DOC-004
+id,hong_gd88,203.0.113.45,2026-03-11 20:14:00,,app,DOC-004

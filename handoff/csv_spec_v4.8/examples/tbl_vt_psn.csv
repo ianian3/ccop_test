@@ -1,0 +1,4 @@
+psn_id,flnm,dob,gender,nationality,occp_nm,source_id
+P-2026-0001,홍길동,1988-04-02,M,KR,무직,DOC-001
+P-2026-0002,김철수,1995-11-20,M,KR,회사원,DOC-001
+P-2026-0003,김영희,1972-06-15,F,KR,자영업,DOC-001
