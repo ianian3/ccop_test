@@ -2,7 +2,25 @@
 
 > 2026-08-27 배포본(`CCOP_CSV_적재규격_배포패키지`)의 후속. **기존 9종 파일은 그대로 쓰시면 됩니다.**
 > V4.8에서 달라지는 것은 *추가 컬럼*과 *신규 파일 종류*이고, 기존 컬럼은 이름·의미가 그대로입니다.
-> 동봉: `examples/` 아래 예제 CSV 16종 · 자체 검증 도구 `validate_csv_v48.py`
+>
+> 동봉: 예제 CSV 16종(`examples/`) · CSV 검증 도구(`validate_csv_v48.py`) ·
+> **적재 참조 구현**(`load_csv_to_graph.py`)
+
+### 도구 3종을 순서대로 쓰시면 됩니다
+
+```
+CSV 작성  →  validate_csv_v48.py   (규격 점검, DB 불필요)
+          →  load_csv_to_graph.py  (그래프 적재)
+          →  audit_ontology_v48.py (온톨로지 정경 점검 · 온톨로지 패키지에 동봉)
+```
+
+`load_csv_to_graph.py`는 **이 규격서가 약속한 동작을 그대로 구현한 참조 구현**입니다. CSV가 정확히
+어떤 노드·엣지가 되는지 코드로 확인하실 수 있고, 그대로 쓰시거나 자체 적재기의 기준으로 삼으셔도
+됩니다. 필요한 것은 `psycopg2` 하나이고 접속 정보는 환경변수로 받습니다.
+
+```bash
+python3 load_csv_to_graph.py <CSV폴더> --graph <그래프명>
+```
 
 ---
 
