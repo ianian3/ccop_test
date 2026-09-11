@@ -91,10 +91,14 @@ def day(v):
 def read(folder, keyword):
     """키워드가 든 CSV 를 모두 읽어 행 목록으로. 파일별 기본 source_id 도 함께."""
     out = []
-    for fn in sorted(os.listdir(folder)):
+    paths = []
+    for root, _dirs, fns in os.walk(folder):        # 하위 폴더까지 훑는다
+        paths += [os.path.join(root, fn) for fn in fns]
+    for path in sorted(paths):
+        fn = os.path.basename(path)
         if not fn.lower().endswith('.csv') or keyword not in fn:
             continue
-        with open(os.path.join(folder, fn), encoding='utf-8-sig', newline='') as f:
+        with open(path, encoding='utf-8-sig', newline='') as f:
             for row in csv.DictReader(f):
                 row = {(k or '').strip(): (v.strip() if isinstance(v, str) else v)
                        for k, v in row.items()}
@@ -219,6 +223,20 @@ def main():
                 'occrn_dt': r.get('occrn_dt'), 'damage_amt': num(r.get('damage_amt')),
                 'crime_site': r.get('crime_site'), 'case_summary': r.get('incdnt_smry_cn'),
                 'source_id': sid(r, 'CSV-case')})
+
+    unresolved = []
+
+    def resolve_psn(v, where):
+        """psn_id → 이름. 인물 노드 파일이 없어 해석 못 하면 경고한다.
+
+        해석 실패를 방치하면 psn_id 문자열 자체가 인물 노드로 만들어져, 같은 사람이
+        '홍길동' 과 'P-2026-0001' 로 갈라진다(조용한 중복 — 그래프를 보고도 모른다).
+        """
+        if v in psn_key:
+            return psn_key[v]
+        if re.match(r'^[A-Za-z][\w.-]*$', str(v)):     # 이름 같지 않으면 미해석 ID 로 본다
+            unresolved.append(f'{where}: {v}')
+        return v
 
     def person(r):
         """행이 가리키는 인물의 그래프 키(name). psn_id 우선."""
@@ -360,7 +378,7 @@ def main():
         lab, keyp = SUBJ_LABEL[st]
         s = sid(r, 'CSV-ip-use')
         if lab == 'vt_psn':
-            sv = psn_key.get(sv, sv)
+            sv = resolve_psn(sv, 'tbl_eg_ip_use')
         L.node(lab, keyp, sv, {'source_id': s})
         L.node('vt_ip', 'ip_addr', ip, {'source_id': s})
         L.edge('used_ip', (lab, keyp, sv), ('vt_ip', 'ip_addr', ip),
@@ -374,12 +392,18 @@ def main():
         lab, keyp = SUBJ_LABEL[st]
         s = sid(r, 'CSV-loc-use')
         if lab == 'vt_psn':
-            sv = psn_key.get(sv, sv)
+            sv = resolve_psn(sv, 'tbl_eg_loc_use')
         L.node(lab, keyp, sv, {'source_id': s})
         L.node('vt_loc', 'loc_id', loc, {'source_id': s})
         L.edge('located_at', (lab, keyp, sv), ('vt_loc', 'loc_id', loc), {'source_id': s})
 
     # ── 결과 ──
+    if unresolved:
+        print(f'  ⚠ psn_id 를 이름으로 해석하지 못했습니다 ({len(unresolved)}건) — '
+              f'tbl_vt_psn(인물 노드 파일)이 없거나 해당 psn_id 가 없습니다.')
+        for u in unresolved[:5]:
+            print(f'      {u}')
+        print('      → 이대로면 같은 사람이 이름과 psn_id 로 갈라집니다.')
     print(f'[{args.graph}] MERGE 호출 노드 {L.n_node} · 엣지 {L.n_edge}')
     tot_n = tot_e = 0
     for l in LABELS:

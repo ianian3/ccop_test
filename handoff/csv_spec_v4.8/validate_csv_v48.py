@@ -125,7 +125,11 @@ def main():
     if not os.path.isdir(args.folder):
         sys.exit(f'폴더가 아닙니다: {args.folder}')
 
-    files = sorted(f for f in os.listdir(args.folder) if f.lower().endswith('.csv'))
+    files = []                                   # 하위 폴더까지(필수/선택 분리 구성 대응)
+    for root, _d, fns in os.walk(args.folder):
+        files += [os.path.relpath(os.path.join(root, f), args.folder)
+                  for f in fns if f.lower().endswith('.csv')]
+    files.sort()
     if not files:
         sys.exit(f'CSV 가 없습니다: {args.folder}')
 
@@ -141,7 +145,8 @@ def main():
         path = os.path.join(args.folder, fn)
         kw, req, opt = match_spec(fn)
         if not kw:
-            rep.error('파일명 미인식', f'{fn} — tbl_ 로 시작하고 규격 키워드를 포함해야 적재됩니다')
+            rep.error('파일명 미인식',
+                      f'{fn} — tbl_ 로 시작하고 규격 키워드를 포함해야 적재됩니다')
             continue
         hdr, rows = read_csv(path, rep)
         if hdr is None:
