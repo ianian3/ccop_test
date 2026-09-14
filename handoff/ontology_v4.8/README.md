@@ -10,7 +10,7 @@
 | 순서 | 파일 | 무엇을 얻나 |
 |---|---|---|
 | 1 | **`spec/SCHEMA_CATALOG_ACTUAL.html`** | 브라우저로 열면 **실제 적재된 스키마**를 노드 클릭으로 탐색. 정의보다 이걸 먼저 보십시오 |
-| 2 | `spec/CCOP_Ontology_V4.8_노드엣지속성.xlsx` | 노드·엣지·속성 정본(검토·회신용 시트) |
+| 2 | `spec/CCOP_Ontology_V4.8_node_edge_attrs.xlsx` | 노드·엣지·속성 정본(검토·회신용 시트) |
 | 3 | `code/ccop_ontology_v48.py` | 기계가 읽는 정의 SoT — 이식·검증의 기준 |
 | 4 | `spec/CYBERCOP_STANDARD_TABLE_DDL.sql` | RDB 표준 51테이블 (온톨로지↔RDB 대응) |
 | 5 | `code/audit_ontology_v48.py` | 귀사 적재 결과를 스스로 검증하는 도구 |
@@ -214,7 +214,7 @@ handoff/ontology_v4.8/
 ├── README.md                                  ← 이 문서
 ├── spec/
 │   ├── SCHEMA_CATALOG_ACTUAL.html             실측 스키마 (인터랙티브 — 먼저 보십시오)
-│   ├── CCOP_Ontology_V4.8_노드엣지속성.xlsx    정본 (노드·엣지·속성)
+│   ├── CCOP_Ontology_V4.8_node_edge_attrs.xlsx    정본 (노드·엣지·속성)
 │   ├── CCOP_ONTOLOGY_DESIGN_HISTORY.md        V4.0→V4.8 설계 이력·변경 사유
 │   ├── CYBERCOP_STANDARD_TABLE_DDL.sql        RDB 표준 51테이블
 │   └── PARTNER_DATA_STANDARD.md               협력기관 데이터 표준 가이드
