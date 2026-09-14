@@ -1,4 +1,4 @@
-telno,telco_nm,join_typ_cd,subs_holder,is_burner,source_id
+﻿telno,telco_nm,join_typ_cd,subs_holder,is_burner,source_id
 010-1234-5678,SKT,01,홍길동,N,DOC-002
 070-8888-2222,알뜰폰,02,김철수,Y,DOC-002
 010-9999-0000,KT,01,김영희,N,DOC-002
