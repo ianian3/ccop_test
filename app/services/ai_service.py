@@ -45,7 +45,8 @@ class AIService:
         r'((대한민국|한국)\s*(의\s*)?수도|날씨|코드.*짜|python.*코드|파이썬.*코드|'
         r'영어.*번역|번역해\s*줘|번역.*해줘|시간.*몇|오늘.*날짜|무슨\s*요일|'
         r'주식.*추천|맛집.*추천|음식.*추천|영화.*추천|추천해\s*줘|'
-        r'대답해|hello|hi\s|안녕하|반가워|고마워|누구야|넌\s*누구)',
+        # '누구야' 단독은 금지 — '주범은 누구야'(수사 질문)를 오탐. AI 정체성 질문만 한정
+        r'대답해|hello|hi\s|안녕하|반가워|고마워|넌\s*누구|너\s*누구|당신\s*누구|네가\s*누구)',
         re.IGNORECASE,
     )
 
@@ -148,15 +149,20 @@ class AIService:
             return {"intent": "GUARD", "keyword": "", "labels": []}
         if AIService._GENERAL_PATTERNS.search(q):
             return {"intent": "GENERAL", "keyword": "", "labels": []}
-        # PATH — 두 개체 관계/경로
-        for pat in AIService._PATH_PATTERNS:
-            m = pat.search(q)
-            if m:
-                a = AIService._extract_keyword(m.group('a'))
-                b = AIService._extract_keyword(m.group('b'))
-                if a and b and a != b:
-                    return {"intent": "PATH", "keyword": a, "term1": a, "term2": b,
-                            "labels": AIService._rule_labels(q)}
+        # PATH — 두 개체 관계/경로. 단, 명확한 조회 신호어가 있으면 QUERY 우선
+        # ('A와 B 사이 이체 내역'은 경로탐색이 아니라 두 계좌 간 이체 조회다).
+        # '찾아/보여/조회'는 PATH('경로를 찾아줘')에도 흔한 중립어라 제외 — 오분류 유발.
+        _query_signal = re.search(r'(내역|목록|리스트|개수|몇\s*[개건명]|합계|총액|얼마|'
+                                  r'얼마나|건수|통계|이체|송금|거래)', q)
+        if not _query_signal:
+            for pat in AIService._PATH_PATTERNS:
+                m = pat.search(q)
+                if m:
+                    a = AIService._extract_keyword(m.group('a'))
+                    b = AIService._extract_keyword(m.group('b'))
+                    if a and b and a != b:
+                        return {"intent": "PATH", "keyword": a, "term1": a, "term2": b,
+                                "labels": AIService._rule_labels(q)}
         # QUERY (기본)
         return {"intent": "QUERY", "keyword": AIService._extract_keyword(q),
                 "labels": AIService._rule_labels(q)}

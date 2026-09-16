@@ -699,12 +699,19 @@ class LangGraphAgent:
             }
 
         success, elements = GraphService.find_shortest_path(id1, id2, state['graph_path'])
-        
+
+        # 내부는 BFS 지만, 사용자·감사에 '무엇을 실행했는지' 보이도록 동등한 shortestPath 를 노출.
+        gp = state['graph_path'].replace("'", "''")
+        path_cypher = (f"SELECT * FROM cypher('{gp}', $$ MATCH p = shortestPath("
+                       f"(a)-[*..6]-(b)) WHERE id(a) = {id1} AND id(b) = {id2} "
+                       f"RETURN p $$) AS (p agtype);")
         return {
             "final_response": {
                 "status": "success" if success else "no_path",
                 "results": elements,
+                "elements": elements,
                 "results_count": len(elements) if elements else 0,
+                "cypher": path_cypher,
                 "type": "path",
                 "intent": "PATH",
             }
