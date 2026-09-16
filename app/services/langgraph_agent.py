@@ -390,6 +390,8 @@ class AgentState(TypedDict):
     schema_info: str
     cypher_query: str
     execution_result: Any
+    error_message: Optional[str]  # 노드 간 오류 전파 채널 — 없으면 LangGraph가 반환값을 버려
+                                  #   가드/폴백실패/스키마검증 상태가 data_view 까지 전달되지 않음
     error_count: int
     reflection_log: List[str]
     final_response: Any
@@ -1192,14 +1194,27 @@ AS (p agtype);
                     sllm_failed = True
                     openai_key = current_app.config.get('OPENAI_API_KEY')
                     if not openai_key:
-                        raise
+                        raise RuntimeError(f"LLM_UNAVAILABLE: sLLM 실패({sllm_err}) · OPENAI_API_KEY 미설정")
+                    # 폴백도 학습 system 프롬프트를 그대로 쓴다. 종전에는 구형 이벤트 모델
+                    # (from_account·caller·vt_transfer) 예제가 든 별도 프롬프트를 썼는데, 통합
+                    # 그래프에는 해당 인스턴스가 0건이라 폴백이 발동해도 무효 쿼리만 나왔다
+                    # (2026-09-16 실증). GPT-4o도 native Cypher를 내게 하고 sLLM과 동일하게
+                    # wrap 경로를 태운다(_wrap_native_cypher 는 SELECT 입력에 멱등).
                     from openai import OpenAI as _OpenAI
-                    fb_client = _OpenAI(api_key=openai_key)
-                    resp = fb_client.chat.completions.create(
-                        model='gpt-4o',
-                        messages=[{"role": "user", "content": prompt}],
-                        temperature=0,
-                    )
+                    fb_client = _OpenAI(api_key=openai_key, timeout=25)
+                    try:
+                        resp = fb_client.chat.completions.create(
+                            model='gpt-4o',
+                            messages=[
+                                {"role": "system", "content": _system_prompt_for(state['graph_path'])},
+                                {"role": "user", "content": user_msg},
+                            ],
+                            temperature=0,
+                            max_tokens=512,
+                        )
+                    except Exception as fb_err:
+                        # 키 크레딧 소진(429) 등 — 조용한 빈 결과 대신 명시적 상태로 남긴다
+                        raise RuntimeError(f"LLM_UNAVAILABLE: sLLM·GPT 폴백 모두 실패 — {fb_err}")
             else:
                 resp = client.chat.completions.create(
                     model=current_app.config.get('SLLM_MODEL_NAME', 'gpt-4o'),
@@ -1210,9 +1225,10 @@ AS (p agtype);
             # 마크다운 제거
             cypher = re.sub(r'```[a-zA-Z]*\n?', '', cypher).replace('```', '').strip()
 
-            # sLLM은 Native Cypher만 출력하도록 학습됨 → SQL Wrapper로 변환
-            # (폴백 시 GPT-4o가 prompt 기반으로 SQL Wrapped를 생성하므로 wrap 불필요)
-            if use_sllm and not sllm_failed:
+            # sLLM은 Native Cypher만 출력하도록 학습됨 → SQL Wrapper로 변환.
+            # 폴백(GPT-4o)도 같은 system 프롬프트로 native 를 내므로 동일 경로
+            # (wrap 은 SELECT 로 시작하는 입력을 그대로 돌려줘 이중 wrap 없음)
+            if use_sllm:
                 cypher = LangGraphAgent._wrap_native_cypher(cypher, state['graph_path'])
             
             # --- 0. Cypher Sanitizer (sLLM 공백 누락 자동 교정) ---
@@ -1288,6 +1304,8 @@ AS (p agtype);
             metrics = {**metrics, f"execution_node_attempt_{state['error_count'] + 1}": time.time() - start_time}
             if state.get("error_message") == "GENERAL_CHAT":
                 return {"metrics": metrics} # 에러 유지
+            if str(state.get("error_message") or "").startswith("LLM_UNAVAILABLE"):
+                return {"metrics": metrics} # 원인(모델 호출 실패) 보존 — '쿼리 없음'으로 덮지 않는다
             return {"error_message": "생성된 쿼리가 없습니다.", "metrics": metrics}
 
         # 비-Cypher 응답 방어: 모델이 GENERAL: 프리픽스 없이 일반 문장을 낸 경우
@@ -1720,7 +1738,12 @@ AS (p agtype);
         # '관련 없음'으로 읽히므로(틀린 답보다 위험) 무엇을 조회했는지와 한계를 반드시 함께 준다.
         zero_notice = []
         if state.get('intent') not in ('GENERAL', 'ALGO'):
-            if not raw_elements:
+            if str(state.get("error_message") or "").startswith("LLM_UNAVAILABLE"):
+                # 모델 호출 자체가 실패한 0건 — 데이터 문제로 오독되지 않게 구분해 알린다
+                zero_notice = ["⚠ 질의 생성 모델 호출 실패(sLLM·폴백 모두) — 아래 결과 없음은 데이터가 "
+                               "아니라 시스템 문제입니다. 관리자에게 문의하세요: "
+                               + str(state.get("error_message"))[:160]]
+            elif not raw_elements:
                 zero_notice = ["⚠ 조회 결과 0건 — '관련 없음'이 아닐 수 있습니다. 사용된 관계 경로·방향이 "
                                "실제 데이터와 다를 가능성을 검토하세요(아래 유사 노드 힌트 참고)."]
             elif n_model_rows == 0 and n_anchor_added > 0:
