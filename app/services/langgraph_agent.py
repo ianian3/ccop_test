@@ -1323,7 +1323,7 @@ AS (p agtype);
             return {}
 
         # Phase 3-A: Schema 검증 실패 시 실행 건너뛰고 reflection 유도
-        if state.get("error_message", "").startswith("SCHEMA_VALIDATION_FAILED"):
+        if (state.get("error_message") or "").startswith("SCHEMA_VALIDATION_FAILED"):
             logger.warning(f"Skipping execution due to schema validation failure")
             metrics = {**metrics, f"execution_node_attempt_{state['error_count'] + 1}": time.time() - start_time}
             return {"execution_result": [], "metrics": metrics}

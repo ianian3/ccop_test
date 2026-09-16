@@ -53,8 +53,17 @@ LangGraph 상태기계 (8노드, :1826~1879)
    - 그 외 → `t2c_v37_system.txt`(1,775B) / `t2c_v47_system.txt`(1,016B)
 3. **폴백** — sLLM 미설정 시 GPT-4o(`OPENAI_API_KEY`)
 
-**reflection 은 항상 GPT**(:1584 — `gpt-4o-mini`). sLLM 은 Cypher 생성 특화라 오류 분석
-능력이 부족하다는 설계 판단. ⚠ 폐쇄망에서는 reflection 이 무력화됨(§7 리스크).
+**reflection·router 는 항상 OpenAI 우선** (reflection :1584 `gpt-4o-mini` / router
+`AIService._get_router_client`). sLLM 은 Cypher 생성 특화라 오류 분석·의도 분류는
+GPT 에 맡긴다는 설계.
+
+> ⚠ **정정(2026-09-16 실측)**: OpenAI 계층이 죽으면(폐쇄망 또는 크레딧 소진) 영향이
+> reflection 뿐 아니라 **① 의도 분류(router)** 와 **② synthesis 폴백** 까지 3곳에 미친다.
+> - router 는 규칙(`fast`) 폴백이 있으나 정확도 열위 — "대한민국 수도는?" 을 QUERY 로
+>   오분류(GENERAL 판정 실패)해 무효 Cypher 를 생성함을 실측.
+> - synthesis 폴백은 키가 실제로 **429 크레딧 소진** 상태라 현재 무효(§7-R1).
+> - 결국 sLLM 만으로는 **의도 분류·오류 재시도·생성 폴백이 모두 반쪽**. 폐쇄망 납품에서는
+>   이 3계층의 sLLM/규칙 대체가 함께 필요하다.
 
 ## 4. 방어·보정 계층 (이 기능의 차별점)
 
@@ -118,7 +127,8 @@ LangGraph 상태기계 (8노드, :1826~1879)
 **리스크·약점**
 | # | 항목 | 내용 |
 |---|---|---|
-| 1 | reflection 의 GPT 의존 | 폐쇄망(경찰청 납품 환경)에서는 OPENAI 불가 → 재시도 루프 무력화. sLLM reflection 대체 또는 규칙 기반 교정 필요 |
+| 1 | **OpenAI 3계층 의존** | router(의도분류)·reflection(재시도)·synthesis 폴백이 OpenAI 우선. 폐쇄망 또는 크레딧 소진 시 셋 다 무력화. **현재 키는 429 크레딧 소진 실측** — 폴백이 실제로 안 뜬다. router 만 규칙 폴백 있으나 오분류(GENERAL→QUERY). sLLM/규칙 대체가 개선 1순위 |
+| 1b | 폴백 무효화 결함(수정됨) | `AgentState` 에 `error_message` 필드 부재로 LangGraph 가 노드 반환을 폐기 → 폴백 실패·가드 상태가 전파 안 되던 버그. 2026-09-16 수정(커밋 8d1fa72·후속). 폴백도 학습 프롬프트+native→wrap 통일 |
 | 2 | 크래시 가드는 대증요법 | 근본 조치는 운영 DB 안정판 교체(요청 대기). 가드 패턴에 없는 새 크래시 형태 위험 잔존 |
 | 3 | 라우터 오분류 | `AIService.route_question` 의존 — PATH/QUERY 오판 시 흐름 자체가 어긋남(폴백은 있음) |
 | 4 | max_retries=1 | 복합 오류에서 1회 성찰로 부족할 수 있음(비용 균형 판단이나 설정 노출 필요) |
