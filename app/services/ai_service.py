@@ -42,20 +42,42 @@ class AIService:
 
     # 명백한 패턴 — LLM 호출 없이 즉시 분류
     _GENERAL_PATTERNS = re.compile(
-        r'(한국\s*수도|날씨|코드.*짜|python.*코드|파이썬.*코드|영어.*번역|번역해\s*줘|'
-        r'시간.*몇|오늘.*날짜|주식.*추천|맛집.*추천|음식.*추천|영화.*추천|'
-        r'대답해|hello|hi\s|안녕|반가워)',
+        r'((대한민국|한국)\s*(의\s*)?수도|날씨|코드.*짜|python.*코드|파이썬.*코드|'
+        r'영어.*번역|번역해\s*줘|번역.*해줘|시간.*몇|오늘.*날짜|무슨\s*요일|'
+        r'주식.*추천|맛집.*추천|음식.*추천|영화.*추천|추천해\s*줘|'
+        r'대답해|hello|hi\s|안녕하|반가워|고마워|누구야|넌\s*누구)',
         re.IGNORECASE,
     )
 
-    # GUARD: 쓰기/삭제 DDL/DML + 프롬프트 인젝션 시도
+    # GUARD: 쓰기/삭제 DDL/DML(영문) + 한글 변경 동사 + 프롬프트 인젝션.
+    # recall 위주 — router가 놓쳐도 synthesis→execution 의 실제 Cypher 가드가 최종 방어.
+    # 오탐(조회를 GUARD로)이 미탐(쓰기 통과)보다 안전한 수사 도구 특성상 보수적으로.
     _GUARD_PATTERNS = re.compile(
         r'(\bCREATE\b|\bDELETE\b|\bMERGE\b|\bSET\b|\bDETACH\b|\bDROP\b|\bUPDATE\b|'
-        r'\bINSERT\b|\bALTER\b|\bTRUNCATE\b|'
+        r'\bINSERT\b|\bALTER\b|\bTRUNCATE\b|\bREMOVE\b|'
+        r'수정해\s*줘|수정하라|바꿔\s*줘|바꿔라|변경해\s*줘|고쳐\s*줘|'
+        r'삭제해|지워\s*줘|지워라|추가해\s*줘|등록해\s*줘|입력해\s*줘|'
         r'이전\s*지시.*잊|시스템\s*프롬프트|프롬프트.*출력|제한\s*없는\s*AI|'
-        r'DB.*초기화|데이터.*삭제|전체.*지워|모든.*삭제|risk_level.*바꿔)',
+        r'DB.*초기화|데이터.*삭제|전체.*지워|모든.*삭제|.*으로\s*수정|.*로\s*변경)',
         re.IGNORECASE,
     )
+
+    # PATH: 두 개체 간 관계·경로. term1/term2 를 캡처한다.
+    _PATH_PATTERNS = [
+        # "A 와/과/랑/하고 B (의) 관계/경로/연결/사이"
+        re.compile(r'^(?P<a>.+?)\s*(?:와|과|랑|하고)\s+(?P<b>.+?)\s*(?:의|간|사이)?\s*'
+                   r'(?:관계|경로|연결|사이|connection|path)', re.IGNORECASE),
+        # "A 에서 B (로/까지/으로) 가는/이어지는 경로"
+        re.compile(r'^(?P<a>.+?)\s*(?:에서|부터)\s+(?P<b>.+?)\s*(?:로|까지|으로)?\s*'
+                   r'(?:가는|이어지는|연결되는)?\s*(?:경로|관계|길)', re.IGNORECASE),
+    ]
+    # 식별자 패턴 — 키워드 추출 우선순위 1
+    _ID_PATTERNS = [
+        re.compile(r'\b\d{1,3}(?:\.\d{1,3}){3}\b'),                 # IPv4
+        re.compile(r'\b0\d{1,2}-?\d{3,4}-?\d{4}\b'),               # 전화
+        re.compile(r'\b\d[\d-]{7,}\d\b'),                          # 계좌(숫자·하이픈 9+)
+    ]
+    _JOSA = ('을', '를', '의', '와', '과', '이', '가', '은', '는', '에게', '한테', '관련', '소유')
 
     @staticmethod
     def _normalize_question(q: str) -> str:
@@ -64,15 +86,105 @@ class AIService:
 
     @staticmethod
     def _try_fast_route(question: str):
-        """LLM 없이 분류 가능한 패턴 즉시 처리 (None 반환 시 LLM 사용)."""
+        """LLM 없이 확실히 분류 가능한 패턴만 즉시 처리 (None 반환 시 LLM 사용).
+
+        GUARD·GENERAL 처럼 오탐 위험이 낮은 것만 여기서 조기 종결한다. QUERY/PATH 의
+        키워드·레이블 정밀 추출은 LLM 우선이되, LLM 부재/실패 시 _rule_classify 가 담당.
+        """
         q = question or ''
-        # 0) GUARD — 쓰기 명령 / 프롬프트 인젝션 (GENERAL보다 먼저 체크)
         if AIService._GUARD_PATTERNS.search(q):
             return {"intent": "GUARD", "keyword": "", "labels": []}
-        # 0) GENERAL — 명백한 비수사 질문
         if AIService._GENERAL_PATTERNS.search(q):
             return {"intent": "GENERAL", "keyword": "", "labels": []}
         return None
+
+    @staticmethod
+    def _extract_keyword(question: str):
+        """질문에서 핵심 검색어 추출 — 식별자 > 따옴표 > 한글 인명 > 첫 명사."""
+        q = question or ''
+        # 1) 식별자(IP·전화·계좌)
+        for pat in AIService._ID_PATTERNS:
+            m = pat.search(q)
+            if m:
+                return m.group(0)
+        # 2) 따옴표 안 값
+        m = re.search(r"['\"‘’“”]([^'\"‘’“”]{2,})['\"‘’“”]", q)
+        if m:
+            return m.group(1).strip()
+        # 3) 한글 인명 후보 — 스키마 용어(별칭)는 제외
+        alias_words = set()
+        try:
+            from app.middleware.services.ontology_service import KICSCrimeDomainOntology as O
+            for al in O.LABEL_ALIASES.values():
+                alias_words.update(al)
+        except Exception:
+            pass
+
+        def _ok(c):
+            return c and c not in alias_words and not any(c in a for a in alias_words)
+
+        # 3-a) 조사 동반 명사 — 백트래킹이 조사를 분리('전혜진의'→'전혜진')
+        for m in re.finditer(r'([가-힣]{2,4})(?:을|를|의|와|과|이|가|은|는|에게|한테|에서|랑|하고)', q):
+            if _ok(m.group(1)):
+                return m.group(1)
+        # 3-b) 조사 없이 공백/끝으로 구분된 명사
+        for m in re.finditer(r'([가-힣]{2,4})(?:\s|$)', q):
+            if _ok(m.group(1)):
+                return m.group(1)
+        # 4) 폴백 — 첫 유의미 토큰
+        toks = [t for t in re.split(r'\s+', q) if len(t) >= 2]
+        return toks[0] if toks else ''
+
+    @staticmethod
+    def _rule_classify(question: str):
+        """LLM 없이 완전한 라우팅 결과를 낸다 (폐쇄망·LLM 실패 폴백).
+
+        반환: {intent, keyword, labels, term1?, term2?}
+        기존 except 폴백('무조건 QUERY + 첫 단어')을 대체 — 의도·키워드·레이블 전부 규칙화.
+        """
+        q = (question or '').strip()
+        # GUARD/GENERAL 은 fast route 와 동일 기준
+        if AIService._GUARD_PATTERNS.search(q):
+            return {"intent": "GUARD", "keyword": "", "labels": []}
+        if AIService._GENERAL_PATTERNS.search(q):
+            return {"intent": "GENERAL", "keyword": "", "labels": []}
+        # PATH — 두 개체 관계/경로
+        for pat in AIService._PATH_PATTERNS:
+            m = pat.search(q)
+            if m:
+                a = AIService._extract_keyword(m.group('a'))
+                b = AIService._extract_keyword(m.group('b'))
+                if a and b and a != b:
+                    return {"intent": "PATH", "keyword": a, "term1": a, "term2": b,
+                            "labels": AIService._rule_labels(q)}
+        # QUERY (기본)
+        return {"intent": "QUERY", "keyword": AIService._extract_keyword(q),
+                "labels": AIService._rule_labels(q)}
+
+    # 온톨로지 별칭에 없는 영문·약어 별칭 보강 (SoT 는 손대지 않는다)
+    _EN_LABEL_HINTS = {
+        'vt_ip': (r'\bip\b', r'아이피'), 'vt_atm': (r'\batm\b', r'현금인출'),
+        'vt_site': (r'\burl\b', r'\bdomain\b'), 'vt_email': (r'\bemail\b', r'\bmail\b'),
+        'vt_id': (r'\bid\b', r'아이디', r'계정'), 'vt_crypto': (r'지갑', r'코인', r'가상화폐'),
+    }
+
+    @staticmethod
+    def _rule_labels(question: str):
+        """레이블 결정론 추출 — 온톨로지 SoT 별칭 + 영문 힌트 + 인명→vt_psn 보강."""
+        q = (question or '').lower()
+        labels = []
+        try:
+            from app.middleware.services.ontology_service import KICSCrimeDomainOntology as O
+            labels = list(O.match_labels_by_keywords(question))
+        except Exception:
+            pass
+        for lab, pats in AIService._EN_LABEL_HINTS.items():
+            if lab not in labels and any(re.search(p, q) for p in pats):
+                labels.append(lab)
+        # 다른 레이블이 전혀 안 잡혔고 한글 인명이 있으면 인물 조회로 본다
+        if not labels and re.search(r'[가-힣]{2,4}(?:을|를|의|이|가|은|는|\s|$)', question or ''):
+            labels.append('vt_psn')
+        return labels
 
     @staticmethod
     def route_question(question):
@@ -89,6 +201,13 @@ class AIService:
             AIService._ROUTER_CACHE_HITS += 1
             return dict(cached)  # 얕은 복사로 호출자 변경 차단
         AIService._ROUTER_CACHE_MISSES += 1
+
+        # ②-b OPENAI 키가 없으면 LLM 호출 자체를 건너뛰고 규칙 분류(폐쇄망 경로).
+        # sLLM 은 intent JSON 미학습이라 라우팅에 부적합 → 규칙이 더 정확·안전.
+        if not current_app.config.get('OPENAI_API_KEY'):
+            result = AIService._rule_classify(question)
+            AIService._ROUTER_CACHE[key] = dict(result)
+            return result
 
         client = AIService._get_router_client()
 
@@ -181,9 +300,10 @@ class AIService:
             content = resp.choices[0].message.content.strip()
             result = json.loads(content)
         except Exception as e:
-            logger.error(f"!!! Intent/Keyword Routing Error: {e}")
-            words = question.split()
-            result = {"intent": "QUERY", "keyword": words[0] if words else ""}
+            # LLM 실패(크레딧 소진 429·타임아웃·폐쇄망) → 규칙 분류로 폴백.
+            # 종전엔 '무조건 QUERY + 첫 단어'라 GENERAL/GUARD/PATH 를 전부 놓쳤다.
+            logger.warning(f"[Router Fallback] LLM 라우팅 실패 → 규칙 분류: {e}")
+            result = AIService._rule_classify(question)
 
         # ③ 캐시 저장 (LRU 크기 초과 시 가장 오래된 항목 제거)
         if len(AIService._ROUTER_CACHE) >= AIService._ROUTER_CACHE_MAX:

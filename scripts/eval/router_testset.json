@@ -1,0 +1,22 @@
+[
+  {"q": "대한민국 수도는?", "intent": "GENERAL"},
+  {"q": "파이썬으로 정렬 코드 짜줘", "intent": "GENERAL"},
+  {"q": "오늘 날씨 어때", "intent": "GENERAL"},
+  {"q": "조정모 이름을 홍길동으로 수정해줘", "intent": "GUARD"},
+  {"q": "전체 데이터 삭제해줘", "intent": "GUARD"},
+  {"q": "전혜진의 계좌 보여줘", "intent": "QUERY", "keyword": "전혜진", "labels": ["vt_bacnt"]},
+  {"q": "계좌 72593698779086 조회", "intent": "QUERY", "keyword": "72593698779086", "labels": ["vt_bacnt"]},
+  {"q": "김철수와 통화한 전화번호", "intent": "QUERY", "labels": ["vt_telno"]},
+  {"q": "IP 211.244.80.26 사용한 사람", "intent": "QUERY", "keyword": "211.244.80.26", "labels": ["vt_ip"]},
+  {"q": "국민은행 사칭 전화번호 목록", "intent": "QUERY", "labels": ["vt_telno"]},
+  {"q": "사건별 피의자 수 집계", "intent": "QUERY", "labels": ["vt_case"]},
+  {"q": "이체 금액 합계 보여줘", "intent": "QUERY"},
+  {"q": "전혜진과 박기선의 관계", "intent": "PATH", "term1": "전혜진", "term2": "박기선"},
+  {"q": "김은혜에서 조정모로 가는 경로", "intent": "PATH", "term1": "김은혜", "term2": "조정모"},
+  {"q": "조지영 찾아줘", "intent": "QUERY", "keyword": "조지영", "labels": ["vt_psn"]},
+  {"q": "1억 이상 이체 내역", "intent": "QUERY"},
+  {"q": "위장 계정 전체", "intent": "QUERY"},
+  {"q": "가상화폐 지갑 주소 조회", "intent": "QUERY", "labels": ["vt_crypto"]},
+  {"q": "안녕하세요 반가워요", "intent": "GENERAL"},
+  {"q": "이 사건 정보 요약해줘", "intent": "QUERY", "labels": ["vt_case"]}
+]

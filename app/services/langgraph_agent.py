@@ -704,7 +704,9 @@ class LangGraphAgent:
             "final_response": {
                 "status": "success" if success else "no_path",
                 "results": elements,
-                "type": "path"
+                "results_count": len(elements) if elements else 0,
+                "type": "path",
+                "intent": "PATH",
             }
         }
 
@@ -1302,10 +1304,12 @@ AS (p agtype);
         
         if not state['cypher_query']:
             metrics = {**metrics, f"execution_node_attempt_{state['error_count'] + 1}": time.time() - start_time}
-            if state.get("error_message") == "GENERAL_CHAT":
-                return {"metrics": metrics} # 에러 유지
-            if str(state.get("error_message") or "").startswith("LLM_UNAVAILABLE"):
-                return {"metrics": metrics} # 원인(모델 호출 실패) 보존 — '쿼리 없음'으로 덮지 않는다
+            # 종결 신호(가드·일반대화·모델실패)는 원인을 보존해야 data_view 가 올바른 분기로 응답한다.
+            # GUARD_BLOCK 누락 시 '생성된 쿼리 없음'으로 덮여 쓰기 차단이 일반 조회로 새어나갔다
+            # (규칙 라우터가 GUARD 를 제대로 잡으면서 드러난 잠재 결함, 2026-09-16).
+            _em = str(state.get("error_message") or "")
+            if _em == "GENERAL_CHAT" or _em == "GUARD_BLOCK" or _em.startswith("LLM_UNAVAILABLE"):
+                return {"metrics": metrics}  # 에러 원인 유지
             return {"error_message": "생성된 쿼리가 없습니다.", "metrics": metrics}
 
         # 비-Cypher 응답 방어: 모델이 GENERAL: 프리픽스 없이 일반 문장을 낸 경우
