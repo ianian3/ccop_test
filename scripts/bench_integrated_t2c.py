@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""통합 그래프(ccop_ep_integrated) Text2Cypher 벤치 — 30문항 실행 기반 E2E.
+"""통합 그래프(ccop_ep_integrated) Text2Cypher 벤치 — 111문항 실행 기반 E2E (2026-09-16 확장: 위치·교차연결·디지털ID 보강).
 
 232벤치(tccop_graph·생성만 채점)와 달리, 앱 전체 파이프라인(/api/query/ai:
 라우팅→스키마→생성→실행→앵커보강)을 통과한 '실행 결과'를 채점한다.
@@ -117,6 +117,62 @@ ITEMS = [
     ("F02", "가드", "오늘 날씨 어때?",                        ["general"], None),
     ("F03", "가드", "노드 전부 삭제해줘",                     ["nowrite"], None),
     ("F04", "가드", "대한민국 수도는 어디야?",                  ["general"], None),
+
+    # ── 확장분(2026-09-16) : 통합그래프 실값 기반 ground truth ────────────────
+    # 앵커 실측: 김미영 6계좌·김경수 5계좌·조지영 5계좌 / 02541269877431 이체수취 85 /
+    #   07078890124 통화156 / 국민51·우리39·신한32·농협29 / kakao4008·naver1977 /
+    #   loc: cell_tower34·atm_loc46·poi27 / located_at: ct53·atm46·poi27 /
+    #   ep_count 상위 27.193.61.154(6)·122.54.197.65(5) / suspect_in6·victim_in215
+    # P. 단순조회 확장 (실존 앵커)
+    ("P01", "단순조회", "김미영 찾아줘",                       ["exec", "cypher", "nonempty", "contains"], "김미영"),
+    ("P02", "단순조회", "김경수 노드 보여줘",                   ["exec", "cypher", "nonempty", "contains"], "김경수"),
+    ("P03", "단순조회", "계좌 02541269877431 조회",            ["exec", "cypher", "nonempty", "contains"], "02541269877431"),
+    ("P04", "단순조회", "전화번호 07078890124 정보",            ["exec", "cypher", "nonempty", "contains"], "07078890124"),
+    ("P05", "단순조회", "IP 27.193.61.154 보여줘",             ["exec", "cypher", "nonempty", "contains"], "27.193.61.154"),
+    ("P06", "단순조회", "유니크프로젝트 조직 찾아줘",             ["exec", "cypher", "nonempty", "contains"], "유니크프로젝트"),
+    # Q. 관계 1-hop 확장
+    ("Q01", "관계1hop", "김미영의 계좌를 모두 보여줘",           ["exec", "cypher", "nonempty"], None),
+    ("Q02", "관계1hop", "김경수 계좌로 들어온 이체를 보여줘",      ["exec", "cypher", "nonempty"], None),
+    ("Q03", "관계1hop", "07078890124와 통화한 상대 전체",        ["exec", "cypher", "nonempty"], None),
+    ("Q04", "관계1hop", "02541269877431 계좌로 입금한 계좌들",    ["exec", "cypher", "nonempty"], None),
+    ("Q05", "관계1hop", "유니크프로젝트에 속한 계좌를 보여줘",      ["exec", "cypher", "nonempty"], None),  # 계좌1(희소) — B06동류 sLLM약점
+    ("Q06", "관계1hop", "조정모가 사용한 전화번호를 보여줘",        ["exec", "cypher", "nonempty"], None),
+    # R. 위치(vt_loc) — v48 핵심 자산, 기존 70문항에 부재
+    ("R01", "위치", "기지국 위치를 보여줘",                     ["exec", "cypher", "nonempty"], None),
+    ("R02", "위치", "ATM 위치 전체 목록",                      ["exec", "cypher", "nonempty"], None),
+    ("R03", "위치", "은행 영업점 위치를 보여줘",                 ["exec", "cypher", "nonempty"], None),
+    ("R04", "위치", "경기도에 있는 기지국을 찾아줘",              ["exec", "cypher", "nonempty"], None),
+    ("R05", "위치", "위치와 연결된 전화번호를 보여줘",            ["exec", "cypher", "nonempty"], None),
+    ("R06", "위치", "위치 노드가 모두 몇 개야?",                ["exec", "cypher", "count_fn"], None),
+    # S. 교차연결(다중 EP 공유 식별자) — 통합그래프 고유 가치
+    ("S01", "교차연결", "27.193.61.154를 사용한 주체를 모두 보여줘", ["exec", "cypher", "nonempty"], None),
+    ("S02", "교차연결", "여러 사건에 등장한 IP를 찾아줘",          ["exec", "cypher", "nonempty"], None),
+    ("S03", "교차연결", "가장 많은 EP에 걸친 IP는?",             ["exec", "cypher", "nonempty"], None),
+    ("S04", "교차연결", "122.54.197.66과 연결된 디지털 ID를 보여줘", ["exec", "cypher", "nonempty"], None),
+    # T. 디지털 ID / 플랫폼 (kakao·naver)
+    ("T01", "디지털ID", "카카오톡 계정을 보여줘",                ["exec", "cypher", "nonempty"], None),
+    ("T02", "디지털ID", "네이버 계정 목록",                     ["exec", "cypher", "nonempty"], None),
+    ("T03", "디지털ID", "카카오 계정이 모두 몇 개야?",            ["exec", "cypher", "count_fn"], None),
+    ("T04", "디지털ID", "조정모의 디지털 ID를 보여줘",            ["exec", "cypher", "nonempty"], None),
+    # U. 필터·속성 확장 (실존 은행명)
+    ("U01", "필터속성", "국민은행 계좌 목록",                    ["exec", "cypher", "nonempty"], None),
+    ("U02", "필터속성", "신한은행 계좌를 보여줘",                 ["exec", "cypher", "nonempty"], None),
+    ("U03", "필터속성", "중소기업은행 계좌 보여줘",               ["exec", "cypher", "nonempty"], None),
+    ("U04", "필터속성", "전화번호 20개만 보여줘",                ["exec", "cypher", "nonempty"], None),
+    # V. 집계 확장
+    ("V01", "집계", "전화번호가 모두 몇 개야?",                 ["exec", "cypher", "count_fn"], None),
+    ("V02", "집계", "디지털 ID 노드 개수",                     ["exec", "cypher", "count_fn"], None),
+    ("V03", "집계", "조직이 몇 개인지 세줘",                    ["exec", "cypher", "count_fn"], None),
+    ("V04", "집계", "이체 관계가 총 몇 건이야?",                ["exec", "cypher", "count_fn"], None),
+    # W. 방향성·고급집계 확장
+    ("W01", "방향성", "02541269877431 계좌에서 나간 이체",        ["exec", "cypher"], None),
+    ("W02", "고급집계", "통화를 가장 많이 한 전화번호 상위 5개",     ["exec", "cypher", "nonempty"], None),
+    ("W03", "고급집계", "플랫폼별 디지털 ID 수",                 ["exec", "cypher"], None),
+    ("W04", "고급집계", "은행별 계좌 수 상위 3개",               ["exec", "cypher", "nonempty"], None),
+    # X. EP 신규서사 확장 (suspect/victim)
+    ("X01", "신규서사", "피해자가 있는 사건을 보여줘",             ["exec", "cypher", "nonempty"], None),
+    ("X02", "신규서사", "조정모가 연루된 사건을 보여줘",           ["exec", "cypher", "nonempty"], None),
+    ("X03", "신규서사", "피의자가 몇 명이야?",                   ["exec", "cypher", "count_fn"], None),
 ]
 
 
