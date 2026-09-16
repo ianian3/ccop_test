@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""통합 그래프(ccop_ep_integrated) Text2Cypher 벤치 — 111문항 실행 기반 E2E (2026-09-16 확장: 위치·교차연결·디지털ID 보강).
+"""통합 그래프(ccop_ep_integrated) Text2Cypher 벤치 — 154문항 실행 기반 E2E (2026-09-16 확장: 위치·교차연결·디지털ID 보강).
 
 232벤치(tccop_graph·생성만 채점)와 달리, 앱 전체 파이프라인(/api/query/ai:
 라우팅→스키마→생성→실행→앵커보강)을 통과한 '실행 결과'를 채점한다.
@@ -173,6 +173,63 @@ ITEMS = [
     ("X01", "신규서사", "피해자가 있는 사건을 보여줘",             ["exec", "cypher", "nonempty"], None),
     ("X02", "신규서사", "조정모가 연루된 사건을 보여줘",           ["exec", "cypher", "nonempty"], None),
     ("X03", "신규서사", "피의자가 몇 명이야?",                   ["exec", "cypher", "count_fn"], None),
+
+    # ── 2차 확장(2026-09-16) : 시간축·속성숫자·관계·위치·방향·부정형·다중조건 심화 ──
+    # 앵커 실측: 고액이체(1억+)11 / txn_count max194 / owns_phone 조정진4·김성이3 /
+    #   registered_to198 / atm located_at46 / 이체date 2017-03-01~ / 3차집금 tier2
+    # Y. 시간축 심화
+    ("Y01", "시간축", "3월에 발생한 통화를 보여줘",               ["exec", "cypher", "nonempty"], None),
+    ("Y02", "시간축", "2017년 4월 이체 내역",                   ["exec", "cypher", "nonempty"], None),
+    ("Y03", "시간축", "가장 최근 통화는 언제야?",                ["exec", "cypher"], None),
+    ("Y04", "시간축", "3월 10일 이전 이체를 보여줘",             ["exec", "cypher", "nonempty"], None),
+    ("Y05", "시간축", "2017년에 발생한 사건 수",                ["exec", "cypher", "count_fn"], None),
+    # Z. 속성숫자 심화 (금액·건수 비교 — P1-B 숫자화 검증)
+    ("Z01", "속성숫자", "1억 이상 이체를 보여줘",                ["exec", "cypher", "nonempty"], None),
+    ("Z02", "속성숫자", "5천만원 이상 이체 내역",                ["exec", "cypher", "nonempty"], None),
+    ("Z03", "속성숫자", "이체 횟수가 10번 넘는 계좌 쌍",          ["exec", "cypher", "nonempty"], None),
+    ("Z04", "속성숫자", "이체 총액이 가장 큰 계좌 쌍은?",          ["exec", "cypher", "nonempty"], None),
+    ("Z05", "속성숫자", "여러 상대와 통화한 전화번호를 보여줘",      ["exec", "cypher", "nonempty"], None),
+    ("Z06", "속성숫자", "degree_cent가 높은 인물 5명",           ["exec", "cypher"], None),
+    # AA. 관계 심화 (owns_phone·registered_to·uses_id 방향)
+    ("AA01", "관계심화", "조정진이 소유한 전화번호를 보여줘",       ["exec", "cypher", "nonempty"], None),
+    ("AA02", "관계심화", "전화번호의 명의자를 보여줘",            ["exec", "cypher", "nonempty"], None),
+    ("AA03", "관계심화", "김성이의 전화번호로 통화한 상대",         ["exec", "cypher", "nonempty"], None),
+    ("AA04", "관계심화", "카카오 계정을 사용하는 인물을 보여줘",     ["exec", "cypher", "nonempty"], None),
+    ("AA05", "관계심화", "조정모의 모든 연결 관계를 보여줘",        ["exec", "cypher", "nonempty"], None),
+    # AB. 위치 심화 (ATM·기지국 located_at 역방향·지역)
+    ("AB01", "위치", "ATM의 설치 위치를 보여줘",               ["exec", "cypher", "nonempty"], None),
+    ("AB02", "위치", "경북 지역 ATM을 찾아줘",                 ["exec", "cypher", "nonempty"], None),
+    ("AB03", "위치", "통화 발신 기지국 위치를 보여줘",           ["exec", "cypher", "nonempty"], None),
+    ("AB04", "위치", "서울에 있는 위치 노드",                  ["exec", "cypher", "nonempty"], None),
+    ("AB05", "위치", "ATM이 설치된 지점 수",                  ["exec", "cypher", "count_fn"], None),
+    # AC. 방향성 심화
+    ("AC01", "방향성", "02541269877431에서 나간 이체 상대",      ["exec", "cypher", "nonempty"], None),
+    ("AC02", "방향성", "김미영 계좌가 보낸 이체를 보여줘",         ["exec", "cypher", "nonempty"], None),
+    ("AC03", "방향성", "돈을 받기만 한 계좌를 보여줘",            ["exec", "cypher"], None),
+    # AD. 부정형·제외 심화
+    ("AD01", "부정형", "전화번호가 없는 인물을 보여줘",           ["exec", "cypher"], None),
+    ("AD02", "부정형", "IP를 사용하지 않은 계좌 수",             ["exec", "cypher", "count_fn"], None),
+    ("AD03", "부정형", "위치 정보가 없는 ATM",                 ["exec", "cypher"], None),
+    # AE. 다중 조건 심화
+    ("AE01", "다중조건", "국민은행이면서 이체 내역이 있는 계좌",     ["exec", "cypher", "nonempty"], None),
+    ("AE02", "다중조건", "3월에 통화하고 이체도 한 인물",          ["exec", "cypher"], None),
+    ("AE03", "다중조건", "카카오와 네이버 계정을 모두 가진 인물",    ["exec", "cypher"], None),
+    ("AE04", "다중조건", "고액 이체를 받은 3차집금 계좌",          ["exec", "cypher"], None),
+    # AF. 집계 심화 (그룹·상위N)
+    ("AF01", "고급집계", "인물별 계좌 수 상위 5명",              ["exec", "cypher", "nonempty"], None),
+    ("AF02", "고급집계", "loc_type별 위치 노드 수",             ["exec", "cypher"], None),
+    ("AF03", "고급집계", "이체를 가장 많이 보낸 계좌 3개",         ["exec", "cypher", "nonempty"], None),
+    ("AF04", "고급집계", "사건별 연루 인물 수를 세줘",            ["exec", "cypher"], None),
+    ("AF05", "집계", "위치 노드가 유형별로 몇 개야?",            ["exec", "cypher"], None),
+    # AG. 교차연결 심화
+    ("AG01", "교차연결", "3개 이상 EP에 등장한 계좌를 보여줘",      ["exec", "cypher", "nonempty"], None),
+    ("AG02", "교차연결", "여러 사건에서 공유된 전화번호",          ["exec", "cypher"], None),
+    ("AG03", "교차연결", "59.21.209.237을 사용한 계정과 계좌",     ["exec", "cypher", "nonempty"], None),
+    # AH. 단순조회 심화 (추가 실값 앵커)
+    ("AH01", "단순조회", "조정진 찾아줘",                      ["exec", "cypher", "nonempty", "contains"], "조정진"),
+    ("AH02", "단순조회", "계좌 53987421033554 조회",           ["exec", "cypher", "nonempty", "contains"], "53987421033554"),
+    ("AH03", "단순조회", "전화번호 07078897940 정보",           ["exec", "cypher", "nonempty", "contains"], "07078897940"),
+    ("AH04", "단순조회", "IP 122.54.197.65 보여줘",            ["exec", "cypher", "nonempty", "contains"], "122.54.197.65"),
 ]
 
 
