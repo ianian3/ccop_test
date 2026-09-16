@@ -1608,16 +1608,27 @@ AS (p agtype);
         start_time = time.time()
         logger.info(f"--- REFLECTION NODE ---")
 
-        openai_api_key = current_app.config.get('OPENAI_API_KEY')
-        if openai_api_key:
-            from openai import OpenAI as _OpenAI
-            client = _OpenAI(api_key=openai_api_key)
-            reflection_model = 'gpt-4o-mini'
-        else:
-            client = self._get_client()
-            reflection_model = current_app.config.get('SLLM_MODEL_NAME', 'gpt-4o-mini')
         error_msg = state['error_message']
         last_query = state['cypher_query']
+
+        # 폐쇄망/크레딧 소진: OPENAI 없으면 LLM 재작성 지시를 만들 수 없다(sLLM 은 피드백
+        # 생성 미학습). 대신 execution_node 가 error_message 에 이미 붙여둔 결정론 진단
+        # (근사 라벨·앵커 실측 이웃·실측 경로)을 그대로 피드백으로 넘긴다 — synthesis 가
+        # 이를 [이전 실패 피드백]으로 받아 재생성한다. LLM 없이도 재시도 루프가 동작.
+        openai_api_key = current_app.config.get('OPENAI_API_KEY')
+        if not openai_api_key:
+            logger.info("[Reflection] OPENAI 없음 → 결정론 진단을 피드백으로 사용(규칙 폴백)")
+            fb = str(error_msg or "").strip() or "이전 쿼리가 0건 또는 오류. 관계 방향·레이블·속성값 표기를 재검토하세요."
+            metrics = {**state.get("metrics", {}), f"reflection_node_attempt_{state['error_count'] + 1}": time.time() - start_time}
+            return {
+                "reflection_log": state['reflection_log'] + [fb],
+                "error_count": state['error_count'] + 1,
+                "error_message": None,
+                "metrics": metrics,
+            }
+        from openai import OpenAI as _OpenAI
+        client = _OpenAI(api_key=openai_api_key)
+        reflection_model = 'gpt-4o-mini'
         
         schema_ctx = state.get("schema_info", "")
         schema_section = f"\n[현재 그래프 스키마]\n{schema_ctx}\n" if schema_ctx else ""
@@ -1658,8 +1669,13 @@ AS (p agtype);
                 "metrics": metrics
             }
         except Exception as e:
+            # LLM 실패(429 등) — 결정론 진단으로 폴백해 재시도 기회를 살린다
+            logger.warning(f"[Reflection Fallback] LLM 실패 → 결정론 진단 사용: {e}")
+            fb = str(error_msg or "").strip() or "이전 쿼리 재검토 필요(관계 방향·레이블·속성 표기)."
             metrics = {**state.get("metrics", {}), f"reflection_node_attempt_{state['error_count'] + 1}": time.time() - start_time}
-            return {"error_count": state['error_count'] + 1, "metrics": metrics}
+            return {"reflection_log": state['reflection_log'] + [fb],
+                    "error_count": state['error_count'] + 1,
+                    "error_message": None, "metrics": metrics}
 
     def data_view_node(self, state: AgentState) -> Dict:
         """Data View: 실행 결과를 사용자에게 보여줄 최종 포맷(JSON/Summary)으로 가공"""
