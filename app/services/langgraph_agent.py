@@ -670,21 +670,28 @@ class LangGraphAgent:
         """최단 경로 탐색 노드: 특정 알고리즘(BFS 등)을 사용하여 두 노드 간 연결 고리 탐색"""
         logger.info(f"--- PATH FINDING NODE: {state['term1']} -> {state['term2']} ---")
         
+        def _pick(res, term):
+            """검색 결과에서 앵커 1개 선택 — 인물명 형태의 term 은 인물(vt_psn)을 우선한다.
+            (동명 계좌 예금주가 vt_bacnt 로 먼저 잡혀 경로 앵커가 계좌가 되는 문제 보정)"""
+            nodes = [it['data'] for it in (res or []) if it.get('group') == 'nodes']
+            if not nodes:
+                return None
+            # term 이 한글 인명 형태면 vt_psn 우선
+            if re.match(r'^[가-힣]{2,4}$', (term or '').strip()):
+                for d in nodes:
+                    if d.get('label') == 'vt_psn':
+                        return d['id']
+            return nodes[0]['id']
+
         def find_id(term):
             if not term: return None
-            # 1. 원본 검색
-            res = GraphService.search_nodes(term, state['graph_path'])
-            if res:
-                for item in res:
-                    if item.get('group') == 'nodes': return item['data']['id']
-            
-            # 2. 정규화 검색 (수식어 제거)
+            hit = _pick(GraphService.search_nodes(term, state['graph_path']), term)
+            if hit: return hit
+            # 정규화 검색 (수식어 제거)
             clean_term = re.sub(r'(계좌|번호|인물|사람|사이트|IP|주소|전화)', '', term).strip()
             if clean_term and clean_term != term:
-                res = GraphService.search_nodes(clean_term, state['graph_path'])
-                if res:
-                    for item in res:
-                        if item.get('group') == 'nodes': return item['data']['id']
+                hit = _pick(GraphService.search_nodes(clean_term, state['graph_path']), clean_term)
+                if hit: return hit
             return None
 
         id1 = find_id(state['term1'])
@@ -698,13 +705,32 @@ class LangGraphAgent:
                 "error_message": f"노드 식별 실패 ({state['term1']}, {state['term2']}). 일반 질의로 전환합니다."
             }
 
-        success, elements = GraphService.find_shortest_path(id1, id2, state['graph_path'])
+        # 질문에서 경로 종류를 추론해 관계 타입을 좁힌다(방향·타입 인지 탐색).
+        # '자금이 어떻게 흘렀나' 와 '통신으로 어떻게 이어졌나' 는 밟아야 할 엣지가 다르다.
+        q = state['question']
+        rel_types, path_kind = None, "전체 관계"
+        if re.search(r'자금|이체|송금|돈|입금|출금|계좌', q):
+            rel_types, path_kind = ['transferred_to', 'has_account'], "자금 흐름"
+        elif re.search(r'통화|연락|전화|메시지|문자|카카오', q):
+            rel_types, path_kind = ['contacted', 'owns_phone', 'registered_to', 'uses_id'], "통신"
+        # '흘러/보낸/이체한' 등 방향이 명시되면 순방향만(자금이 실제 흘러간 경로)
+        directed = bool(re.search(r'흘러|흘렀|보낸|송금한|이체한|건너간|로 간', q))
 
-        # 내부는 BFS 지만, 사용자·감사에 '무엇을 실행했는지' 보이도록 동등한 shortestPath 를 노출.
+        success, elements = GraphService.find_shortest_path(
+            id1, id2, state['graph_path'], rel_types=rel_types, directed=directed)
+
+        # 실행한 탐색을 사용자·감사에 명시(방향·타입 반영). 내부는 방향인지 BFS.
         gp = state['graph_path'].replace("'", "''")
+        rel_expr = ('|'.join(rel_types)) if rel_types else ''
+        arrow = '->' if directed else '-'
         path_cypher = (f"SELECT * FROM cypher('{gp}', $$ MATCH p = shortestPath("
-                       f"(a)-[*..6]-(b)) WHERE id(a) = {id1} AND id(b) = {id2} "
+                       f"(a)-[:{rel_expr}*..6]{arrow}(b)) WHERE id(a) = {id1} AND id(b) = {id2} "
+                       f"RETURN p $$) AS (p agtype);" if rel_expr else
+                       f"SELECT * FROM cypher('{gp}', $$ MATCH p = shortestPath("
+                       f"(a)-[*..6]{arrow}(b)) WHERE id(a) = {id1} AND id(b) = {id2} "
                        f"RETURN p $$) AS (p agtype);")
+        # 경로 방향을 사람이 읽는 한 줄로 요약(누가→누구, 어떤 관계로)
+        summary = LangGraphAgent._describe_path(elements)
         return {
             "final_response": {
                 "status": "success" if success else "no_path",
@@ -712,10 +738,40 @@ class LangGraphAgent:
                 "elements": elements,
                 "results_count": len(elements) if elements else 0,
                 "cypher": path_cypher,
+                "path_kind": path_kind,
+                "path_summary": summary,
                 "type": "path",
                 "intent": "PATH",
             }
         }
+
+    @staticmethod
+    def _describe_path(elements):
+        """경로 elements → '조지영 -[has_account→]-> 계좌 -[transferred_to→]-> ...' 사람이 읽는 요약.
+        backward 엣지는 ←로 표시해 실제 방향을 드러낸다(has_account 역방향 = 소유주 역추적)."""
+        nodes = {e['data']['id']: e['data'] for e in elements if 'source' not in e.get('data', {})}
+        edges = [e['data'] for e in elements if 'source' in e.get('data', {})]
+        if not edges:
+            return ""
+
+        _LBL = {'vt_psn': '인물', 'vt_bacnt': '계좌', 'vt_telno': '전화', 'vt_ip': 'IP',
+                'vt_id': '계정', 'vt_loc': '위치', 'vt_org': '조직', 'vt_case': '사건',
+                'vt_atm': 'ATM', 'vt_email': '이메일'}
+
+        def name(d):
+            # 동명 노드(계좌 예금주 vs 인물 등)를 구분하도록 라벨을 접두로 붙인다
+            p = d.get('props', {}) if d else {}
+            val = p.get('name') or p.get('account_no') or p.get('telno') or p.get('ip_addr') \
+                or p.get('id_val') or p.get('flnm') or '?'
+            lbl = _LBL.get(d.get('label', ''), d.get('label', '')) if d else ''
+            return f"{lbl}:{val}" if lbl else val
+        parts = []
+        for e in edges:
+            s, t = nodes.get(e['source']), nodes.get(e['target'])
+            # 방향대로 그린다 — backward 는 실제 엣지가 target→source 임을 명시
+            mark = '→' if e.get('direction') == 'forward' else '→(역추적)'
+            parts.append(f"{name(s)} ={e['label']}{mark}= {name(t)}")
+        return " · ".join(parts)
 
     def context_retrieval_node(self, state: AgentState) -> Dict:
         """Context Retrieval: Vector DB를 사용하여 질문 내 엔티티의 실제 DB 정보를 매칭"""

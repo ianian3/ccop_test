@@ -663,58 +663,96 @@ class GraphService:
             conn.close()
 
     @staticmethod
-    def find_shortest_path(src, tgt, graph_path):
-        """최단 경로 탐색 (BFS)"""
+    def find_shortest_path(src, tgt, graph_path, rel_types=None, directed=False):
+        """최단 경로 탐색 (방향·타입 인지 BFS).
+
+        수사에서 경로의 '방향(누가 누구에게)'과 '관계 종류'는 연결 여부만큼 중요하다.
+        종전 무방향·전타입 BFS는 has_account 를 역으로 밟는 등 방향을 잃어 경로 의미가
+        왜곡됐다(2026-09-16 실측). 개선:
+          · 각 홉의 실제 방향(forward/backward)과 엣지 타입을 기록 → 엣지 element 의
+            source/target 을 실제 방향대로 그린다(backward 는 뒤집어서).
+          · rel_types 지정 시 해당 관계만 밟는다(자금흐름=transferred_to·has_account,
+            통신=contacted 등). 화이트리스트(^[a-z_]+$)로 injection 차단.
+          · directed=True 면 출발→도착 순방향만 탐색(자금이 실제로 흘러간 경로).
+        하위호환: rel_types=None, directed=False = 종전처럼 무방향 전타입 탐색(+방향 기록).
+        """
+        import re as _re
         conn, cur = GraphService.get_db_connection()
-        if not conn: return False, []
-        
+        if not conn:
+            return False, []
+
+        # 타입 필터 — 화이트리스트 검증 후 IN 절 구성
+        type_filter = ""
+        if rel_types:
+            safe = [t for t in rel_types if isinstance(t, str) and _re.match(r'^[a-z_]+$', t)]
+            if safe:
+                type_filter = " AND type(r) IN [" + ",".join(f"'{t}'" for t in safe) + "]"
+
         try:
             safe_set_graph_path(cur, graph_path)
-            
-            # BFS 탐색
-            queue = [[src]]
+            src, tgt = str(src), str(tgt)
+
+            # BFS — path 원소 = (node_id, via_edge_type, via_direction)
+            queue = [[(src, None, None)]]
             visited = {src}
             found_path = None
-            
             while queue:
                 path = queue.pop(0)
-                curr = path[-1]
+                curr = path[-1][0]
                 if curr == tgt:
-                    found_path = path; break
-                if len(path) > 6: continue # 깊이 제한
-                
-                # 이웃 노드 검색
-                cur.execute(f"MATCH (u)-[]-(v) WHERE id(u) = '{curr}' RETURN id(v)")
-                for row in cur.fetchall():
-                    neighbor_id = str(row[0])
-                    if neighbor_id not in visited:
-                        visited.add(neighbor_id)
-                        queue.append(path + [neighbor_id])
-            
-            if not found_path: return False, []
-            
-            # 경로 시각화 데이터 생성
+                    found_path = path
+                    break
+                if len(path) > 6:
+                    continue  # 깊이 제한(7홉+ 미탐)
+
+                neighbors = []
+                # 순방향 (curr)-[r]->(v)
+                cur.execute(f"MATCH (u)-[r]->(v) WHERE id(u) = '{curr}'{type_filter} "
+                            f"RETURN id(v), type(r)")
+                for vid, rt in cur.fetchall():
+                    neighbors.append((str(vid), rt, 'forward'))
+                # 역방향 (curr)<-[r]-(v) — directed 아닐 때만(연결성 최대화)
+                if not directed:
+                    cur.execute(f"MATCH (u)<-[r]-(v) WHERE id(u) = '{curr}'{type_filter} "
+                                f"RETURN id(v), type(r)")
+                    for vid, rt in cur.fetchall():
+                        neighbors.append((str(vid), rt, 'backward'))
+
+                for vid, rt, dr in neighbors:
+                    if vid not in visited:
+                        visited.add(vid)
+                        queue.append(path + [(vid, rt, dr)])
+
+            if not found_path:
+                return False, []
+
+            # 노드
             elements = []
-            for nid in found_path:
+            for nid, _, _ in found_path:
                 cur.execute(f"MATCH (n) WHERE id(n) = '{nid}' RETURN id(n), labels(n), properties(n)")
                 r = cur.fetchone()
                 if r:
-                    node_id = str(r[0])
-                    elements.append({"group": "nodes", "data": {"id": node_id, "label": r[1][0], "props": GraphService.safe_props(r[2])}})
-            
-            # 엣지 연결
-            for i in range(len(found_path)-1):
-                u, v = found_path[i], found_path[i+1]
-                cur.execute(f"MATCH (u)-[r]-(v) WHERE id(u) = '{u}' AND id(v) = '{v}' RETURN id(r), type(r), properties(r)")
-                edge_res = cur.fetchone()
-                
-                if edge_res:
-                    edge_id = str(edge_res[0])
-                    elements.append({"group": "edges", "data": {"id": edge_id, "source": str(u), "target": str(v), "label": edge_res[1], "props": GraphService.safe_props(edge_res[2])}})
+                    elements.append({"group": "nodes", "data": {
+                        "id": str(r[0]), "label": r[1][0], "props": GraphService.safe_props(r[2])}})
+
+            # 엣지 — 방향대로 그린다(backward 는 실제 엣지 방향이 nid→prev)
+            for i in range(1, len(found_path)):
+                prev = found_path[i - 1][0]
+                nid, rt, dr = found_path[i]
+                s, t = (prev, nid) if dr == 'forward' else (nid, prev)
+                cur.execute(f"MATCH (u)-[r]->(v) WHERE id(u) = '{s}' AND id(v) = '{t}' "
+                            f"RETURN id(r), type(r), properties(r) LIMIT 1")
+                er = cur.fetchone()
+                if er:
+                    elements.append({"group": "edges", "data": {
+                        "id": str(er[0]), "source": s, "target": t, "label": er[1],
+                        "direction": dr, "props": GraphService.safe_props(er[2])}})
                 else:
-                    # 논리적 연결일 경우 점선 처리
-                    elements.append({"group": "edges", "data": {"id": f"v_{u}_{v}", "source": u, "target": v, "label": "Same Info", "props": {"type":"virtual"}}, "classes": "virtual-edge"})
-                    
+                    elements.append({"group": "edges", "data": {
+                        "id": f"v_{prev}_{nid}", "source": prev, "target": nid,
+                        "label": rt or "Same Info", "direction": dr,
+                        "props": {"type": "virtual"}}, "classes": "virtual-edge"})
+
             return True, elements
             
         except Exception as e:
