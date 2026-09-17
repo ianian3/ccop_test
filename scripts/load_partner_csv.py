@@ -103,21 +103,42 @@ def sid(row, default):
 
 
 class Loader:
-    def __init__(self, cur):
+    def __init__(self, cur, conn=None, batch=2000):
         self.cur = cur
+        self.conn = conn          # 배치 커밋용 — 대량 입력에서 트랜잭션으로 묶어 MVCC 가시성 확보
+        self.batch = batch
         self.n_node = 0
         self.n_edge = 0
+        self._ops = 0
+        self._seen = set()   # (label, key, val) 캐시 — 대량 입력에서 동일 노드 반복 MERGE 방지
+
+    def _tick(self):
+        # 주기적 커밋 — autocommit 이면 매 문장 새 스냅샷이라 방금 MERGE 한 tuple 을 다음
+        # 문장이 못 봐 'invisible tuple' 오류가 난다. 트랜잭션으로 묶어 가시성을 일관되게.
+        self._ops += 1
+        if self.conn is not None and self._ops % self.batch == 0:
+            self.conn.commit()
 
     def node(self, label, key, val, props):
         if val in (None, ''):
             return False
-        sets = [f"n.{k} = {v if isinstance(v, (int, float)) else chr(39)+esc(v)+chr(39)}"
-                for k, v in props.items() if v not in (None, '')]
-        q = f"MERGE (n:{label} {{{key}: '{esc(val)}'}})"
-        if sets:
-            q += ' SET ' + ', '.join(sets)
-        self.cur.execute(q)
+        # 이미 만든 노드는 재MERGE 안 함. 대량(42만 메시지 등)에서 동일 계정을 반복 MERGE 하면
+        # AgensGraph autocommit 에서 'attempted to delete invisible tuple' 오류 + 성능 급락.
+        # 첫 등장 시 속성까지 세팅, 이후 등장은 skip(속성은 첫 소스 우선 — 규격상 노드 속성은 안정적).
+        ck = (label, key, str(val))
+        if ck in self._seen:
+            return True
+        self._seen.add(ck)
+        # 캐시가 유니크를 보장하므로 CREATE 사용. AgensGraph 2.x MERGE 는 대량 반복 시
+        # 'attempted to delete invisible tuple'(엔진 버그)을 내는데, 캐시+CREATE 로 회피한다.
+        # 전제: --reset 신규 그래프(중복 시작 없음). 재적재는 --reset 권장(멱등성은 캐시가 대신).
+        props2 = {key: val, **{k: v for k, v in props.items() if v not in (None, '')}}
+        fields = ', '.join(
+            f"{k}: {v if isinstance(v, (int, float)) else chr(39)+esc(v)+chr(39)}"
+            for k, v in props2.items())
+        self.cur.execute(f"CREATE (n:{label} {{{fields}}})")
         self.n_node += 1
+        self._tick()
         return True
 
     def edge(self, el, a, b, props, match_props=None):
@@ -140,6 +161,7 @@ class Loader:
             q += ' SET ' + ', '.join(sets)
         self.cur.execute(q)
         self.n_edge += 1
+        self._tick()
         return True
 
 
@@ -168,7 +190,9 @@ def main():
         cur.execute(f"CREATE VLABEL IF NOT EXISTS {l}")
     for e in ELABELS:
         cur.execute(f"CREATE ELABEL IF NOT EXISTS {e}")
-    L = Loader(cur)
+    conn.commit()                 # DDL 확정
+    conn.autocommit = False       # 이후 데이터 적재는 배치 트랜잭션
+    L = Loader(cur, conn=conn)
     F = args.folder
 
     # ── 노드 ──
@@ -395,6 +419,8 @@ def main():
         for u in unresolved[:5]:
             print(f'      {u}')
         print('      → 이대로면 같은 사람이 이름과 psn_id 로 갈라집니다.')
+    conn.commit()                 # 잔여 배치 확정
+    conn.autocommit = True        # 이후 집계 조회
     print(f'[{args.graph}] MERGE 호출 노드 {L.n_node} · 엣지 {L.n_edge}')
     tot_n = tot_e = 0
     for l in LABELS:
