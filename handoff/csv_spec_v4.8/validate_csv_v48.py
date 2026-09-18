@@ -41,7 +41,7 @@ SPEC = [
     ('tbl_eg_call',        {'dsptch_no', 'rcptn_no'},
      {'bgng_ymdhm', 'end_ymdhm', 'tlcmco', 'channel', 'bsst_addr', 'source_id'}),
     ('tbl_eg_case',        {'incdnt_no'},
-     {'incdnt_nm', 'incdnt_typ_cd', 'occrn_dt', 'incdnt_smry_cn', 'damage_amt', 'crime_site', 'source_id'}),
+     {'flnm', 'incdnt_nm', 'incdnt_typ_cd', 'occrn_dt', 'incdnt_smry_cn', 'damage_amt', 'crime_site', 'source_id'}),
     ('tbl_eg_rmt',         {'se', 'actno', 'rlt_actno'},
      {'bank', 'bank_cd', 'dpstr', 'rlt_bank', 'rlt_bank_cd', 'rlt_dpstr', 'rmt_ymdhm',
       'dpst_amt', 'tkmny_amt', 'ip_addr', 'brnch_nm', 'source_id'}),
