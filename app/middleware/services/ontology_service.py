@@ -122,7 +122,7 @@ class KICSCrimeDomainOntology:
         },
         # V4.0 P2 — 나머지 16노드 id_format 표준 (감사 리포트 §6 보강)
         'vt_src':          {'canonical_field': 'src_id',        'id_formats': ['plain'],         'default_format': 'plain'},
-        'vt_case':         {'canonical_field': 'flnm',          'id_formats': ['plain'],         'default_format': 'plain'},  # [정합화] 실 MERGE 키=flnm
+        'vt_case':         {'canonical_field': 'incdnt_no',      'id_formats': ['plain'],         'default_format': 'plain'},  # [V4.8→정공법 2026-09-18] 수사관 인지 식별자=경찰청 공식 사건번호(incdnt_no). flnm(사건파일명)은 보조 속성
         'vt_petition':     {'canonical_field': 'petition_id',   'id_formats': ['plain'],         'default_format': 'plain'},
         'vt_org':          {'canonical_field': 'org_id',        'id_formats': ['plain'],         'default_format': 'plain'},
         'vt_email':        {'canonical_field': 'email_addr',    'id_formats': ['normalized'],    'default_format': 'normalized'},  # [정합화] 실 MERGE 키=email_addr
@@ -450,7 +450,7 @@ class KICSCrimeDomainOntology:
         # Source Layer (회색 — 메타)
         'vt_src':           {'color': '#95A5A6', 'shape': 'rectangle', 'icon': 'src.png',     'size': 30, 'label_property': 'src_name'},
         # Case Layer (빨강 계열 — 사건)
-        'vt_case':          {'color': '#E74C3C', 'shape': 'ellipse',   'icon': 'case.png',    'size': 50, 'label_property': 'flnm'},
+        'vt_case':          {'color': '#E74C3C', 'shape': 'ellipse',   'icon': 'case.png',    'size': 50, 'label_property': 'incdnt_no'},
         'vt_petition':      {'color': '#EC7063', 'shape': 'ellipse',   'icon': 'petition.png','size': 40, 'label_property': 'petition_id'},
         'pt_cluster':       {'color': '#FFD93D', 'shape': 'hexagon',   'icon': 'cluster.png', 'size': 60, 'label_property': 'cluster_id', 'is_hub': True},
         # Person Layer (파랑 계열 — 인물)
@@ -700,7 +700,7 @@ class KICSCrimeDomainOntology:
             'layer': 'Case',
             'label': 'vt_case',
             'label_ko': '사건',
-            'properties': ['flnm', 'incdnt_no'],
+            'properties': ['incdnt_no', 'flnm'],
             'attributes': ['incdnt_nm', 'incdnt_typ_cd', 'crime_type', 'occrn_dt',
                            'damage_amount', 'case_summary', 'status',
                            'chrgdp_nm', 'chrg_plcmn_nm', 'police_station',

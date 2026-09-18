@@ -242,8 +242,12 @@ def main():
     for r in read(F, 'tbl_eg_case'):
         if 'case_prsn' in r.get('_file', ''):
             continue                      # 파일명 키워드 겹침 방지
-        L.node('vt_case', 'flnm', r.get('incdnt_no'),
-               {'incdnt_nm': r.get('incdnt_nm'), 'incdnt_typ_cd': r.get('incdnt_typ_cd'),
+        # canonical=incdnt_no(경찰청 공식 사건번호 — 수사관 인지 식별자). flnm(사건파일명)은
+        # 별개 보조 속성으로 보존(있을 때만). 종전엔 incdnt_no 값을 flnm 키에 밀어넣어 개념이
+        # 어긋나고 incdnt_no 속성이 비었다(2026-09-18 정공법 교정).
+        L.node('vt_case', 'incdnt_no', r.get('incdnt_no'),
+               {'flnm': r.get('flnm'),
+                'incdnt_nm': r.get('incdnt_nm'), 'incdnt_typ_cd': r.get('incdnt_typ_cd'),
                 'occrn_dt': r.get('occrn_dt'), 'damage_amt': num(r.get('damage_amt')),
                 'crime_site': r.get('crime_site'), 'case_summary': r.get('incdnt_smry_cn'),
                 'source_id': sid(r, 'CSV-case')})
@@ -289,8 +293,8 @@ def main():
         s = sid(r, 'CSV-case-prsn')
         el = ROLE_EDGE.get((r.get('role') or 'VICTIM').upper(), 'victim_in')
         L.node('vt_psn', 'name', p, {'source_id': s})
-        L.node('vt_case', 'flnm', cs, {'source_id': s})
-        L.edge(el, ('vt_psn', 'name', p), ('vt_case', 'flnm', cs), {'source_id': s})
+        L.node('vt_case', 'incdnt_no', cs, {'source_id': s})
+        L.edge(el, ('vt_psn', 'name', p), ('vt_case', 'incdnt_no', cs), {'source_id': s})
     for r in read(F, 'tbl_eg_id_use'):
         p, idv = person(r), r.get('id_val')
         s = sid(r, 'CSV-id-use')

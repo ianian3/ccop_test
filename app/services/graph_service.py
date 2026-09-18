@@ -487,8 +487,11 @@ class GraphService:
 
             # 1. 키워드 검색 — AgensGraph 는 properties(n)::text 캐스트가 "not scalar" 오류.
             #    주요 식별 속성을 개별 CONTAINS 로 OR (없는 속성은 null 반환이라 안전).
+            # incdnt_no(경찰청 공식 사건번호)·incdnt_nm(사건명)은 수사관이 사건을 검색할 때
+            # 실제로 인지하는 값이라 반드시 포함(2026-09-18 정공법). atm_nm(ATM명)·loc_id(위치)도 보강.
             _search_props = ['name', 'korn_flnm', 'dpstr', 'telno', 'account_no', 'ip_addr',
-                             'id_val', 'flnm', 'url_addr', 'email_addr', 'src_name', 'org_name', 'val']
+                             'id_val', 'flnm', 'incdnt_no', 'incdnt_nm', 'atm_nm', 'loc_id',
+                             'url_addr', 'email_addr', 'src_name', 'org_name', 'val']
             _where = " OR ".join(f"n.{p} CONTAINS '{kw}'" for p in _search_props)
             cur.execute(
                 f"MATCH (n) WHERE {_where} "

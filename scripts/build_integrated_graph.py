@@ -12,7 +12,7 @@ from app import create_app
 from app.database import safe_set_graph_path
 import psycopg2
 
-KP = {'vt_bacnt': 'account_no', 'vt_case': 'flnm', 'vt_id': 'id_val', 'vt_psn': 'name',
+KP = {'vt_bacnt': 'account_no', 'vt_case': 'incdnt_no', 'vt_id': 'id_val', 'vt_psn': 'name',
       'vt_telno': 'telno', 'vt_ip': 'ip_addr', 'vt_org': 'org_name', 'vt_atm': 'atm_nm',
       'vt_email': 'email_addr', 'vt_src': 'src_name',
       'vt_movement': 'mov_id',  # EP9/10 시드: 출입국 이벤트 (V4.8)
@@ -29,6 +29,14 @@ INTEG = 'ccop_ep_integrated'
 
 def esc(v):
     return str(v).replace("\\", "\\\\").replace("'", "''")
+
+
+def _case_kv(label, props):
+    """노드 canonical 키 값. vt_case 는 incdnt_no 우선, 없으면 flnm 폴백(EP 시드 데이터)."""
+    v = props.get(KP.get(label))
+    if label == 'vt_case' and v in (None, ''):
+        v = props.get('flnm')
+    return v
 
 
 def main():
@@ -62,12 +70,21 @@ def main():
                 except Exception:
                     safe_set_graph_path(cur, g); continue
                 for (props,) in cur.fetchall():
-                    if not props or kp not in props or props[kp] in (None, ''):
+                    if not props:
                         continue
-                    k = (label, str(props[kp]))
+                    kv = props.get(kp)
+                    # vt_case: canonical=incdnt_no 지만 EP 시드 데이터는 flnm(예:'EP1-01-01')만
+                    # 있고 incdnt_no 가 빈다 → flnm 으로 폴백해 키를 잡고, incdnt_no 속성에도 채운다.
+                    if label == 'vt_case' and kv in (None, ''):
+                        kv = props.get('flnm')
+                    if kv in (None, ''):
+                        continue
+                    k = (label, str(kv))
                     if k not in nodes:
                         nodes[k] = {'props': {}, 'origins': set()}
                     nodes[k]['props'].update({a: b for a, b in props.items() if b not in (None, '')})
+                    if label == 'vt_case' and not props.get('incdnt_no'):
+                        nodes[k]['props']['incdnt_no'] = str(kv)   # 폴백값을 canonical 속성에 보존
                     nodes[k]['origins'].add(gs)
             for el in EDGES:
                 try:
@@ -76,8 +93,11 @@ def main():
                 except Exception:
                     safe_set_graph_path(cur, g); continue
                 for la, pa, lb, pb, pr in cur.fetchall():
-                    if la in KP and lb in KP and pa and pb and KP[la] in pa and KP[lb] in pb:
-                        edges.append((el, (la, str(pa[KP[la]])), (lb, str(pb[KP[lb]])), pr or {}))
+                    if la not in KP or lb not in KP or not pa or not pb:
+                        continue
+                    va, vb = _case_kv(la, pa), _case_kv(lb, pb)   # vt_case 는 incdnt_no→flnm 폴백
+                    if va not in (None, '') and vb not in (None, ''):
+                        edges.append((el, (la, str(va)), (lb, str(vb)), pr or {}))
         print(f"[수집] 노드 {len(nodes)} · 엣지 {len(edges)}", flush=True)
 
         # ── 통합 그래프 생성 ──
