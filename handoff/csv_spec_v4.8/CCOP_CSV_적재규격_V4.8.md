@@ -106,7 +106,7 @@ tbl_vt_loc    loc_id,loc_type,address,sido_nm,sigungu_nm,place_name,source_id
 | `tbl_vt_psn` | `flnm`★ | `psn_id` · `dob` · `gender` · `nationality` · `occp_nm` · `source_id`★ |
 | `tbl_vt_telno` | `telno`★ | `telco_nm` · `join_typ_cd` · `subs_holder` · `is_burner` · `source_id`★ |
 | `tbl_vt_bacnt` | `actno`★ · `bank` · `dpstr` | **`bank_cd`** · `account_type` · `bacnt_opn_dt` · `source_id`★ |
-| `tbl_eg_case` | `incdnt_no`★ · `incdnt_nm` · `incdnt_typ_cd` · `occrn_dt` · `incdnt_smry_cn` | `damage_amt` · `crime_site` · `source_id`★ |
+| `tbl_eg_case` | `incdnt_no`★(경찰청 공식 사건번호=식별키) · `incdnt_nm`(사건명) · `incdnt_typ_cd` · `occrn_dt` · `incdnt_smry_cn` | `flnm`(내부 사건파일명) · `damage_amt` · `crime_site` · `source_id`★ |
 | `tbl_eg_case_prsn` | `incdnt_no`★ · `prsn_id`★ · `role` | `source_id`★ |
 | `tbl_eg_call` | `dsptch_no`★ · `rcptn_no`★ · `bgng_ymdhm` · `end_ymdhm` · `tlcmco` | **`channel`** · `bsst_addr` · `source_id`★ |
 | `tbl_eg_telno_poss` | `flnm`★ · `telno`★ | `prsn_id` · `valid_from` · `valid_to` · `source_id`★ |
