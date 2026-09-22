@@ -32,13 +32,13 @@ const OUT = '/private/tmp/claude-501/-Users-iankwon-test-coop-v1-0/1e441d09-0c0a
   await p.screenshot({ path: OUT + 'vt_psn.png', clip: { x: 0, y: 90, width: 1200, height: 700 } });
 
   // 계좌 클릭 (자기루프 transferred_to 확인)
-  await p.click('#g .node[aria-label*="계좌"]'); await p.waitForTimeout(400);
+  await p.click('#g .node[aria-label*="ATM"]'); await p.waitForTimeout(400);
   const bac = await p.evaluate(() => ({
     meta: document.querySelector('#panel .pmeta').textContent.trim(),
     hasSelf: [...document.querySelectorAll('#panel .grp')].some(e => e.textContent.includes('자기')),
     rows: document.querySelectorAll('#panel .er').length,
   }));
-  console.log('  계좌 선택:', JSON.stringify(bac));
+  console.log('  ATM 선택:', JSON.stringify(bac));
   await p.screenshot({ path: OUT + 'vt_bac.png', clip: { x: 0, y: 90, width: 1200, height: 700 } });
 
   // 리셋
@@ -50,5 +50,5 @@ const OUT = '/private/tmp/claude-501/-Users-iankwon-test-coop-v1-0/1e441d09-0c0a
   console.log('  리셋 후:', JSON.stringify(rst));
   console.log('  JS 오류:', errs.length ? errs.join(' | ') : '0');
   await b.close();
-  process.exit(base.nodes === 12 && base.edges === 28 && sel.rows >= 9 && errs.length === 0 ? 0 : 1);
+  process.exit(base.nodes === 12 && base.edges === 29 && sel.rows >= 9 && errs.length === 0 ? 0 : 1);
 })();
