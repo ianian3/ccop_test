@@ -1,0 +1,702 @@
+{
+  "probes": {
+    "unauthenticated_mutation": {
+      "status": 200,
+      "service_called": true
+    },
+    "graph_name_allowlist_bypass": {
+      "status": 200,
+      "service_called": true
+    },
+    "expired_key": {
+      "model_reports_expired": true,
+      "validator_accepts": true
+    },
+    "v1_allowlist_bypass": {
+      "status": 200,
+      "service_called": true
+    },
+    "anonymous_ui_session": {
+      "status": 200,
+      "ui_authorized": true
+    },
+    "read_only_insert_gap": {
+      "insert_reached_mock_cursor": true
+    },
+    "external_read_allowlist_limit": {
+      "status": 200,
+      "sql": [
+        "SET graph_path = forbidden_graph",
+        "MATCH (n) RETURN n LIMIT 999999"
+      ]
+    },
+    "read_guard_accepts_non_cypher_select": true,
+    "basic_bearer_conflict": {
+      "status": 401,
+      "challenge": "Basic realm=\"CCOP\""
+    },
+    "default_run_arguments": {
+      "host": "0.0.0.0",
+      "port": 5002,
+      "debug": true
+    },
+    "pool_leak": {
+      "checked_out": 10,
+      "maxconn": 10,
+      "next_connection_available": false
+    },
+    "ontology": {
+      "nodes": 25,
+      "relationships": 72,
+      "active": 70,
+      "sameAs_in_sot": false,
+      "same_as_in_sot": true
+    }
+  },
+  "extra": {
+    "/api/etl/ai-suggest": {
+      "status": 500,
+      "body": {
+        "message": "type object 'AIService' has no attribute 'suggest_mapping'",
+        "status": "error"
+      }
+    },
+    "/api/rdb/analyze-csv": {
+      "status": 500,
+      "body": {
+        "message": "type object 'AIService' has no attribute 'infer_column_mapping_for_rdb'",
+        "status": "error"
+      }
+    },
+    "pipeline_failure": {
+      "status": 200,
+      "top_status": "success",
+      "L4": {
+        "error": "audit mock graph failure",
+        "graph": "audit_graph",
+        "layer": "L4 그래프 (AgensGraph)",
+        "success": false
+      }
+    },
+    "javascript_checks": [
+      {
+        "template": "/",
+        "block": 3,
+        "exit": 0,
+        "error": ""
+      },
+      {
+        "template": "/",
+        "block": 4,
+        "exit": 0,
+        "error": ""
+      },
+      {
+        "template": "/",
+        "block": 5,
+        "exit": 0,
+        "error": ""
+      },
+      {
+        "template": "/modeler",
+        "block": 1,
+        "exit": 0,
+        "error": ""
+      }
+    ],
+    "missing_template_assets": [],
+    "shell_checks": [
+      {
+        "file": "scripts/assemble_t2c_handoff.sh",
+        "exit": 0,
+        "error": ""
+      },
+      {
+        "file": "scripts/backup_db.sh",
+        "exit": 0,
+        "error": ""
+      },
+      {
+        "file": "scripts/benchmark_v40.sh",
+        "exit": 0,
+        "error": ""
+      },
+      {
+        "file": "scripts/build_airgap_bundle.sh",
+        "exit": 0,
+        "error": ""
+      },
+      {
+        "file": "scripts/deploy.sh",
+        "exit": 0,
+        "error": ""
+      },
+      {
+        "file": "scripts/deploy/app_server_watchdog.sh",
+        "exit": 0,
+        "error": ""
+      },
+      {
+        "file": "scripts/deploy/gpu_box_start_app.sh",
+        "exit": 0,
+        "error": ""
+      },
+      {
+        "file": "scripts/deploy/gpu_box_watchdog.sh",
+        "exit": 0,
+        "error": ""
+      },
+      {
+        "file": "scripts/deploy_v40.sh",
+        "exit": 0,
+        "error": ""
+      },
+      {
+        "file": "scripts/gen_selfsigned_cert.sh",
+        "exit": 0,
+        "error": ""
+      },
+      {
+        "file": "scripts/init_db.sh",
+        "exit": 0,
+        "error": ""
+      },
+      {
+        "file": "scripts/rebuild_all.sh",
+        "exit": 0,
+        "error": ""
+      },
+      {
+        "file": "scripts/run_native_cypher_lora.sh",
+        "exit": 0,
+        "error": ""
+      },
+      {
+        "file": "scripts/run_vllm_lora.sh",
+        "exit": 0,
+        "error": ""
+      },
+      {
+        "file": "train/retrain_v38.sh",
+        "exit": 0,
+        "error": ""
+      },
+      {
+        "file": "train/retrain_v39.sh",
+        "exit": 0,
+        "error": ""
+      },
+      {
+        "file": "train/run_t2c_merge.sh",
+        "exit": 0,
+        "error": ""
+      },
+      {
+        "file": "train/run_t2c_train.sh",
+        "exit": 0,
+        "error": ""
+      },
+      {
+        "file": "train/run_t2c_train_v37.sh",
+        "exit": 0,
+        "error": ""
+      },
+      {
+        "file": "train/run_t2c_train_v37_qwen.sh",
+        "exit": 0,
+        "error": ""
+      },
+      {
+        "file": "train/run_train.sh",
+        "exit": 0,
+        "error": ""
+      },
+      {
+        "file": "train/server_setup.sh",
+        "exit": 0,
+        "error": ""
+      },
+      {
+        "file": "train/upload_t2c.sh",
+        "exit": 0,
+        "error": ""
+      },
+      {
+        "file": "train/upload_t2c_v37.sh",
+        "exit": 0,
+        "error": ""
+      },
+      {
+        "file": "train/upload_t2c_v37_qwen.sh",
+        "exit": 0,
+        "error": ""
+      },
+      {
+        "file": "train/upload_t2c_v37_qwen_v2.sh",
+        "exit": 0,
+        "error": ""
+      },
+      {
+        "file": "train/upload_to_server.sh",
+        "exit": 0,
+        "error": ""
+      }
+    ],
+    "missing_static_methods": [
+      {
+        "file": "app/routes.py",
+        "line": 1524,
+        "call": "AIService.suggest_mapping"
+      },
+      {
+        "file": "app/routes.py",
+        "line": 1598,
+        "call": "AIService.infer_column_mapping_for_rdb"
+      }
+    ]
+  },
+  "loader": {
+    "rerun_idempotency": {
+      "create_statements_for_same_node_across_two_runs": 2
+    },
+    "bank_identity_collision": {
+      "different_banks": 2,
+      "created_nodes": 1
+    },
+    "person_identity_collision": {
+      "different_ids": 2,
+      "created_nodes": 1
+    },
+    "handoff_sot_labels": {
+      "nodes_equal": true,
+      "edges_equal": true
+    },
+    "xlsx_catalog": {
+      "node_labels_match_sot": false,
+      "recognized_edges": 72,
+      "sot_edges": 72,
+      "node_labels_match_after_trim": true,
+      "labels_with_outer_whitespace": [
+        "pt_cluster ",
+        "site_cluster "
+      ]
+    },
+    "ui_optional_csv": {
+      "success": true,
+      "stats": {
+        "cases": 0,
+        "suspects": 0,
+        "accounts": 0,
+        "phones": 0,
+        "transfers": 0,
+        "calls": 0,
+        "relations": 0
+      },
+      "insert_calls": 0
+    }
+  },
+  "documents": {
+    "pdf": [
+      {
+        "path": "deploy/field_kit/AIRGAP_1ST_EXEC_STEPS.pdf",
+        "pages": 10,
+        "characters": 10844
+      },
+      {
+        "path": "deploy/field_kit/AIRGAP_PREFLIGHT_20260714.pdf",
+        "pages": 4,
+        "characters": 5308
+      },
+      {
+        "path": "deploy/field_kit/AIRGAP_VISIT_INSTALL_RUNBOOK.pdf",
+        "pages": 14,
+        "characters": 13688
+      },
+      {
+        "path": "docs/EXTERNAL_CYPHER_QUERY_HOWTO.pdf",
+        "pages": 13,
+        "characters": 10129
+      },
+      {
+        "path": "docs/PROJECT_OVERVIEW.pdf",
+        "pages": 20,
+        "characters": 19796
+      },
+      {
+        "path": "docs/pdf/API_PROVISION_GUIDE.pdf",
+        "pages": 10,
+        "characters": 5762
+      },
+      {
+        "path": "docs/pdf/API_REFERENCE.pdf",
+        "pages": 15,
+        "characters": 11810
+      },
+      {
+        "path": "docs/test_law.pdf",
+        "pages": 1,
+        "characters": 710
+      }
+    ],
+    "xlsx": [
+      {
+        "path": "docs/6. CCOP-DE53-테이블명세서(스카이월드와이드)_20260727_v0.9.2(SKAI수정).xlsx",
+        "sheets": [
+          {
+            "sheet": "표지",
+            "rows": 34,
+            "cols": 10,
+            "filled_cells": 4,
+            "formulas": 0,
+            "cell_errors": []
+          },
+          {
+            "sheet": "개정이력",
+            "rows": 42,
+            "cols": 7,
+            "filled_cells": 33,
+            "formulas": 0,
+            "cell_errors": []
+          },
+          {
+            "sheet": "테이블목록",
+            "rows": 370,
+            "cols": 8,
+            "filled_cells": 315,
+            "formulas": 0,
+            "cell_errors": []
+          },
+          {
+            "sheet": "컬럼정의서",
+            "rows": 665,
+            "cols": 19,
+            "filled_cells": 6908,
+            "formulas": 0,
+            "cell_errors": []
+          },
+          {
+            "sheet": "작성가이드",
+            "rows": 27,
+            "cols": 3,
+            "filled_cells": 67,
+            "formulas": 0,
+            "cell_errors": []
+          },
+          {
+            "sheet": "SQL",
+            "rows": 16,
+            "cols": 1,
+            "filled_cells": 16,
+            "formulas": 0,
+            "cell_errors": []
+          }
+        ]
+      },
+      {
+        "path": "docs/SCENARIO_EDGE_ONTOLOGY_MAPPING_20260803.xlsx",
+        "sheets": [
+          {
+            "sheet": "시나리오엣지_V4.3대조",
+            "rows": 24,
+            "cols": 13,
+            "filled_cells": 312,
+            "formulas": 0,
+            "cell_errors": []
+          },
+          {
+            "sheet": "요약",
+            "rows": 14,
+            "cols": 2,
+            "filled_cells": 22,
+            "formulas": 0,
+            "cell_errors": []
+          }
+        ]
+      },
+      {
+        "path": "handoff/ontology_v4.8/spec/CCOP_Ontology_V4.8_node_edge_attrs.xlsx",
+        "sheets": [
+          {
+            "sheet": "변경이력(V4.3→V4.8)",
+            "rows": 46,
+            "cols": 7,
+            "filled_cells": 276,
+            "formulas": 0,
+            "cell_errors": []
+          },
+          {
+            "sheet": "엣지카탈로그(72종)",
+            "rows": 74,
+            "cols": 7,
+            "filled_cells": 479,
+            "formulas": 0,
+            "cell_errors": []
+          },
+          {
+            "sheet": "노드카탈로그(25종)",
+            "rows": 26,
+            "cols": 6,
+            "filled_cells": 156,
+            "formulas": 0,
+            "cell_errors": []
+          },
+          {
+            "sheet": "노드 속성 사전",
+            "rows": 267,
+            "cols": 5,
+            "filled_cells": 1335,
+            "formulas": 0,
+            "cell_errors": []
+          },
+          {
+            "sheet": "엣지 속성 사전",
+            "rows": 58,
+            "cols": 5,
+            "filled_cells": 290,
+            "formulas": 0,
+            "cell_errors": []
+          },
+          {
+            "sheet": "값 도메인 사전",
+            "rows": 59,
+            "cols": 4,
+            "filled_cells": 197,
+            "formulas": 0,
+            "cell_errors": []
+          },
+          {
+            "sheet": "탐색·적재 규칙",
+            "rows": 11,
+            "cols": 5,
+            "filled_cells": 55,
+            "formulas": 0,
+            "cell_errors": []
+          },
+          {
+            "sheet": "파생속성 등록부",
+            "rows": 12,
+            "cols": 6,
+            "filled_cells": 72,
+            "formulas": 0,
+            "cell_errors": []
+          },
+          {
+            "sheet": "공통 메타·안내",
+            "rows": 25,
+            "cols": 2,
+            "filled_cells": 50,
+            "formulas": 0,
+            "cell_errors": []
+          }
+        ]
+      }
+    ],
+    "broken_markdown_links": [
+      {
+        "path": "README.md",
+        "line": 143,
+        "target": "NODE_LABELS_GUIDE.md"
+      },
+      {
+        "path": "docs/DESIGN_REPORT_v3.6.md",
+        "line": 264,
+        "target": "../app/middleware/services/rdb_to_graph_service.py"
+      },
+      {
+        "path": "docs/KICS_CYBER_CRIME_STANDARD.md",
+        "line": 178,
+        "target": "./RDB_STANDARDIZATION.md"
+      },
+      {
+        "path": "docs/KICS_CYBER_CRIME_STANDARD.md",
+        "line": 179,
+        "target": "./ONTOLOGY_GUIDE.md"
+      },
+      {
+        "path": "docs/KICS_CYBER_CRIME_STANDARD.md",
+        "line": 180,
+        "target": "./CCOP_TECHNICAL_DESIGN.md"
+      },
+      {
+        "path": "docs/NODE_EDGE_REFERENCE.md",
+        "line": 162,
+        "target": "app/services/graph_service.py"
+      },
+      {
+        "path": "docs/T2C_V40_V41_V42_FINAL_REPORT_20260529.md",
+        "line": 278,
+        "target": "../MEMORY/project_v40_checkpoint.md"
+      },
+      {
+        "path": "handoff/ontology_v4.8/spec/CCOP_ONTOLOGY_DESIGN_HISTORY.md",
+        "line": 524,
+        "target": "../app/services/rdb_to_graph_service.py"
+      },
+      {
+        "path": "handoff/ontology_v4.8/spec/CCOP_ONTOLOGY_DESIGN_HISTORY.md",
+        "line": 530,
+        "target": "../app/middleware/services/ontology_service.py"
+      },
+      {
+        "path": "handoff/ontology_v4.8/spec/CCOP_ONTOLOGY_DESIGN_HISTORY.md",
+        "line": 536,
+        "target": "../app/middleware/services/ontology_service.py"
+      },
+      {
+        "path": "handoff/ontology_v4.8/spec/CCOP_ONTOLOGY_DESIGN_HISTORY.md",
+        "line": 544,
+        "target": "../app/services/etl_service.py"
+      },
+      {
+        "path": "handoff/ontology_v4.8/spec/CCOP_ONTOLOGY_DESIGN_HISTORY.md",
+        "line": 545,
+        "target": "../app/services/etl_service.py"
+      },
+      {
+        "path": "handoff/ontology_v4.8/spec/CCOP_ONTOLOGY_DESIGN_HISTORY.md",
+        "line": 546,
+        "target": "../app/services/etl_service.py"
+      },
+      {
+        "path": "handoff/ontology_v4.8/spec/CCOP_ONTOLOGY_DESIGN_HISTORY.md",
+        "line": 547,
+        "target": "../app/services/etl_service.py"
+      },
+      {
+        "path": "handoff/ontology_v4.8/spec/CCOP_ONTOLOGY_DESIGN_HISTORY.md",
+        "line": 548,
+        "target": "../app/services/rdb_to_graph_service.py"
+      },
+      {
+        "path": "handoff/ontology_v4.8/spec/CCOP_ONTOLOGY_DESIGN_HISTORY.md",
+        "line": 550,
+        "target": "../tests/test_etl_v40_meta.py"
+      },
+      {
+        "path": "handoff/ontology_v4.8/spec/CCOP_ONTOLOGY_DESIGN_HISTORY.md",
+        "line": 562,
+        "target": "../app/routes_api.py"
+      },
+      {
+        "path": "handoff/ontology_v4.8/spec/CCOP_ONTOLOGY_DESIGN_HISTORY.md",
+        "line": 572,
+        "target": "../app/routes.py"
+      },
+      {
+        "path": "handoff/ontology_v4.8/spec/CCOP_ONTOLOGY_DESIGN_HISTORY.md",
+        "line": 578,
+        "target": "V40_ONTOLOGY_AUDIT_20260521.md"
+      },
+      {
+        "path": "handoff/ontology_v4.8/spec/CCOP_ONTOLOGY_DESIGN_HISTORY.md",
+        "line": 579,
+        "target": "STAGING_PATCH_VERIFICATION_20260521.md"
+      },
+      {
+        "path": "handoff/ontology_v4.8/spec/CCOP_ONTOLOGY_DESIGN_HISTORY.md",
+        "line": 580,
+        "target": "ETL_V40_GAP_REPORT_20260521.md"
+      },
+      {
+        "path": "handoff/ontology_v4.8/spec/CCOP_ONTOLOGY_DESIGN_HISTORY.md",
+        "line": 581,
+        "target": "DA_TEAM_V40_REQUEST_20260521.md"
+      },
+      {
+        "path": "handoff/ontology_v4.8/spec/CCOP_ONTOLOGY_DESIGN_HISTORY.md",
+        "line": 582,
+        "target": "../scripts/da_v37_v40_patch.sql"
+      }
+    ]
+  },
+  "test_summary": {
+    "tests/test_api_persistence.py": {
+      "passed": 25
+    },
+    "tests/test_etl_v40_meta.py": {
+      "passed": 14
+    },
+    "tests/test_ip_role_temporal.py": {
+      "passed": 16
+    },
+    "tests/test_lazy_expansion.py": {
+      "passed": 7
+    },
+    "tests/test_legal_rag.py": {
+      "passed": 39
+    },
+    "tests/test_loader_sot_consistency.py": {
+      "passed": 5,
+      "failed": 2
+    },
+    "tests/test_ontology_transform_viz.py": {
+      "passed": 25
+    },
+    "tests/test_pattern_network_analysis.py": {
+      "passed": 26,
+      "skipped_or_xfailed": 1
+    },
+    "tests/test_rdb_normalization.py": {
+      "passed": 11
+    },
+    "tests/test_security.py": {
+      "passed": 37
+    },
+    "tests/test_t2c_v37_helpers.py": {
+      "passed": 19,
+      "failed": 1
+    },
+    "tests/test_temporal_continuity.py": {
+      "passed": 12
+    }
+  },
+  "test_failures": [
+    {
+      "test": "tests.test_loader_sot_consistency::test_loader_edge_labels_subset_of_sot",
+      "failure": "tests/test_loader_sot_consistency.py:43: in test_loader_edge_labels_subset_of_sot\n    assert not extra, f'적재가 선언한 SoT 밖 엣지 라벨(오타·드리프트): {sorted(extra)}'\nE   AssertionError: 적재가 선언한 SoT 밖 엣지 라벨(오타·드리프트): ['sameAs']\nE   assert not {'sameAs'}"
+    },
+    {
+      "test": "tests.test_loader_sot_consistency::test_pole_schema_edges_subset_of_sot",
+      "failure": "tests/test_loader_sot_consistency.py:55: in test_pole_schema_edges_subset_of_sot\n    assert not extra, f'POLE_SCHEMA(Text2Cypher)에 SoT 밖 엣지: {sorted(extra)}'\nE   AssertionError: POLE_SCHEMA(Text2Cypher)에 SoT 밖 엣지: ['sameAs']\nE   assert not {'sameAs'}"
+    },
+    {
+      "test": "tests.test_t2c_v37_helpers.TestWrapNativeCypher::test_dot_access_return_uses_col_alias",
+      "failure": "tests/test_t2c_v37_helpers.py:28: in test_dot_access_return_uses_col_alias\n    assert \"(col0 agtype, col1 agtype)\" in out\nE   assert '(col0 agtype, col1 agtype)' in \"SELECT * FROM cypher('tccop_graph_v6', $$ MATCH (d:vt_dev) RETURN d $$) AS (d agtype);\""
+    }
+  ],
+  "test_expected_failures": [
+    {
+      "test": "tests.test_pattern_network_analysis.TestSameLabelRequiredNodeBug::test_money_laundering_valid_chain_should_pass",
+      "reason": "_match_pattern 이 같은 라벨 필수노드를 구분하지 못함 → 올바른 자금세탁 체인도 0.4점(임계 0.75 미만)으로 오탐"
+    }
+  ],
+  "baseline": {
+    "date": "2026-09-17",
+    "initial_code_commit": "64b6d04",
+    "final_commit": "75401a2",
+    "tracked_files": 622,
+    "python_files": 231,
+    "python_lines": 61852,
+    "markdown_files": 154,
+    "route_declarations": 92,
+    "syntax_errors": [],
+    "external_services_used": false,
+    "tests_collected": 293,
+    "test_execution": {
+      "passed": 236,
+      "failed": 3,
+      "xfailed": 1
+    },
+    "packages": {
+      "flask": "3.0.0",
+      "psycopg2-binary": "2.9.9",
+      "openai": "2.15.0",
+      "langgraph": "0.6.11",
+      "pandas": "2.1.4",
+      "numpy": "1.26.4",
+      "networkx": "3.2.1",
+      "pytest": "8.4.2"
+    },
+    "report_completed": "2026-09-18"
+  }
+}

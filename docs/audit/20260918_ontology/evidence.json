@@ -1,0 +1,142 @@
+{
+  "snapshot": "39b78ec",
+  "counts": {
+    "nodes": 25,
+    "edges": 72,
+    "active_edges": 70,
+    "layers": 6
+  },
+  "canonical_not_declared": {
+    "Device": {
+      "canonical": "dev_id",
+      "properties": [
+        "device_id"
+      ],
+      "missing": [
+        "dev_id"
+      ]
+    },
+    "Transfer": {
+      "canonical": "transfer_id",
+      "properties": [
+        "event_id"
+      ],
+      "missing": [
+        "transfer_id"
+      ]
+    },
+    "Call": {
+      "canonical": "call_id",
+      "properties": [
+        "event_id"
+      ],
+      "missing": [
+        "call_id"
+      ]
+    },
+    "Message": {
+      "canonical": "msg_id",
+      "properties": [
+        "event_id"
+      ],
+      "missing": [
+        "msg_id"
+      ]
+    },
+    "Impersonation": {
+      "canonical": "impersonation_id",
+      "properties": [
+        "event_id"
+      ],
+      "missing": [
+        "impersonation_id"
+      ]
+    }
+  },
+  "handoff_core_sync": {
+    "ENTITIES": true,
+    "NODE_ID_STANDARD": true,
+    "EDGE_META_SCHEMA": true,
+    "GDB_LABEL_MAP": true,
+    "relation_contracts": true
+  },
+  "abstract_endpoints": [
+    [
+      "linked_id",
+      "domain",
+      "Object"
+    ],
+    [
+      "recorded_in",
+      "domain",
+      "Any"
+    ],
+    [
+      "occurred_at",
+      "domain",
+      "Any"
+    ],
+    [
+      "owns",
+      "range",
+      "Any"
+    ],
+    [
+      "linked_to",
+      "domain",
+      "Any"
+    ],
+    [
+      "linked_to",
+      "range",
+      "Any"
+    ],
+    [
+      "sourced_from",
+      "domain",
+      "Any"
+    ],
+    [
+      "used_for",
+      "domain",
+      "Any"
+    ],
+    [
+      "operates",
+      "range",
+      "Any"
+    ],
+    [
+      "contains_file",
+      "domain",
+      "Any"
+    ],
+    [
+      "performed_by",
+      "domain",
+      "Any"
+    ],
+    [
+      "located_at",
+      "domain",
+      "Any"
+    ]
+  ],
+  "zip_case_key": {
+    "canonical_field": "flnm",
+    "id_formats": [
+      "plain"
+    ],
+    "default_format": "plain"
+  },
+  "time_probe": {
+    "derived": [
+      "2026-09-01",
+      "2026-09-03"
+    ],
+    "last_observation_in_interval": false
+  },
+  "missing_key_source_exit_code": 0,
+  "missing_key_source_output": "\n══ synthetic_graph ══\n  노드 라벨 1종 · 정경 준수\n  엣지 0종 · 정경 준수\n  domain/range 준수\n  ⚠ 키 충전율 미달(스펙 canonical_field 기준):\n      vt_psn.psn_id 0/1 (0%)\n  source_id 보유: 0/1 (0%)  ⚠ 원본 대조 불가 노드 존재\n\n✅ 위반 0\n",
+  "linked_id_accepts_account": false
+}
