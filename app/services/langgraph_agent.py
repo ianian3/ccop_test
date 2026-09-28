@@ -544,7 +544,7 @@ class LangGraphAgent:
             "sent_msg", "received_msg",
             "recorded_in", "occurred_at",
             "belongs_to", "resolves_to", "contains_file", "sourced_from",
-            "sameAs", "contradicts", "used_for", "targets",
+            "same_as", "contradicts", "used_for", "targets",
             "eg_used_account", "eg_used_phone", "eg_used_ip",
             "uses_email", "owns_wallet", "uses_device",
             "accessed_from", "performed_by",
@@ -586,7 +586,7 @@ class LangGraphAgent:
             # sourced_from: 모든 노드 타입 → vt_src (None = Any)
             # 버그수정 v3.7: ("vt_psn","vt_src") 제한 → vt_case 등 방향 교정 무작동
             "sourced_from":  (None,          "vt_src"),
-            "sameAs":        ("vt_psn",      "vt_psn"),
+            "same_as":        ("vt_psn",      "vt_psn"),
             "contradicts":   ("vt_psn",      "vt_psn"),
             "used_for":      ("vt_telno",    "vt_impersonation"),
             "targets":       ("vt_impersonation", "vt_org"),

@@ -69,7 +69,7 @@ class GraphService:
         "works_at":      ("vt_psn",      "vt_org"),
         # ── PERSON 간 관계 ────────────────────────────────────────────
         "accomplice_of": ("vt_psn",      "vt_psn"),
-        "sameAs":        ("vt_psn",      "vt_psn"),
+        "same_as":        ("vt_psn",      "vt_psn"),
         "contradicts":   ("vt_psn",      "vt_psn"),
         # ── PERSON v3.4 신규 ──────────────────────────────────────────
         "operates":      ("vt_psn",      "vt_site"),

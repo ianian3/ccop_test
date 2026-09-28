@@ -366,7 +366,7 @@ class AIService:
         # 사칭 V3.2 레거시 (deprecated — 읽기 전용)
         "impersonates":   ("vt_telno",    "vt_org"),
         # 엔티티 해소
-        "sameAs":         ("vt_psn",      "vt_psn"),
+        "same_as":        ("vt_psn",      "vt_psn"),
         "contradicts":    ("vt_psn",      "vt_psn"),
     }
 

@@ -114,3 +114,12 @@ def test_standard_table_map_public_v2_matches_loader():
         if tables != pub_set:
             mismatches.append((node, sorted(tables), sorted(pub_set)))
     assert not mismatches, f'STANDARD_TABLE_MAP.public_v2 ≠ 적재 실매핑: {mismatches}'
+
+
+def test_t2c_prevalidator_accepts_sot_same_as():
+    """F08: 사전 검증기가 SoT 표기 same_as 를 거절하고 sameAs(DB 실현 'sameas' → 0건)로 유도하던 결함."""
+    from app.services.langgraph_agent import LangGraphAgent as L
+    ok, err = L._validate_cypher_schema("MATCH (a:vt_psn)-[:same_as]->(b:vt_psn) RETURN a, b")
+    assert ok, err
+    ok, err = L._validate_cypher_schema("MATCH (a:vt_psn)-[:sameAs]->(b:vt_psn) RETURN a, b")
+    assert not ok and "'same_as'" in err   # 레거시 표기는 same_as 로 교정 유도

@@ -214,7 +214,7 @@ class RdbToGraphService:
                 # 역할 엣지 (v3.0 Role-as-Edge)
                 'suspect_in', 'victim_in', 'witness_in',
                 # 엔티티 해소
-                'sameAs', 'contradicts',
+                'same_as', 'contradicts',
                 # 증거 연결
                 'eg_used_account', 'eg_used_phone', 'eg_used_ip',
                 'has_account', 'owns_phone', 'used_ip', 'linked_to',
@@ -1474,7 +1474,7 @@ class RdbToGraphService:
                 conn.commit()
             except: conn.rollback()
 
-            # 6D. 엔티티 해소 (TB_ENTITY_SAME_AS, STATUS_CD='CONFIRMED') → sameAs 엣지
+            # 6D. 엔티티 해소 (TB_ENTITY_SAME_AS, STATUS_CD='CONFIRMED') → same_as 엣지 (SoT 표기 — 미인용 sameAs 는 DB 에 'sameas' 로 실현돼 불일치)
             try:
                 cur.execute("""
                     SELECT SRC_ENTITY_TYPE, SRC_ENTITY_ID, TGT_ENTITY_TYPE, TGT_ENTITY_ID,
@@ -1496,7 +1496,7 @@ class RdbToGraphService:
                         tgt_label = label_map.get(tgt_type, tgt_type)
                         cur.execute(f"""
                             MATCH (s:{src_label} {{id: '{src_id}'}}), (t:{tgt_label} {{id: '{tgt_id}'}})
-                            MERGE (s)-[e:sameAs {{confidence: '{conf}', method: '{method}'}}]->(t)
+                            MERGE (s)-[e:same_as {{confidence: '{conf}', method: '{method}'}}]->(t)
                         """)
                         stats["edges"] += 1
                     except Exception as _e:
