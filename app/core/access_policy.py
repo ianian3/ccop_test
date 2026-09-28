@@ -96,6 +96,12 @@ def _effective_graphs(endpoint):
 def _is_ui_or_admin() -> bool:
     if session.get('ui_authorized') or session.get('admin_logged_in'):
         return True
+    # Basic Auth 배포: 전역 Basic 검사(app/__init__.py, 이 훅보다 먼저 등록)를 통과한 요청은 이미
+    # 인증된 사용자다. 세션 쿠키에 의존하지 않는다 — FLASK_ENV=production 이면 쿠키가 Secure 라
+    # HTTP(SSH 포워딩) 접속에서 재전송되지 않아 모든 내부 API 가 401 이 되던 문제 (2026-09-28 신규 인스턴스)
+    auth = request.authorization
+    if current_app.config.get('BASIC_AUTH_ENABLED') and auth is not None and auth.type == 'basic':
+        return True
     auth = request.headers.get('Authorization', '')
     if auth.startswith('Bearer '):
         from app.middleware.api_auth import validate_api_key

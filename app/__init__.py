@@ -21,6 +21,7 @@ def create_app():
     # env 미설정 시 완전 무동작 (예: skai2_vm). 헬스체크는 모니터링/watchdog 위해 예외.
     _ba_user = os.getenv('BASIC_AUTH_USER')
     _ba_pass = os.getenv('BASIC_AUTH_PASS')
+    app.config['BASIC_AUTH_ENABLED'] = bool(_ba_user and _ba_pass)
     if _ba_user and _ba_pass:
         from flask import Response
 

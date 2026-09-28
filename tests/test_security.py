@@ -450,3 +450,36 @@ class TestBasicAuthBearerSplit:
         assert r.status_code != 401
         r = basic_client.get("/", headers={"Authorization": f"Basic {tok}"})
         assert r.status_code == 200
+
+
+class TestBasicAuthIsAuthenticatedCaller:
+    """Basic Auth 배포에서 Basic 통과 요청은 세션 쿠키 없이도 내부 API 접근 (Secure 쿠키 + HTTP 접속)."""
+
+    @pytest.fixture
+    def basic_app(self, monkeypatch, app):
+        monkeypatch.setenv("BASIC_AUTH_USER", "u")
+        monkeypatch.setenv("BASIC_AUTH_PASS", "p")
+        from app import create_app
+        a = create_app()
+        a.config["TESTING"] = True
+        return a
+
+    def _hdr(self, cred):
+        import base64
+        return {"Authorization": "Basic " + base64.b64encode(cred).decode()}
+
+    def test_basic_without_session_reaches_internal_api(self, basic_app, monkeypatch):
+        from app.services.graph_service import GraphService
+        monkeypatch.setattr(GraphService, "list_graphs", staticmethod(lambda: [{"name": "g"}]))
+        c = basic_app.test_client(use_cookies=False)
+        r = c.get("/api/graph/list", headers=self._hdr(b"u:p"))
+        assert r.status_code == 200
+
+    def test_wrong_basic_still_rejected(self, basic_app):
+        c = basic_app.test_client(use_cookies=False)
+        assert c.get("/api/graph/list", headers=self._hdr(b"u:wrong")).status_code == 401
+
+    def test_no_basic_deployment_still_requires_session(self, client):
+        """Basic 미설정 배포에서 임의 Basic 헤더로 우회 불가."""
+        r = client.get("/api/graph/list", headers=self._hdr(b"x:y"))
+        assert r.status_code == 401
