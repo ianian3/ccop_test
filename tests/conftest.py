@@ -10,6 +10,15 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
+@pytest.fixture(autouse=True)
+def _isolate_api_key_files(tmp_path, monkeypatch):
+    """API 키 저장소를 임시 파일로 격리 — 테스트가 실제 data/api_keys.json 에
+    test_corp·deact_test 키를 영구 누적하던 오염 방지 (파트너 생성 테스트 → save_api_keys)."""
+    from app.middleware import api_auth
+    monkeypatch.setattr(api_auth, "_API_KEYS_FILE", str(tmp_path / "api_keys.json"))
+    monkeypatch.setattr(api_auth, "_PLAINTEXT_KEYS_FILE", str(tmp_path / "api_keys_plaintext.json"))
+
+
 @pytest.fixture
 def app():
     """Create Flask app for testing"""
