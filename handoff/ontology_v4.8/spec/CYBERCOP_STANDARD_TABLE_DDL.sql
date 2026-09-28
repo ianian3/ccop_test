@@ -15,6 +15,16 @@
 --  - 컬럼명 및 주석 정비
 --  - V4.0 호환성 패치 적용
 --
+--  
+-- 20260812 적용 사항
+-- - 수사단서 연관관계분석 스키마(20260810) 문서에 따른 DDL 수정 작업
+-- - 신규 생성되는 테이블 기관대표자관계 테이블에 대한 표준화 작업
+-- - TB_PSN_M 테이블 컬럼 추가에 따른 표준화 작업
+--
+-- 20260813 적용사항
+-- - 시스템로그인이벤트내역 테이블 컬럼 추가
+-- 컬럼명: 접속타입코드
+--
 -- ============================================================
 
 -- ============================================================
@@ -72,7 +82,7 @@ CREATE TABLE TB_DATA_CLCT_L
     TOT_NOCS    numeric(10) DEFAULT 0,
     SCS_NOCS    numeric(10) DEFAULT 0,
     FAIL_NOCS    numeric(10) DEFAULT 0,
-    JOB_PRCS_RSLT_CD    varchar(5),
+    JOB_PRCS_RSLT_CD    varchar(10),
     ERR_MSG_CN    varchar(4000)
 );
 
@@ -397,7 +407,8 @@ CREATE TABLE TB_PSN_M
     CRT_DT    timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
     MDFCN_DT    timestamp with time zone,
     USER_ID    varchar(20),
-    ANMT_PSN_YN    character(1) DEFAULT 'N'
+    ANMT_PSN_YN    character(1) DEFAULT 'N',
+    CR_NM    varchar(100)
 );
 
 COMMENT ON COLUMN TB_PSN_M.PSN_ID IS '사람아이디';
@@ -415,6 +426,7 @@ COMMENT ON COLUMN TB_PSN_M.CRT_DT IS '생성일시';
 COMMENT ON COLUMN TB_PSN_M.MDFCN_DT IS '수정일시';
 COMMENT ON COLUMN TB_PSN_M.USER_ID IS '사용자아이디';
 COMMENT ON COLUMN TB_PSN_M.ANMT_PSN_YN IS '익명사람여부';
+COMMENT ON COLUMN public.TB_PSN_M.CR_NM IS '직업명';
 
 COMMENT ON TABLE TB_PSN_M IS '사람기본';
 
@@ -430,7 +442,7 @@ CREATE TABLE TB_INST_M
 (
     INST_ID    varchar(200) NOT NULL,
     INST_NM    varchar(200) NOT NULL,
-    INST_SE_CD    varchar(2),
+    INST_SE_CD    varchar(20),
     BRNO    character(10),
     BANK_CD    varchar(30),
     ADDR    varchar(200),
@@ -456,6 +468,37 @@ ALTER TABLE TB_INST_M
  ADD CONSTRAINT TB_INST_M_PK PRIMARY KEY 
  USING INDEX TB_INST_M_PK;
 
+-- 기관대표자관계내역 테이블
+CREATE TABLE TB_INST_RPRSV_REL_T
+(
+    REL_SN     BIGSERIAL NOT NULL,
+    INST_ID    varchar(200) NOT NULL,
+    PSN_ID     varchar(50) NOT NULL,
+    RPRS_SE_CD    varchar(20),
+    VLD_BGNG_DT    timestamp with time zone,
+    VLD_END_DT    timestamp with time zone,
+    SRC_ID    varchar(200),
+    CRT_DT    timestamp with time zone NOT NULL    
+);
+
+COMMENT ON COLUMN TB_INST_RPRSV_REL_T.REL_SN IS '관계일련번호';
+COMMENT ON COLUMN TB_INST_RPRSV_REL_T.INST_ID IS '기관아이디';
+COMMENT ON COLUMN TB_INST_RPRSV_REL_T.PSN_ID IS '사람아이디';
+COMMENT ON COLUMN TB_INST_RPRSV_REL_T.RPRS_SE_CD IS '대표구분코드';
+COMMENT ON COLUMN TB_INST_RPRSV_REL_T.VLD_BGNG_DT IS '유효시작일시';
+COMMENT ON COLUMN TB_INST_RPRSV_REL_T.VLD_END_DT IS '유효종료일시';
+COMMENT ON COLUMN TB_INST_RPRSV_REL_T.SRC_ID IS '출처아이디';
+COMMENT ON COLUMN TB_INST_RPRSV_REL_T.CRT_DT IS '생성일시';
+
+COMMENT ON TABLE TB_INST_RPRSV_REL_T IS '기관대표자관계내역';
+
+CREATE UNIQUE INDEX TB_INST_RPRSV_REL_T_PK ON TB_INST_RPRSV_REL_T
+( REL_SN );
+
+ALTER TABLE TB_INST_RPRSV_REL_T
+ ADD CONSTRAINT TB_INST_RPRSV_REL_T_PK PRIMARY KEY 
+ USING INDEX TB_INST_RPRSV_REL_T_PK;
+
 -- ============================================================
 -- 3.5 금융 도메인
 -- 계좌 및 거래 정보 관리
@@ -468,7 +511,7 @@ CREATE TABLE TB_FNNC_BACNT_M
     BANK_CD    varchar(30) NOT NULL,
     BANK_NM    varchar(100),
     DPSTR_NM    varchar(100),
-    BACNT_TYP_CD    character(3),
+    BACNT_TYP_CD    varchar(20),
     BACNT_ESTBL_YMD    character(8),
     INST_ID    varchar(200),
     ACNT_LCK_YN    character(1) DEFAULT 'N',
@@ -1143,7 +1186,7 @@ CREATE TABLE TB_WEB_DMN_M
 (
     URL_ADDR    varchar(2000) NOT NULL,
     DMN_ADDR    varchar(200),
-    SITE_TYP_CD    character(3),
+    SITE_TYP_CD    varchar(10),
     MLGN_YN    character(1) DEFAULT 'N',
     IP_ADDR    varchar(15),
     PGE_HASH_VL    varchar(64),
@@ -1224,7 +1267,8 @@ CREATE TABLE TB_SYS_LGN_EVT_T
     CFRT_GRD_CD    numeric(3) DEFAULT 3,
     CLCT_DT    timestamp with time zone,
     RCRD_CRT_DT    timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
-    RCRD_MDFCN_DT    timestamp with time zone DEFAULT CURRENT_TIMESTAMP
+    RCRD_MDFCN_DT    timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+    CNTN_TYP_CD    varchar(10)
 );
 
 COMMENT ON COLUMN TB_SYS_LGN_EVT_T.LGN_SN IS '로그인일련번호';
@@ -1243,6 +1287,7 @@ COMMENT ON COLUMN TB_SYS_LGN_EVT_T.CFRT_GRD_CD IS '신뢰도등급코드';
 COMMENT ON COLUMN TB_SYS_LGN_EVT_T.CLCT_DT IS '수집일시';
 COMMENT ON COLUMN TB_SYS_LGN_EVT_T.RCRD_CRT_DT IS '레코드생성일시';
 COMMENT ON COLUMN TB_SYS_LGN_EVT_T.RCRD_MDFCN_DT IS '레코드수정일시';
+COMMENT ON COLUMN public.TB_SYS_LGN_EVT_T.CNTN_TYP_CD IS '접속타입코드';
 
 COMMENT ON TABLE TB_SYS_LGN_EVT_T IS '시스템로그인이벤트내역';
 

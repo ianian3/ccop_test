@@ -12,7 +12,7 @@
 | 1 | **`spec/SCHEMA_CATALOG_ACTUAL.html`** | 브라우저로 열면 **실제 적재된 스키마**를 노드 클릭으로 탐색. 정의보다 이걸 먼저 보십시오 |
 | 2 | `spec/CCOP_Ontology_V4.8_node_edge_attrs.xlsx` | 노드·엣지·속성 정본(검토·회신용 시트) |
 | 3 | `code/ccop_ontology_v48.py` | 기계가 읽는 정의 SoT — 이식·검증의 기준 |
-| 4 | `spec/CYBERCOP_STANDARD_TABLE_DDL.sql` | RDB 표준 51테이블 (온톨로지↔RDB 대응) |
+| 4 | `spec/CYBERCOP_STANDARD_TABLE_DDL.sql` | RDB 표준 52테이블 (온톨로지↔RDB 대응, 20260911판) |
 | 5 | `code/audit_ontology_v48.py` | 귀사 적재 결과를 스스로 검증하는 도구 |
 
 ---
@@ -185,7 +185,7 @@ MATCH (i:vt_id) WHERE i.platform='kakao' MATCH (p:vt_psn {name:'홍길동'})-[:u
 
 ## 6. RDB 표준과의 관계
 
-`spec/CYBERCOP_STANDARD_TABLE_DDL.sql` — 51테이블/전컬럼이 테이블명세서와 정합합니다.
+`spec/CYBERCOP_STANDARD_TABLE_DDL.sql` — 52테이블/전컬럼이 테이블명세서(v0.9.6)와 정합합니다(20260911판 — 기관대표자관계 TB_INST_RPRSV_REL_T 추가).
 온톨로지↔RDB 매핑은 `O.STANDARD_TABLE_MAP` 에 선언돼 있고, **실사용 12라벨 전부(12/12)**
 표준 테이블을 갖습니다. 값은 표준 이력별로 3키를 갖는 중첩 구조이니 `standard` 를 쓰십시오:
 
@@ -216,7 +216,7 @@ handoff/ontology_v4.8/
 │   ├── SCHEMA_CATALOG_ACTUAL.html             실측 스키마 (인터랙티브 — 먼저 보십시오)
 │   ├── CCOP_Ontology_V4.8_node_edge_attrs.xlsx    정본 (노드·엣지·속성)
 │   ├── CCOP_ONTOLOGY_DESIGN_HISTORY.md        V4.0→V4.8 설계 이력·변경 사유
-│   ├── CYBERCOP_STANDARD_TABLE_DDL.sql        RDB 표준 51테이블
+│   ├── CYBERCOP_STANDARD_TABLE_DDL.sql        RDB 표준 52테이블
 │   └── PARTNER_DATA_STANDARD.md               협력기관 데이터 표준 가이드
 └── code/
     ├── ccop_ontology_v48.py                   정의 스펙 (외부 의존 0 · 1,215행)
