@@ -123,3 +123,16 @@ def test_t2c_prevalidator_accepts_sot_same_as():
     assert ok, err
     ok, err = L._validate_cypher_schema("MATCH (a:vt_psn)-[:sameAs]->(b:vt_psn) RETURN a, b")
     assert not ok and "'same_as'" in err   # 레거시 표기는 same_as 로 교정 유도
+
+
+def test_case_nodes_keyed_by_incdnt_no():
+    """B-갭1: vt_case 정경 키는 incdnt_no(SoT). RDB→그래프 적재가 사건번호를 flnm 키로 MERGE 하던 결함 재발 방지."""
+    import pathlib, re
+    root = pathlib.Path(__file__).resolve().parent.parent
+    for rel in ("app/services/rdb_to_graph_service.py",
+                "handoff/csv_spec_v4.8/load_csv_to_graph.py", "scripts/load_partner_csv.py"):
+        src = (root / rel).read_text()
+        bad = re.findall(r"vt_case\s*\{\{?\s*flnm\s*:", src)
+        assert not bad, f"{rel}: vt_case 를 flnm 키로 조회/생성 {len(bad)}곳"
+    from app.middleware.services.ontology_service import KICSCrimeDomainOntology as O
+    assert O.ENTITIES["Case"]["properties"][0] == "incdnt_no"

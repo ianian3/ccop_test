@@ -1418,6 +1418,7 @@ class GraphService:
             q = f"""
             MATCH (v)-[r]-(n) 
             WHERE v.flnm CONTAINS '{target_kw}'
+               OR v.incdnt_no CONTAINS '{target_kw}'
                OR v.telno CONTAINS '{target_kw}'
                OR v.phone CONTAINS '{target_kw}'
                OR v.bacnt CONTAINS '{target_kw}'
@@ -1480,6 +1481,7 @@ class GraphService:
             q = f"""
             MATCH p=(v)-[*1..6]-(n) 
             WHERE v.flnm CONTAINS '{target_kw}'
+               OR v.incdnt_no CONTAINS '{target_kw}'
                OR v.name CONTAINS '{target_kw}'
                OR v.nickname CONTAINS '{target_kw}'
                OR v.org_name CONTAINS '{target_kw}'

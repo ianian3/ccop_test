@@ -17,8 +17,9 @@ CANON_EDGES = set(REL.keys())
 DEPRECATED = {k for k, v in REL.items() if v.get('deprecated')}
 C2L = O.GDB_LABEL_MAP  # Concept → vt_label
 
+# vt_case 정경 키 = incdnt_no(SoT, 2026-09-18 승격). EP 시드 그래프는 아직 flnm 만 있어 미달로 잡힌다(갭).
 KP = {'vt_psn': 'name', 'vt_bacnt': 'account_no', 'vt_telno': 'telno', 'vt_ip': 'ip_addr',
-      'vt_id': 'id_val', 'vt_case': 'flnm', 'vt_org': 'org_name', 'vt_atm': 'atm_nm',
+      'vt_id': 'id_val', 'vt_case': 'incdnt_no', 'vt_org': 'org_name', 'vt_atm': 'atm_nm',
       'vt_email': 'email_addr', 'vt_src': 'src_name', 'vt_site': 'url_addr'}
 
 conn = psycopg2.connect(dbname=os.getenv('DB_NAME'), user=os.getenv('DB_USER'),

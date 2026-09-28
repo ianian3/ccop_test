@@ -517,7 +517,7 @@ def graph_briefing():
             sus = {}
             for nm, role, birth, addr, case in q(
                     "MATCH (p:vt_psn)-[:suspect_in]->(c:vt_case) "
-                    "RETURN p.name, p.role, p.birth_partial, p.addr_base, c.flnm"):
+                    "RETURN p.name, p.role, p.birth_partial, p.addr_base, coalesce(c.incdnt_no, c.flnm)"):
                 sus[nm] = {'name': nm, 'role': role or '피의자', 'birth': birth, 'addr': addr,
                            'case': case, 'depart': None}
             for nm, dt, dest in q(

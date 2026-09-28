@@ -2370,7 +2370,7 @@ function showTruncateBanner(metas){
                         'width': '85px', 'height': '85px', 'background-image': '/static/images/person.png', 'background-fit': 'cover', 'border-color': '#6c5ce7', 'border-width': 6, 'shadow-blur': 25, 'shadow-color': '#6c5ce7', 'z-index': 9999, 'label': function (ele) {
                             const p = ele.data('props') || {};
                             const role = p.role_cd ? getCodeName('ROLE', p.role_cd) : (p.role || '');
-                            return (p.name || p.flnm || ele.data('id')) + (role ? `\n(${role})` : '');
+                            return (p.name || p.incdnt_no || p.flnm || ele.data('id')) + (role ? `\n(${role})` : '');
                         }, 'text-wrap': 'wrap'
                     }
                 },
@@ -2472,7 +2472,7 @@ function showTruncateBanner(metas){
                 { selector: 'node[badge]', style: {
                     'label': function (ele) {
                         const p = ele.data('props') || {};
-                        const base = p.name || p.title || p.flnm || p.val || p.event_type || p.type || ele.data('label') || 'Node';
+                        const base = p.name || p.title || p.incdnt_no || p.flnm || p.val || p.event_type || p.type || ele.data('label') || 'Node';
                         return base + '  ⬤' + ele.data('badge');
                     },
                     'border-width': 3, 'border-color': '#f1c40f', 'font-weight': 'bold'
@@ -3026,7 +3026,7 @@ function showTruncateBanner(metas){
 
         // ── 네트워크 분석 알고리즘 UI (CALL ccop.algo.* → /api/graph/algo) ──
         const _ALGO_NAME = { pagerank: 'PageRank(영향력)', betweenness: '매개중심성(중개허브)', degree_cent: '연결중심성', eigenvector: '고유벡터중심성', kcore: 'k-core(밀집참여)', clustering: '삼각형계수(결속)', degree_live: '연결수(즉석 — 지표 미계산 폴백)' };
-        function _nodeKey(n) { const p = n.data('props') || {}; return String(p.name || p.account_no || p.telno || p.ip_addr || p.id_val || p.flnm || p.org_name || p.atm_nm || p.email_addr || p.src_name || ''); }
+        function _nodeKey(n) { const p = n.data('props') || {}; return String(p.name || p.account_no || p.telno || p.ip_addr || p.id_val || p.incdnt_no || p.flnm || p.org_name || p.atm_nm || p.email_addr || p.src_name || ''); }
         function runAlgo() {
             const sel = document.getElementById('algoSelect').value;
             const graph = document.getElementById('targetGraphInfo').value;
@@ -4547,7 +4547,7 @@ ${snap?sect('7. 그래프 스냅샷 (현재 탐색 화면)')+`<img class="snap" 
 
         function _pathNodeName(node) {
             const p = (node && node.data('props')) || {};
-            return p.name || p.actno || p.telno || p.flnm || (node ? node.id() : '');
+            return p.name || p.actno || p.telno || p.incdnt_no || p.flnm || (node ? node.id() : '');
         }
 
         function clearPathHighlight() {

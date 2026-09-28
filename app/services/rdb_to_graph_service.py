@@ -279,9 +279,9 @@ class RdbToGraphService:
                     for r in rows:
                         try:
                             cid, cno, cname, ctype, cdate, org = [safe_str(x) for x in r]
-                            flnm = cno or cid
-                            props = f"{{flnm: '{flnm}', crime: '{cname}', crime_type: '{ctype}', date: '{cdate}', org: '{org}', type: '사건'}}"
-                            cur.execute(f"MERGE (n:vt_case {{flnm: '{flnm}'}}) SET n = {props}")
+                            case_key = cno or cid
+                            props = f"{{incdnt_no: '{case_key}', crime: '{cname}', crime_type: '{ctype}', date: '{cdate}', org: '{org}', type: '사건'}}"
+                            cur.execute(f"MERGE (n:vt_case {{incdnt_no: '{case_key}'}}) SET n = {props}")
                             stats["nodes"] += 1; stats["cases"] += 1
                         except Exception as _e:
                             logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
@@ -297,9 +297,9 @@ class RdbToGraphService:
                     rows = cur.fetchall()
                     for r in rows:
                         try:
-                            flnm = safe_str(r[0])
-                            props = f"{{flnm: '{flnm}', type: '사건'}}"
-                            cur.execute(f"MERGE (n:vt_case {{flnm: '{flnm}'}}) ON CREATE SET n = {props}")
+                            case_key = safe_str(r[0])
+                            props = f"{{incdnt_no: '{case_key}', type: '사건'}}"
+                            cur.execute(f"MERGE (n:vt_case {{incdnt_no: '{case_key}'}}) ON CREATE SET n = {props}")
                             stats["nodes"] += 1; stats["cases"] += 1
                         except Exception as _e:
                             logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
@@ -431,7 +431,7 @@ class RdbToGraphService:
                             if not pid or not incdnt: continue
                             edge_type = 'suspect_in' if '피의자' in role else ('victim_in' if '피해자' in role else 'witness_in')
                             cur.execute(f"""
-                                MATCH (p:vt_psn {{id: '{pid}'}}), (c:vt_case {{flnm: '{incdnt}'}})
+                                MATCH (p:vt_psn {{id: '{pid}'}}), (c:vt_case {{incdnt_no: '{incdnt}'}})
                                 MERGE (p)-[:{edge_type} {{role: '{role}'}}]->(c)
                             """)
                             stats["edges"] += 1; stats["relations"] += 1
@@ -478,14 +478,14 @@ class RdbToGraphService:
             except Exception:
                 conn.rollback()
 
-            # 3-1. Case (TB_INCDNT_MST)
+            # 3-1. Case (TB_INCDNT_MST) — 식별 키 incdnt_no(SoT canonical). test_v40.tb_incdnt_mst.flnm 에는 현재 사건명이 들어 있어 crime 으로만 쓴다(표준 DDL 은 INCDNT_NM=사건명·FLNM=성명 — 의미 정리 미결)
             cur.execute(f'SELECT incdnt_no, COALESCE(flnm, incdnt_no), COALESCE(occurred_at::text, %s) FROM "{source_schema}".tb_incdnt_mst', ('',))
             rows = cur.fetchall()
             for r in rows:
                 try:
-                    flnm, crime, dt = safe_str(r[0]), safe_str(r[1]), safe_str(r[2])
-                    props = f"{{flnm: '{flnm}', crime: '{crime}', date: '{dt}', type: '사건'}}"
-                    cur.execute(f"MERGE (n:vt_case {{flnm: '{flnm}'}}) SET n = {props}")
+                    case_key, crime, dt = safe_str(r[0]), safe_str(r[1]), safe_str(r[2])
+                    props = f"{{incdnt_no: '{case_key}', crime: '{crime}', date: '{dt}', type: '사건'}}"
+                    cur.execute(f"MERGE (n:vt_case {{incdnt_no: '{case_key}'}}) SET n = {props}")
                     stats["nodes"] += 1; stats["cases"] += 1
                 except Exception as _e:
                     logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
@@ -662,10 +662,10 @@ class RdbToGraphService:
                 try:
                     case_no, actno, telno = safe_str(r[1]), safe_str(r[2]), safe_str(r[3])
                     if actno:
-                        cur.execute(f"MATCH (c:vt_case {{flnm: '{case_no}'}}), (a:vt_bacnt {{account_no: '{actno}'}}) MERGE (c)-[:eg_used_account]->(a)")
+                        cur.execute(f"MATCH (c:vt_case {{incdnt_no: '{case_no}'}}), (a:vt_bacnt {{account_no: '{actno}'}}) MERGE (c)-[:eg_used_account]->(a)")
                         stats["edges"] += 1
                     if telno:
-                        cur.execute(f"MATCH (c:vt_case {{flnm: '{case_no}'}}), (t:vt_telno {{telno: '{telno}'}}) MERGE (c)-[:eg_used_phone]->(t)")
+                        cur.execute(f"MATCH (c:vt_case {{incdnt_no: '{case_no}'}}), (t:vt_telno {{telno: '{telno}'}}) MERGE (c)-[:eg_used_phone]->(t)")
                         stats["edges"] += 1
                 except Exception as _e:
                     logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
@@ -762,7 +762,7 @@ class RdbToGraphService:
                         if case_no and pid:
                             # v3.2 Role-as-Edge: ROLE_CD → 역할별 엣지 타입
                             role_edge = 'suspect_in' if role == 'SUSPECT' else 'victim_in' if role == 'VICTIM' else 'witness_in' if role == 'WITNESS' else 'involves'
-                            cur.execute(f"MATCH (c:vt_case {{flnm: '{case_no}'}}), (p:vt_psn {{id: '{pid}'}}) MERGE (p)-[r:{role_edge}]->(c) SET r.evid_grade = 'A', r.src_tier = 1")
+                            cur.execute(f"MATCH (c:vt_case {{incdnt_no: '{case_no}'}}), (p:vt_psn {{id: '{pid}'}}) MERGE (p)-[r:{role_edge}]->(c) SET r.evid_grade = 'A', r.src_tier = 1")
                             stats["edges"] += 1
                     except Exception as _e:
                         logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
@@ -986,7 +986,7 @@ class RdbToGraphService:
                 try:
                     case1, case2 = safe_str(r[0]), safe_str(r[1])
                     if case1 and case2:
-                        cur.execute(f"MATCH (c1:vt_case {{flnm: '{case1}'}}), (c2:vt_case {{flnm: '{case2}'}}) MERGE (c1)-[:related_case {{confidence: '0.75', reason: 'shared_evidence'}}]->(c2)")
+                        cur.execute(f"MATCH (c1:vt_case {{incdnt_no: '{case1}'}}), (c2:vt_case {{incdnt_no: '{case2}'}}) MERGE (c1)-[:related_case {{confidence: '0.75', reason: 'shared_evidence'}}]->(c2)")
                         stats["edges"] += 1
                 except Exception as _e:
                     logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
@@ -1081,7 +1081,7 @@ class RdbToGraphService:
 
                         # 진정서 → 사건 연결 (filed_as: Petition→Case, v3 표준)
                         if case_no:
-                            cur.execute(f"MATCH (p:vt_petition {{petition_id: '{pid}'}}), (c:vt_case {{flnm: '{case_no}'}}) MERGE (p)-[:filed_as]->(c)")
+                            cur.execute(f"MATCH (p:vt_petition {{petition_id: '{pid}'}}), (c:vt_case {{incdnt_no: '{case_no}'}}) MERGE (p)-[:filed_as]->(c)")
                             stats["edges"] += 1
                         # 출처 연결
                         if src_id:
@@ -1749,7 +1749,7 @@ class RdbToGraphService:
                         if etype not in evid_type_map: continue
                         label, key, edge_type = evid_type_map[etype]
                         cur.execute(f"""
-                            MATCH (c:vt_case {{flnm: '{case_no}'}}),
+                            MATCH (c:vt_case {{incdnt_no: '{case_no}'}}),
                                   (e:{label} {{{key}: '{eval_}'}})
                             MERGE (c)-[r:{edge_type} {{evid_grade: 'A', src_tier: 1}}]->(e)
                         """)
@@ -2114,9 +2114,9 @@ class RdbToGraphService:
             if not row:
                 return False, f"사건번호 {case_no} 없음"
             nm, se, st, odt, cdt = safe_str(row[1]), safe_str(row[2]), safe_str(row[3]), safe_str(row[4]), safe_str(row[5])
-            props = (f"{{flnm: '{case_s}', case_name: '{nm}', case_type: '{se}', "
+            props = (f"{{incdnt_no: '{case_s}', case_name: '{nm}', case_type: '{se}', "
                      f"status: '{st}', open_date: '{odt}', close_date: '{cdt}', type: '사건'}}")
-            cur.execute(f"MERGE (c:vt_case {{flnm: '{case_s}'}}) SET c = {props}")
+            cur.execute(f"MERGE (c:vt_case {{incdnt_no: '{case_s}'}}) SET c = {props}")
             stats["nodes"] += 1
             conn.commit()
 
@@ -2139,7 +2139,7 @@ class RdbToGraphService:
                     cur.execute(f"MERGE (p:vt_psn {{id: '{pid}'}}) SET p = {props_p}")
                     stats["nodes"] += 1
                     role_edge = 'suspect_in' if role == 'SUSPECT' else 'victim_in' if role == 'VICTIM' else 'witness_in' if role == 'WITNESS' else 'involves'
-                    cur.execute(f"MATCH (c:vt_case {{flnm: '{case_s}'}}), (p:vt_psn {{id: '{pid}'}}) MERGE (p)-[r:{role_edge}]->(c) SET r.evid_grade = 'A', r.src_tier = 1")
+                    cur.execute(f"MATCH (c:vt_case {{incdnt_no: '{case_s}'}}), (p:vt_psn {{id: '{pid}'}}) MERGE (p)-[r:{role_edge}]->(c) SET r.evid_grade = 'A', r.src_tier = 1")
                     stats["edges"] += 1
                     # sourced_from: 인물 → vt_src (v3.6 확정: tier 1은 엣지 생성)
                     cur.execute(f"MATCH (s:vt_src {{src_id: 'src-kics-official'}}), (p:vt_psn {{id: '{pid}'}}) MERGE (p)-[:sourced_from {{src_tier: 1, rec_created: toString(datetime())}}]->(s)")
