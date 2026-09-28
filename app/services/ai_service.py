@@ -424,3 +424,149 @@ class AIService:
             logger.debug(f"[Direction Fix] 교정 스킵: {e}")
             return cypher
 
+
+    # ------------------------------------------------------------------
+    # CSV 컬럼 매핑 추론 (routes.py /api/etl/ai-suggest, /api/rdb/analyze-csv)
+    #   과거 리팩터링(f2c93ab, 62e9f52)에서 삭제돼 AttributeError→500 이던 것을 복원 (감사 F04).
+    #   LLM 응답은 입력 헤더·허용 키로만 걸러서 반환 — 환각 컬럼/타입이 UI·적재로 새지 않도록.
+    # ------------------------------------------------------------------
+    RDB_COLUMN_TYPES = (
+        'case', 'crime', 'suspect', 'person', 'nickname', 'phone', 'caller', 'callee',
+        'account', 'sender', 'receiver', 'amount', 'date', 'ip', 'site', 'file', 'atm', 'ignore',
+    )
+
+    @staticmethod
+    def _parse_llm_json(content: str):
+        """LLM 응답에서 JSON 객체 추출 (```json 펜스·앞뒤 잡음 허용)."""
+        content = (content or '').strip().replace('```json', '').replace('```', '').strip()
+        try:
+            return json.loads(content)
+        except ValueError:
+            m = re.search(r'\{.*\}', content, re.DOTALL)
+            if not m:
+                raise
+            return json.loads(m.group(0))
+
+    @staticmethod
+    def suggest_mapping(headers, sample_row):
+        """CSV 헤더 → 그래프 스키마(Source -[Edge]-> Target + 속성) 매핑 추천.
+
+        Returns: {"sourceCol", "targetCol", "edgeType", "properties": [{col, target, key}]}
+        LLM 호출/파싱 실패는 예외로 올린다 (호출측에서 오류 응답).
+        """
+        headers = [str(h) for h in headers]
+        prompt = f"""
+You are a Cybercrime Investigation Data Architect.
+Analyze the CSV headers and sample row to suggest the best Graph Database Schema mapping (Source -> Edge -> Target).
+
+[Domain Context: Cyber Financial Crime Investigation]
+The data involves phishing, smishing, and investment fraud.
+- Case Info: 경찰서, 접수번호, 수사관, 범죄종류, 피해금액, 사건개요
+- Financial: 은행, 계좌번호, 투자자산종류, 거래소구분
+- Digital: IP 주소, URL, ID, 닉네임, 통신사, 휴대전화
+
+[Input Data]
+Headers: {headers}
+Sample Row: {sample_row}
+
+[Mapping Logic Priorities]
+1. Source Node: Case Identifier ('접수번호', '사건번호') first, else Suspect Identifier.
+2. Target Node: strongest connector — 계좌번호/지갑주소 > 휴대전화/IP 주소 > URL/ID/닉네임.
+3. Edge Type: Account → "MONEY_FLOW"/"USED_ACCOUNT", Phone → "USED_PHONE", IP/URL → "DIGITAL_TRACE", else "RELATED_TO".
+4. Properties: remaining columns. Contextual info (금액, 일시, 수법) → "edge"; static info → "source" or "target".
+
+[Output JSON Format]
+{{"sourceCol": "EXACT_HEADER_NAME", "targetCol": "EXACT_HEADER_NAME", "edgeType": "SUGGESTED_EDGE_TYPE",
+  "properties": [{{"col": "EXACT_HEADER_NAME", "target": "edge", "key": "amount_krw"}}]}}
+
+Constraint: Output RAW JSON ONLY. Keep 'col' exactly as in headers; use English snake_case for 'key'.
+"""
+        client = AIService.get_client()
+        resp = client.chat.completions.create(
+            model=current_app.config.get('SLLM_MODEL_NAME', 'gpt-4o'),
+            messages=[
+                {"role": "system", "content": "You are a JSON generator. Output raw JSON only."},
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0,
+        )
+        raw = AIService._parse_llm_json(resp.choices[0].message.content)
+        if not isinstance(raw, dict):
+            raise ValueError("LLM 매핑 응답이 JSON 객체가 아님")
+
+        header_set = set(headers)
+        edge_type = str(raw.get('edgeType') or 'RELATED_TO')
+        if not re.match(r'^[A-Za-z_][A-Za-z0-9_]*$', edge_type):
+            edge_type = 'RELATED_TO'
+        props = []
+        for p in raw.get('properties') or []:
+            if not isinstance(p, dict) or p.get('col') not in header_set:
+                continue
+            target = p.get('target') if p.get('target') in ('edge', 'source', 'target') else 'edge'
+            key = str(p.get('key') or p['col'])
+            props.append({"col": p['col'], "target": target, "key": key})
+        return {
+            "sourceCol": raw.get('sourceCol') if raw.get('sourceCol') in header_set else None,
+            "targetCol": raw.get('targetCol') if raw.get('targetCol') in header_set else None,
+            "edgeType": edge_type,
+            "properties": props,
+        }
+
+    @staticmethod
+    def infer_column_mapping_for_rdb(columns, sample_rows):
+        """규칙 매칭에 실패한 CSV 컬럼의 KICS RDB 의미 타입을 LLM 으로 추론.
+
+        Returns: {컬럼명: RDB_COLUMN_TYPES 중 하나}. LLM 실패 시 {} (규칙 매핑만으로 진행).
+        """
+        if not columns:
+            return {}
+        sample_preview = []
+        for col in columns:
+            values = [str(row.get(col, ""))[:50] for row in (sample_rows or [])[:3] if row.get(col)]
+            sample_preview.append(f"- {col}: {values}")
+
+        prompt = f"""
+당신은 대한민국 경찰청 사이버 범죄 데이터베이스(RDB) 관리자입니다.
+다음은 범죄 수사 증거 CSV 파일에서 의미를 알 수 없는 일부 컬럼명과 최대 3건의 샘플 데이터입니다.
+
+[분석할 컬럼 및 샘플 데이터]
+{chr(10).join(sample_preview)}
+
+[매핑 키] 각 컬럼을 아래 키 중 하나로 매핑하세요.
+- 'case': 사건번호/접수번호 (TB_INCDNT_MST.INCDNT_NO)
+- 'crime': 사건개요/죄명 (TB_INCDNT_MST.INCDNT_NM)
+- 'suspect': 피의자/주체 식별자 (TB_PRSN.PRSN_ID)
+- 'person': 인물 성명 (TB_PRSN.KORN_FLNM)
+- 'nickname': 닉네임/별명 (TB_PRSN.RMK_CN)
+- 'phone': 일반 전화번호 (TB_TELNO_MST.TELNO)
+- 'caller': 발신 전화번호 (TB_TELNO_CALL_DTL.DSPTCH_TELNO)
+- 'callee': 수신 전화번호 (TB_TELNO_CALL_DTL.RCPTN_TELNO)
+- 'account': 계좌번호 (TB_FIN_BACNT.BACNT_NO)
+- 'sender': 출금/송금 계좌 (TB_FIN_BACNT_DLNG.BACNT_NO)
+- 'receiver': 입금/수취 계좌 (TB_FIN_BACNT_DLNG.TRRC_BACNT_NO)
+- 'amount': 거래/이체 금액 (TB_FIN_BACNT_DLNG.DLNG_AMT)
+- 'date': 발생/거래 일시
+- 'ip': 접속 IP 주소 (TB_SYS_LGN_EVT.CNNT_IP_ADDR)
+- 'site': 도메인/URL (TB_WEB_DMN.DMN_ADDR)
+- 'file': 기기 내 파일명 (TB_DGTL_FILE_INVNT.FILE_NM)
+- 'atm': ATM 관리번호 (TB_FIN_BACNT_DLNG.ATM_MNG_NO)
+- 'ignore': 적재할 필요가 없는 일련번호·시스템 데이터
+
+[출력 형식] 마크다운 없이 JSON 만: {{"컬럼명1": "phone", "컬럼명2": "ignore"}}
+"""
+        try:
+            client = AIService.get_client()
+            resp = client.chat.completions.create(
+                model=current_app.config.get('SLLM_MODEL_NAME', 'gpt-4o'),
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.1,
+            )
+            raw = AIService._parse_llm_json(resp.choices[0].message.content)
+        except Exception as e:
+            logger.error(f"LLM RDB Column Inference Error: {e}")
+            return {}
+        if not isinstance(raw, dict):
+            return {}
+        col_set = {str(c) for c in columns}
+        return {c: t for c, t in raw.items()
+                if c in col_set and t in AIService.RDB_COLUMN_TYPES}

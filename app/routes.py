@@ -1514,17 +1514,21 @@ def legal_status():
 # ------------------------------
 @bp.route('/api/etl/ai-suggest', methods=['POST'])
 def etl_suggest():
+    if 'file' not in request.files:
+        return jsonify({"status": "error", "message": "No file part"}), 400
     try:
-        file = request.files['file']
         import pandas as pd
-        df = pd.read_csv(file, nrows=3)
-        headers = df.columns.tolist()
-        sample = df.iloc[0].astype(str).tolist()
-        
+        df = pd.read_csv(request.files['file'], nrows=3)
+    except Exception as e:
+        return jsonify({"status": "error", "message": f"CSV 파싱 실패: {e}"}), 400
+    headers = df.columns.tolist()
+    sample = df.iloc[0].astype(str).tolist() if len(df) else []
+    try:
         mapping = AIService.suggest_mapping(headers, sample)
         return jsonify({"status": "success", "mapping": mapping})
     except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
+        logger.error(f"AI mapping suggest error: {e}")
+        return jsonify({"status": "error", "message": "AI 매핑 추천 실패 (LLM 연결/응답 오류)"}), 502
 
 @bp.route('/api/rdb/analyze-csv', methods=['POST'])
 def rdb_analyze_csv():
