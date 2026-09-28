@@ -187,7 +187,7 @@ class TestTimeAggregation:
 
     def _ip(self, L, vf, vt=None, at=None, src="DOC-1"):
         L.agg_edge("used_ip", ("vt_telno", "telno", "010"), ("vt_ip", "ip_addr", "1.2.3.4"),
-                   {"valid_from": vf, "valid_to": vt or vf, "access_count": 1, "access_type": at},
+                   {"valid_from": vf, "valid_to": vt or vf, "usage_count": 1, "access_type": at},
                    source_id=src)
 
     def _merges(self, cur, el):
@@ -201,7 +201,7 @@ class TestTimeAggregation:
         (q,) = self._merges(cur, "used_ip")
         assert "r.valid_from = '2026-03-01 09:00:00'" in q
         assert "r.valid_to = '2026-03-05 14:00:00'" in q
-        assert "r.access_count = 3" in q
+        assert "r.usage_count = 3" in q
         assert "r.access_type = 'banking|web'" in q
         assert "r.source_id = 'DOC-1|DOC-2'" in q
 
@@ -214,11 +214,11 @@ class TestTimeAggregation:
     def test_used_ip_second_delivery_accumulates(self, M):
         cur = FakeCursor(agg={"used_ip": [({"telno": "010"}, {"ip_addr": "1.2.3.4"},
                                            {"valid_from": "2026-02-01", "valid_to": "2026-02-10",
-                                            "access_count": 4, "access_type": "web",
+                                            "usage_count": 4, "access_type": "web",
                                             "source_id": "DOC-0"}, "vt_telno")]})
         _run(M, cur, lambda L: self._ip(L, "2026-03-01", at="banking", src="DOC-1"))
         (q,) = self._merges(cur, "used_ip")
-        assert "r.access_count = 5" in q
+        assert "r.usage_count = 5" in q
         assert "r.valid_from = '2026-02-01'" in q and "r.valid_to = '2026-03-01'" in q
         assert "r.access_type = 'banking|web'" in q
 

@@ -597,11 +597,11 @@ class KICSCrimeDomainOntology:
                     'meaning': '닉네임/인물/계정/계좌(뱅킹 접속)가 IP 주소를 사용함. ※시각별 접속 레코드가 있는 소스는 R8 vt_access(banking)+access_via/accessed_from reification 우선, 요약 관계만 있으면 '
                                '본 엣지 직결',
                     'legal_significance': '디지털증거',
-                    'properties': ['valid_from', 'valid_to', 'confidence', 'source_id', 'rec_created', 'access_count', 'access_type'],
+                    'properties': ['valid_from', 'valid_to', 'confidence', 'source_id', 'rec_created', 'usage_count', 'access_type'],
                     'aggregation': {'key': ('subject', 'ip'),
                                     'min': ('valid_from',),
                                     'max': ('valid_to',),
-                                    'sum': ('access_count',),
+                                    'sum': ('usage_count',),
                                     'union': ('access_type', 'source_id')}},
         'linked_to': {'domain': 'Any', 'range': 'Any', 'label_ko': '연결됨', 'meaning': '두 증거가 연결됨', 'legal_significance': None},
         'transferred_to': {'domain': 'BankAccount',

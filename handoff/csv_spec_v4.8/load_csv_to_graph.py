@@ -15,7 +15,7 @@
   · 인물 식별은 psn_id 우선, 없으면 flnm(이름) — 규격서 §3.4
   · 발신기지국(bsst_addr)·거래점(brnch_nm) → vt_loc, 거래 IP → vt_ip 자동 연결
   · IP 사용(used_ip)·위치(located_at)도 쌍당 1엣지로 접되 시각을 보존 — used_ip 는
-    valid_from(최초)·valid_to(마지막 관측)·access_count·access_type, located_at 은
+    valid_from(최초)·valid_to(마지막 관측)·usage_count·access_type, located_at 은
     first_dt·last_dt·evt_count (시각 없는 정적 위치는 시각 속성 없이)
   · 멱등. 대상 그래프의 기존 노드·집계 엣지를 먼저 읽어, 같은 폴더를 두 번 넣어도 중복이 생기지
     않고(이미 반영된 source_id 는 건너뜀), 2차·3차 납품분은 덧붙는다(속성·출처 보강, 건수·금액 누적)
@@ -133,7 +133,7 @@ AGG_RULES = {
     'transferred_to': {'sum': ('txn_count', 'total_amount'),
                        'min': ('first_dlng_dt',), 'max': ('last_dlng_dt',), 'union': ()},
     # 접속 시각이 달라도 (주체, IP)당 1엣지 — valid_from=최초 접속, valid_to=마지막 관측, 건수 보존
-    'used_ip':        {'sum': ('access_count',), 'min': ('valid_from',), 'max': ('valid_to',),
+    'used_ip':        {'sum': ('usage_count',), 'min': ('valid_from',), 'max': ('valid_to',),
                        'union': ('access_type',)},
     # 정적 위치 관계라 (주체, 위치)당 1엣지 — 시각 있는 행은 first_dt/last_dt/evt_count 로 보존
     'located_at':     {'sum': ('evt_count',), 'min': ('first_dt',), 'max': ('last_dt',), 'union': ()},
@@ -255,7 +255,7 @@ class Loader:
     def agg_edge(self, el, a, b, obs, source_id=None, match_props=None):
         """건별 관측 1행을 (el, a, b[, match]) 집계에 더한다 — flush 때 쌍당 1엣지로 확정.
 
-        obs: AGG_RULES[el] 의 필드만 (예: used_ip → valid_from·valid_to·access_count·access_type)
+        obs: AGG_RULES[el] 의 필드만 (예: used_ip → valid_from·valid_to·usage_count·access_type)
         """
         if a[2] in (None, '') or b[2] in (None, ''):
             return False
@@ -600,7 +600,7 @@ def main():
             L.node('vt_ip', 'ip_addr', ip, {'source_id': s})
             t = (r.get('rmt_ymdhm') or '').strip() or None
             L.agg_edge('used_ip', ('vt_bacnt', 'account_no', base), ('vt_ip', 'ip_addr', ip),
-                       {'valid_from': t, 'valid_to': t, 'access_count': 1}, source_id=s)
+                       {'valid_from': t, 'valid_to': t, 'usage_count': 1}, source_id=s)
         if (r.get('brnch_nm') or '').strip():
             br = r['brnch_nm'].strip()
             L.node('vt_loc', 'loc_id', br, {'loc_type': 'poi', 'place_name': br, 'source_id': s})
@@ -627,7 +627,7 @@ def main():
         vf = (r.get('valid_from') or '').strip() or None
         vt = (r.get('valid_to') or '').strip() or vf
         L.agg_edge('used_ip', (lab, keyp, sv), ('vt_ip', 'ip_addr', ip),
-                   {'valid_from': vf, 'valid_to': vt, 'access_count': 1,
+                   {'valid_from': vf, 'valid_to': vt, 'usage_count': 1,
                     'access_type': (r.get('access_type') or '').strip() or None}, source_id=s)
     # ── 위치 사용 ──
     for r in read(F, 'tbl_eg_loc_use'):

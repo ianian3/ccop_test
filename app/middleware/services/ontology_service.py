@@ -1408,14 +1408,14 @@ class KICSCrimeDomainOntology:
             'meaning': '닉네임/인물/계정/계좌(뱅킹 접속)가 IP 주소를 사용함. ※시각별 접속 레코드가 있는 소스는 R8 vt_access(banking)+access_via/accessed_from reification 우선, 요약 관계만 있으면 본 엣지 직결',
             'legal_significance': '디지털증거',
             'properties': ['valid_from', 'valid_to', 'confidence', 'source_id', 'rec_created',
-                           'access_count', 'access_type'],
+                           'usage_count', 'access_type'],
             # V4.6 S1: ip_role bitemporal 전제(시간축). 타입은 EDGE_META_SCHEMA 공통정의
             # V4.8 (2026-09-28) 요약 엣지 집계 규칙 — (주체, IP) 쌍당 1엣지. 건별 접속 행을 접을 때
             #   valid_from = 최초 접속(최솟값), valid_to = 마지막 관측(각 행 valid_to, 없으면 valid_from 의 최댓값),
-            #   access_count = 접속 행 수, access_type = 관측된 값(여러 개면 '|' 결합), source_id = 출처 합집합.
+            #   usage_count = 접속 행 수, access_type = 관측된 값(여러 개면 '|' 결합), source_id = 출처 합집합.
             #   (이전 참조 적재기는 행마다 SET 으로 덮어써 마지막 행 시각만 남았다 — 협력기관 질의로 발견)
             'aggregation': {'key': ('subject', 'ip'), 'min': ('valid_from',), 'max': ('valid_to',),
-                            'sum': ('access_count',), 'union': ('access_type', 'source_id')},
+                            'sum': ('usage_count',), 'union': ('access_type', 'source_id')},
         },
         
         # ═══════════════════════════════════════════════════════════

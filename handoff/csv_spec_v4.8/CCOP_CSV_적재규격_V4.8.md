@@ -214,11 +214,11 @@ V4.8 그래프는 통화·이체를 **쌍당 1개 엣지로 접고** 첫/마지�
 
 | 엣지 | 쌍 단위 | 남는 속성 |
 |---|---|---|
-| `used_ip` | (주체, IP) | `valid_from`(최초 접속) · `valid_to`(마지막 관측 — 행의 `valid_to`, 없으면 `valid_from`) · `access_count` · `access_type`(여러 값이면 `\|` 결합) |
+| `used_ip` | (주체, IP) | `valid_from`(최초 접속) · `valid_to`(마지막 관측 — 행의 `valid_to`, 없으면 `valid_from`) · `usage_count` · `access_type`(여러 값이면 `\|` 결합) |
 | `located_at` | (주체, 위치) | `first_dt` · `last_dt` · `evt_count` (`evt_ymdhm`·통화 시작·이체 일시가 있는 행 기준. 시각 없는 ATM 설치 위치 등은 시각 속성 없음) |
 
 예: 같은 전화번호가 한 IP로 3번 접속했다면 `used_ip {valid_from:'2026-03-01 09:00:00',
-valid_to:'2026-03-05 14:00:00', access_count:3}` 한 줄이 됩니다. (2026-09-28 이전 참조 적재기는
+valid_to:'2026-03-05 14:00:00', usage_count:3}` 한 줄이 됩니다. (2026-09-28 이전 참조 적재기는
 이 경우 마지막 행의 시각만 남기고 `evt_ymdhm`은 저장하지 않았습니다 — 수정됨)
 
 ---
