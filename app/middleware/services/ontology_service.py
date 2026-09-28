@@ -1407,7 +1407,15 @@ class KICSCrimeDomainOntology:
             'label_ko': 'IP사용',
             'meaning': '닉네임/인물/계정/계좌(뱅킹 접속)가 IP 주소를 사용함. ※시각별 접속 레코드가 있는 소스는 R8 vt_access(banking)+access_via/accessed_from reification 우선, 요약 관계만 있으면 본 엣지 직결',
             'legal_significance': '디지털증거',
-            'properties': ['valid_from', 'valid_to', 'confidence', 'source_id', 'rec_created']  # V4.6 S1: ip_role bitemporal 전제(시간축). 타입은 EDGE_META_SCHEMA 공통정의
+            'properties': ['valid_from', 'valid_to', 'confidence', 'source_id', 'rec_created',
+                           'access_count', 'access_type'],
+            # V4.6 S1: ip_role bitemporal 전제(시간축). 타입은 EDGE_META_SCHEMA 공통정의
+            # V4.8 (2026-09-28) 요약 엣지 집계 규칙 — (주체, IP) 쌍당 1엣지. 건별 접속 행을 접을 때
+            #   valid_from = 최초 접속(최솟값), valid_to = 마지막 관측(각 행 valid_to, 없으면 valid_from 의 최댓값),
+            #   access_count = 접속 행 수, access_type = 관측된 값(여러 개면 '|' 결합), source_id = 출처 합집합.
+            #   (이전 참조 적재기는 행마다 SET 으로 덮어써 마지막 행 시각만 남았다 — 협력기관 질의로 발견)
+            'aggregation': {'key': ('subject', 'ip'), 'min': ('valid_from',), 'max': ('valid_to',),
+                            'sum': ('access_count',), 'union': ('access_type', 'source_id')},
         },
         
         # ═══════════════════════════════════════════════════════════
@@ -1859,7 +1867,9 @@ class KICSCrimeDomainOntology:
             'label_ko': '연락관계',
             'meaning': '전화번호/메신저 계정 간 통화·연락 관계 (vt_call·대화상대 목록의 요약 엣지 성격)',
             'legal_significance': '통신사실확인자료|압수수색(메신저 대화내역)',
-            'properties': ['source_id', 'rec_created', 'channel']  # V4.8: channel='call'|'kakao'|'sms' — 연락 수단 구분
+            'properties': ['source_id', 'rec_created', 'channel',  # V4.8: channel='call'|'kakao'|'sms' — 연락 수단 구분
+                           'first_dt', 'last_dt', 'call_count', 'msg_count', 'total_dur_sec'],
+            # V4.8 집계(CSV 규격 §4): (상대방 쌍, channel)당 1엣지 — 적재기가 쓰던 집계 속성을 SoT 에 명시
         },
         'impersonates': {
             'domain': 'Person',
@@ -1930,7 +1940,13 @@ class KICSCrimeDomainOntology:
             'label_ko': '위치',
             'meaning': '고정 객체(ATM·기관 등)의 정적 위치 (이벤트 경유 occurred_at과 구별)',
             'legal_significance': '위치정보',
-            'properties': ['source_id', 'rec_created']
+            'properties': ['source_id', 'rec_created', 'first_dt', 'last_dt', 'evt_count'],
+            # V4.8 (2026-09-28) (주체, 위치) 쌍당 1엣지 — 고정 객체의 정적 위치라 합치는 것은 설계 의도.
+            #   시각 있는 원천 행(tbl_eg_loc_use.evt_ymdhm · 통화 발신기지국 bgng_ymdhm · 이체 거래점 rmt_ymdhm)을
+            #   접을 때 first_dt/last_dt = 관측 시각 최솟값/최댓값, evt_count = 시각 있는 행 수. 시각 없는 정적
+            #   위치(ATM 설치 위치 등)는 세 속성 없이 둔다. 건별 시각이 필요한 이동 분석은 occurred_at(vt_movement).
+            'aggregation': {'key': ('subject', 'location'), 'min': ('first_dt',), 'max': ('last_dt',),
+                            'sum': ('evt_count',), 'union': ('source_id',)},
         },
         'owns_device': {
             'domain': 'Person',

@@ -14,6 +14,9 @@
   · 전 노드·엣지에 source_id 부여 (CSV 에 없으면 파일 기준값으로 생성)
   · 인물 식별은 psn_id 우선, 없으면 flnm(이름) — 규격서 §3.4
   · 발신기지국(bsst_addr)·거래점(brnch_nm) → vt_loc, 거래 IP → vt_ip 자동 연결
+  · IP 사용(used_ip)·위치(located_at)도 쌍당 1엣지로 접되 시각을 보존 — used_ip 는
+    valid_from(최초)·valid_to(마지막 관측)·access_count·access_type, located_at 은
+    first_dt·last_dt·evt_count (시각 없는 정적 위치는 시각 속성 없이)
   · 멱등. 대상 그래프의 기존 노드·집계 엣지를 먼저 읽어, 같은 폴더를 두 번 넣어도 중복이 생기지
     않고(이미 반영된 source_id 는 건너뜀), 2차·3차 납품분은 덧붙는다(속성·출처 보강, 건수·금액 누적)
   · 식별 키가 같은데 bank_cd·psn_id·platform 이 다르면 한 노드로 합쳐진 것이므로 결과에 경고한다
@@ -121,11 +124,20 @@ def sid(row, default):
 # 다르면 서로 다른 실체가 한 노드로 합쳐졌을 수 있다(은행별 동일 계좌번호·동명이인·플랫폼별 동일 ID).
 # 조용히 합치지 않고 적재 결과에 보고한다.
 CONFLICT_PROPS = {'vt_bacnt': ('bank_cd',), 'vt_psn': ('psn_id',), 'vt_id': ('platform',)}
-# 쌍 단위로 접는 집계 엣지 — 재적재·추가 납품 시 source_id 로 중복/누적을 판정
-AGG_EDGES = {'contacted': ('call_count', 'msg_count', 'total_dur_sec'),
-             'transferred_to': ('txn_count', 'total_amount')}
-AGG_MIN = ('first_dt', 'first_dlng_dt')
-AGG_MAX = ('last_dt', 'last_dlng_dt')
+# 쌍 단위로 접는 집계 엣지 규칙 (온톨로지 SoT RELATIONSHIPS[엣지]['aggregation'] 과 같은 뜻).
+# 건별 원본 행을 쌍당 1엣지로 접을 때 sum=합계, min/max=기간, union=관측값 합집합('|' 결합).
+# 재적재·추가 납품 시에도 같은 규칙으로 기존 엣지와 합친다(source_id 로 중복 판정).
+AGG_RULES = {
+    'contacted':      {'sum': ('call_count', 'msg_count', 'total_dur_sec'),
+                       'min': ('first_dt',), 'max': ('last_dt',), 'union': ()},
+    'transferred_to': {'sum': ('txn_count', 'total_amount'),
+                       'min': ('first_dlng_dt',), 'max': ('last_dlng_dt',), 'union': ()},
+    # 접속 시각이 달라도 (주체, IP)당 1엣지 — valid_from=최초 접속, valid_to=마지막 관측, 건수 보존
+    'used_ip':        {'sum': ('access_count',), 'min': ('valid_from',), 'max': ('valid_to',),
+                       'union': ('access_type',)},
+    # 정적 위치 관계라 (주체, 위치)당 1엣지 — 시각 있는 행은 first_dt/last_dt/evt_count 로 보존
+    'located_at':     {'sum': ('evt_count',), 'min': ('first_dt',), 'max': ('last_dt',), 'union': ()},
+}
 
 
 def _lit(v):
@@ -174,7 +186,8 @@ class Loader:
         self._nodes = {}          # (label, key, val) → 이번 실행에서 모은 속성
         self._existing = {}       # (label, key, val) → DB 에 이미 있던 속성
         self._edges = []          # flush 때 실행할 엣지
-        self._agg_existing = {}   # (el, a_val, b_val, channel) → 기존 집계 엣지 속성
+        self._agg = {}            # (el, a, b, match) → 이번 실행에서 모은 집계값 (agg_edge)
+        self._agg_existing = {}   # (el, la, a_val, lb, b_val, channel) → 기존 집계 엣지 속성
         self.conflicts = defaultdict(set)   # (label, prop) → {(키값, 값1, 값2)}
 
     def _tick(self):
@@ -197,7 +210,7 @@ class Loader:
                              f"RETURN properties(x), properties(y), properties(r)")
             for xv, yv, rv in self.cur.fetchall():
                 xp, yp, rp = _props(xv), _props(yv), _props(rv)
-                k = (el, str(xp.get(ka)), str(yp.get(kb)), rp.get('channel'))
+                k = (el, la, str(xp.get(ka)), lb, str(yp.get(kb)), rp.get('channel'))
                 self._agg_existing[k] = rp
 
     def existing(self, label):
@@ -239,6 +252,41 @@ class Loader:
         self._edges.append((el, a, b, dict(props), match_props))
         return True
 
+    def agg_edge(self, el, a, b, obs, source_id=None, match_props=None):
+        """건별 관측 1행을 (el, a, b[, match]) 집계에 더한다 — flush 때 쌍당 1엣지로 확정.
+
+        obs: AGG_RULES[el] 의 필드만 (예: used_ip → valid_from·valid_to·access_count·access_type)
+        """
+        if a[2] in (None, '') or b[2] in (None, ''):
+            return False
+        rule = AGG_RULES[el]
+        key = (el, a, b, tuple(sorted((match_props or {}).items())))
+        d = self._agg.setdefault(key, {'_src': set(), '_union': defaultdict(set)})
+        for f in rule['sum']:
+            if obs.get(f):
+                d[f] = d.get(f, 0) + obs[f]
+        for f in rule['min']:
+            if obs.get(f):
+                d[f] = min(d.get(f) or obs[f], obs[f])
+        for f in rule['max']:
+            if obs.get(f):
+                d[f] = max(d.get(f) or obs[f], obs[f])
+        for f in rule['union']:
+            if obs.get(f):
+                d['_union'][f].add(str(obs[f]))
+        d['_src'].update(_srcs(source_id))
+        return True
+
+    def _agg_to_edges(self):
+        for (el, a, b, mp), d in self._agg.items():
+            props = {k: v for k, v in d.items() if not k.startswith('_')}
+            for f, vals in d['_union'].items():
+                props[f] = '|'.join(sorted(vals))
+            if d['_src']:
+                props['source_id'] = '|'.join(sorted(d['_src']))
+            self._edges.append((el, a, b, props, dict(mp) or None))
+        self._agg = {}
+
     def _flush_nodes(self):
         for ck, p in self._nodes.items():
             label, key, val = ck
@@ -264,7 +312,7 @@ class Loader:
 
     def _merge_agg(self, el, a, b, props, match_props):
         """집계 엣지: 기존 값과 source_id 로 중복·누적 판정. None 이면 건너뜀."""
-        k = (el, str(a[2]), str(b[2]), (match_props or {}).get('channel'))
+        k = (el, a[0], str(a[2]), b[0], str(b[2]), (match_props or {}).get('channel'))
         ex = self._agg_existing.get(k)
         if not ex:
             return props
@@ -276,24 +324,29 @@ class Loader:
             self.conflicts[(el, 'source_id(부분중복)')].add((f"{a[2]}→{b[2]}", '|'.join(sorted(old)),
                                                            '|'.join(sorted(new))))
             return None
+        rule = AGG_RULES[el]
         out = dict(props)
-        for f in AGG_EDGES[el]:
+        for f in rule['sum']:
             if ex.get(f) is not None or props.get(f) is not None:
                 out[f] = (num(ex.get(f)) or 0) + (num(props.get(f)) or 0)
-        for f in AGG_MIN:
-            vals = [v for v in (ex.get(f), props.get(f)) if v]
+        for f in rule['min']:
+            vals = [str(v) for v in (ex.get(f), props.get(f)) if v]
             if vals:
                 out[f] = min(vals)
-        for f in AGG_MAX:
-            vals = [v for v in (ex.get(f), props.get(f)) if v]
+        for f in rule['max']:
+            vals = [str(v) for v in (ex.get(f), props.get(f)) if v]
             if vals:
                 out[f] = max(vals)
+        for f in rule['union']:
+            vals = _srcs(ex.get(f)) | _srcs(props.get(f))
+            if vals:
+                out[f] = '|'.join(sorted(vals))
         out['source_id'] = '|'.join(sorted(old | new))
         return out
 
     def _flush_edges(self):
         for el, (la, ka, va), (lb, kb, vb), props, match_props in self._edges:
-            if el in AGG_EDGES:
+            if el in AGG_RULES:
                 props = self._merge_agg(el, (la, ka, va), (lb, kb, vb), props, match_props)
                 if props is None:
                     self.n_edge_skipped += 1
@@ -313,6 +366,7 @@ class Loader:
     def flush(self):
         """노드 → 엣지 순으로 확정 (엣지 MATCH 가 새 노드를 찾을 수 있게)."""
         self._flush_nodes()
+        self._agg_to_edges()
         self._flush_edges()
 
 
@@ -349,7 +403,10 @@ def main():
     L.preload(NODE_KEYS,
               [('contacted', 'vt_telno', 'telno', 'vt_telno', 'telno'),
                ('contacted', 'vt_id', 'id_val', 'vt_id', 'id_val'),
-               ('transferred_to', 'vt_bacnt', 'account_no', 'vt_bacnt', 'account_no')])
+               ('transferred_to', 'vt_bacnt', 'account_no', 'vt_bacnt', 'account_no')]
+              + [(el, lab, key, tgt, tkey)
+                 for el, tgt, tkey in (('used_ip', 'vt_ip', 'ip_addr'), ('located_at', 'vt_loc', 'loc_id'))
+                 for lab, key in sorted(set(SUBJ_LABEL.values()))])
 
     # ── 노드 ──
     psn_key = {}          # psn_id 또는 flnm → 그래프에 저장한 name 값
@@ -484,8 +541,10 @@ def main():
             L.node('vt_loc', 'loc_id', loc,
                    {'loc_type': 'cell_tower', 'bsst_addr': loc, 'address': loc,
                     'place_name': loc, 'source_id': sid(r, 'CSV-call')})
-            L.edge('located_at', ('vt_telno', 'telno', a), ('vt_loc', 'loc_id', loc),
-                   {'source_id': sid(r, 'CSV-call')})
+            t = (r.get('bgng_ymdhm') or '').strip() or None
+            L.agg_edge('located_at', ('vt_telno', 'telno', a), ('vt_loc', 'loc_id', loc),
+                       {'first_dt': t, 'last_dt': t, 'evt_count': 1 if t else 0},
+                       source_id=sid(r, 'CSV-call'))
     for r in read(F, 'tbl_eg_id_msg'):
         a, b = r.get('snd_id'), r.get('rcv_id')
         if not a or not b:
@@ -539,13 +598,15 @@ def main():
         if (r.get('ip_addr') or '').strip():
             ip = r['ip_addr'].strip()
             L.node('vt_ip', 'ip_addr', ip, {'source_id': s})
-            L.edge('used_ip', ('vt_bacnt', 'account_no', base), ('vt_ip', 'ip_addr', ip),
-                   {'source_id': s})
+            t = (r.get('rmt_ymdhm') or '').strip() or None
+            L.agg_edge('used_ip', ('vt_bacnt', 'account_no', base), ('vt_ip', 'ip_addr', ip),
+                       {'valid_from': t, 'valid_to': t, 'access_count': 1}, source_id=s)
         if (r.get('brnch_nm') or '').strip():
             br = r['brnch_nm'].strip()
             L.node('vt_loc', 'loc_id', br, {'loc_type': 'poi', 'place_name': br, 'source_id': s})
-            L.edge('located_at', ('vt_bacnt', 'account_no', base), ('vt_loc', 'loc_id', br),
-                   {'source_id': s})
+            t = (r.get('rmt_ymdhm') or '').strip() or None
+            L.agg_edge('located_at', ('vt_bacnt', 'account_no', base), ('vt_loc', 'loc_id', br),
+                       {'first_dt': t, 'last_dt': t, 'evt_count': 1 if t else 0}, source_id=s)
     for (frm, to), d in tagg.items():
         L.edge('transferred_to', ('vt_bacnt', 'account_no', frm), ('vt_bacnt', 'account_no', to),
                {'first_dlng_dt': d['first'], 'last_dlng_dt': d['last'], 'txn_count': d['cnt'],
@@ -562,9 +623,12 @@ def main():
             sv = resolve_psn(sv, 'tbl_eg_ip_use')
         L.node(lab, keyp, sv, {'source_id': s})
         L.node('vt_ip', 'ip_addr', ip, {'source_id': s})
-        L.edge('used_ip', (lab, keyp, sv), ('vt_ip', 'ip_addr', ip),
-               {'valid_from': r.get('valid_from'), 'valid_to': r.get('valid_to'),
-                'access_type': r.get('access_type'), 'source_id': s})
+        # 접속 행마다 SET 으로 덮어쓰면 마지막 행 시각만 남는다 → (주체, IP) 집계
+        vf = (r.get('valid_from') or '').strip() or None
+        vt = (r.get('valid_to') or '').strip() or vf
+        L.agg_edge('used_ip', (lab, keyp, sv), ('vt_ip', 'ip_addr', ip),
+                   {'valid_from': vf, 'valid_to': vt, 'access_count': 1,
+                    'access_type': (r.get('access_type') or '').strip() or None}, source_id=s)
     # ── 위치 사용 ──
     for r in read(F, 'tbl_eg_loc_use'):
         st, sv, loc = (r.get('subj_type') or '').lower(), r.get('subj_id'), r.get('loc_id')
@@ -576,7 +640,9 @@ def main():
             sv = resolve_psn(sv, 'tbl_eg_loc_use')
         L.node(lab, keyp, sv, {'source_id': s})
         L.node('vt_loc', 'loc_id', loc, {'source_id': s})
-        L.edge('located_at', (lab, keyp, sv), ('vt_loc', 'loc_id', loc), {'source_id': s})
+        t = (r.get('evt_ymdhm') or '').strip() or None      # 이전엔 저장되지 않고 버려졌다
+        L.agg_edge('located_at', (lab, keyp, sv), ('vt_loc', 'loc_id', loc),
+                   {'first_dt': t, 'last_dt': t, 'evt_count': 1 if t else 0}, source_id=s)
 
     L.flush()
 

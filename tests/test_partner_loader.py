@@ -66,7 +66,8 @@ def _run(M, cur, fn):
     L.preload([("vt_bacnt", "account_no"), ("vt_psn", "name"), ("vt_telno", "telno"),
                ("vt_id", "id_val")],
               [("contacted", "vt_telno", "telno", "vt_telno", "telno"),
-               ("transferred_to", "vt_bacnt", "account_no", "vt_bacnt", "account_no")])
+               ("transferred_to", "vt_bacnt", "account_no", "vt_bacnt", "account_no"),
+               ("used_ip", "vt_telno", "telno", "vt_ip", "ip_addr")])
     fn(L)
     L.flush()
     return L
@@ -178,3 +179,75 @@ def test_two_loader_copies_in_sync():
     """전달본과 내부본의 코드 본문(docstring 제외)이 같아야 한다."""
     bodies = [p.read_text().split("import argparse", 1)[1] for p in PATHS.values()]
     assert bodies[0] == bodies[1]
+
+
+class TestTimeAggregation:
+    """협력기관 질의(2026-09-28): used_ip·located_at 이 시각이 달라도 1엣지로 합쳐지며
+    시각이 사라지던 문제 — 쌍당 1엣지는 유지하되 기간·건수 보존."""
+
+    def _ip(self, L, vf, vt=None, at=None, src="DOC-1"):
+        L.agg_edge("used_ip", ("vt_telno", "telno", "010"), ("vt_ip", "ip_addr", "1.2.3.4"),
+                   {"valid_from": vf, "valid_to": vt or vf, "access_count": 1, "access_type": at},
+                   source_id=src)
+
+    def _merges(self, cur, el):
+        return [q for q in cur.executed if f"[r:{el}" in q and "MERGE" in q]
+
+    def test_used_ip_keeps_first_last_and_count(self, M):
+        cur = FakeCursor()
+        _run(M, cur, lambda L: (self._ip(L, "2026-03-01 09:00:00", at="banking"),
+                                self._ip(L, "2026-03-05 14:00:00", at="web"),
+                                self._ip(L, "2026-03-03 11:00:00", at="banking", src="DOC-2")))
+        (q,) = self._merges(cur, "used_ip")
+        assert "r.valid_from = '2026-03-01 09:00:00'" in q
+        assert "r.valid_to = '2026-03-05 14:00:00'" in q
+        assert "r.access_count = 3" in q
+        assert "r.access_type = 'banking|web'" in q
+        assert "r.source_id = 'DOC-1|DOC-2'" in q
+
+    def test_used_ip_explicit_valid_to_wins(self, M):
+        cur = FakeCursor()
+        _run(M, cur, lambda L: self._ip(L, "2026-03-01", vt="2026-06-30"))
+        (q,) = self._merges(cur, "used_ip")
+        assert "r.valid_to = '2026-06-30'" in q
+
+    def test_used_ip_second_delivery_accumulates(self, M):
+        cur = FakeCursor(agg={"used_ip": [({"telno": "010"}, {"ip_addr": "1.2.3.4"},
+                                           {"valid_from": "2026-02-01", "valid_to": "2026-02-10",
+                                            "access_count": 4, "access_type": "web",
+                                            "source_id": "DOC-0"}, "vt_telno")]})
+        _run(M, cur, lambda L: self._ip(L, "2026-03-01", at="banking", src="DOC-1"))
+        (q,) = self._merges(cur, "used_ip")
+        assert "r.access_count = 5" in q
+        assert "r.valid_from = '2026-02-01'" in q and "r.valid_to = '2026-03-01'" in q
+        assert "r.access_type = 'banking|web'" in q
+
+    def test_located_at_with_and_without_time(self, M):
+        cur = FakeCursor()
+        def load(L):
+            for t in ("2026-03-02 10:00:00", "2026-03-09 18:00:00", None):
+                L.agg_edge("located_at", ("vt_telno", "telno", "010"), ("vt_loc", "loc_id", "L1"),
+                           {"first_dt": t, "last_dt": t, "evt_count": 1 if t else 0}, source_id="D")
+            L.agg_edge("located_at", ("vt_atm", "atm_nm", "ATM1"), ("vt_loc", "loc_id", "L1"),
+                       {"first_dt": None, "last_dt": None, "evt_count": 0}, source_id="D")
+        _run(M, cur, load)
+        tel = [q for q in self._merges(cur, "located_at") if "vt_telno" in q][0]
+        atm = [q for q in self._merges(cur, "located_at") if "vt_atm" in q][0]
+        assert "r.evt_count = 2" in tel and "r.first_dt = '2026-03-02 10:00:00'" in tel
+        assert "r.last_dt = '2026-03-09 18:00:00'" in tel
+        assert "first_dt" not in atm and "evt_count" not in atm   # 정적 위치는 시각 속성 없음
+
+
+def test_agg_rules_match_sot():
+    """적재기 집계 규칙 == 온톨로지 SoT RELATIONSHIPS[*]['aggregation'] (used_ip·located_at)."""
+    from app.middleware.services.ontology_service import KICSCrimeDomainOntology as O
+    M = _load(PATHS["handoff"])
+    for el in ("used_ip", "located_at"):
+        sot = O.RELATIONSHIPS[el]
+        rule = M.AGG_RULES[el]
+        agg = sot["aggregation"]
+        assert set(rule["sum"]) == set(agg["sum"])
+        assert set(rule["min"]) == set(agg["min"]) and set(rule["max"]) == set(agg["max"])
+        assert set(rule["union"]) | {"source_id"} == set(agg["union"])
+        written = set(rule["sum"]) | set(rule["min"]) | set(rule["max"]) | set(rule["union"])
+        assert written <= set(sot["properties"]), f"{el}: SoT properties 에 없는 속성 적재"

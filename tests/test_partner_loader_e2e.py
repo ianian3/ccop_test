@@ -55,8 +55,8 @@ class Cur:
             la, el, lb = m.groups()
             for (e, a, va, b, vb, mp), pr in self.S.edges.items():
                 if e == el and a == la and b == lb:
-                    ka = {'vt_telno': 'telno', 'vt_id': 'id_val', 'vt_bacnt': 'account_no'}[la]
-                    self.res.append(({ka: va}, {ka: vb}, dict(pr)))
+                    ka = {'vt_telno': 'telno', 'vt_id': 'id_val', 'vt_bacnt': 'account_no', 'vt_psn': 'name', 'vt_atm': 'atm_nm', 'vt_dev': 'dev_id'}[la]; kb = {'vt_ip': 'ip_addr', 'vt_loc': 'loc_id'}.get(lb, ka)
+                    self.res.append(({ka: va}, {kb: vb}, dict(pr)))
             return
         m = re.match(r"MATCH \(n:(\w+)\) RETURN count\(n\)", q)
         if m: self.res = [(len(self.S.nodes[m.group(1)]),)]; return
