@@ -1633,7 +1633,13 @@ def rdb_import():
         import os
         from app.services.rdb_service import RDBService
         
-        temp_path = f"/tmp/{file.filename}"
+        # 업로드 파일명을 경로에 그대로 쓰면 '../' 로 임의 경로에 쓰기 가능 → secure_filename + 고유 임시 디렉터리
+        # (규격 판정·라우팅은 원본 파일명 file.filename 으로)
+        import shutil
+        import tempfile
+        from werkzeug.utils import secure_filename
+        temp_path = os.path.join(tempfile.mkdtemp(prefix='ccop_upload_'),
+                                 secure_filename(file.filename) or 'upload.csv')
         file.save(temp_path)
         
         clear_rdb = request.form.get('clear_rdb', 'false').lower() == 'true'
@@ -1680,6 +1686,13 @@ def rdb_import():
         # RDBService 가 사용할 search_path 를 config 에 임시 주입
         current_app.config['_V40_TARGET_SCHEMA'] = target_schema
 
+        if file.filename.lower().startswith('tbl_'):
+            from app.core.csv_spec_v48 import ui_support
+            _kind, _ok, _why = ui_support(file.filename)
+            if not _ok:
+                shutil.rmtree(os.path.dirname(temp_path), ignore_errors=True)
+                return jsonify({"status": "error", "unsupported": True, "message": _why}), 400
+
         try:
             # 스마트 라우팅 분기: 파일명이 tbl_ 로 시작하면 사전 정의된 RDB 스키마로 간주
             if file.filename.lower().startswith('tbl_'):
@@ -1694,8 +1707,7 @@ def rdb_import():
                     source_domain=source_domain, source_id=source_id,
                 )
         finally:
-            if os.path.exists(temp_path):
-                os.remove(temp_path)
+            shutil.rmtree(os.path.dirname(temp_path), ignore_errors=True)
         
         if success:
             return jsonify({

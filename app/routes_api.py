@@ -1649,10 +1649,22 @@ def pipeline_csv_to_v40_graph():
         # fresh=1(기본): 첫 파일 적재 전 test_v40 스테이징 초기화 → 이 업로드분만으로 그래프 구성.
         #   여러 파일이면 첫 파일만 clear, 이후 파일은 누적. fresh=0이면 기존 스테이징에 누적.
         fresh = (request.form.get('fresh', '1') != '0')
-        layer_results['L2'] = {'layer': 'L2 표준화 (test_v40 RDB)', 'tables': {}, 'total_inserted': 0, 'fresh': fresh}
+        layer_results['L2'] = {'layer': 'L2 표준화 (test_v40 RDB)', 'tables': {}, 'total_inserted': 0,
+                               'fresh': fresh, 'files': []}
+        # 파일별 결과 — 실패·미지원을 삼키지 않고 최상위 status 에 반영 (감사 F07)
+        from app.core.csv_spec_v48 import ui_support
+        cleared = False
 
-        for _idx, (temp_path, fname) in enumerate(temp_paths):
-            clear_now = fresh and _idx == 0   # 첫 파일에서만 초기화
+        for temp_path, fname in temp_paths:
+            frec = {'name': fname, 'status': 'loaded'}
+            layer_results['L2']['files'].append(frec)
+            if fname.lower().startswith('tbl_'):
+                frec['kind'], _ok, _why = ui_support(fname)
+                if not _ok:
+                    frec.update(status='unsupported', error=_why)
+                    continue
+            # 초기화는 실제 적재되는 첫 파일에서 — 미지원 파일이 첫 번째여도 스테이징 잔존 방지
+            clear_now = fresh and not cleared
             try:
                 if fname.lower().startswith('tbl_'):
                     success, result = RDBService.import_predefined_schema_to_rdb(
@@ -1672,13 +1684,18 @@ def pipeline_csv_to_v40_graph():
                         temp_path, clear_existing=clear_now,
                         source_domain=source_domain, source_id=source_id,
                     )
+                    frec['status'] = 'public_only'
+                cleared = cleared or clear_now
                 if success:
                     for k, v in (result.items() if isinstance(result, dict) else []):
                         if isinstance(v, int) and v > 0:
                             layer_results['L2']['tables'][k] = layer_results['L2']['tables'].get(k, 0) + v
                             layer_results['L2']['total_inserted'] += v
+                else:
+                    frec.update(status='failed', error=str(result)[:300])
             except Exception as e:
                 current_app.logger.warning(f"L2 적재 실패 {fname}: {e}")
+                frec.update(status='failed', error=str(e)[:300])
 
         # 적재 후 test_v40 실제 row count 직접 검증 (정확한 통계)
         try:
@@ -1721,7 +1738,13 @@ def pipeline_csv_to_v40_graph():
 
         # ─── L4. 그래프 변환 ─────────────────────────────
         layer_results['L4'] = {'layer': 'L4 그래프 (AgensGraph)', 'graph': graph_name}
+        _loaded_any = any(f['status'] in ('loaded', 'public_only')
+                          for f in layer_results['L2']['files'])
         try:
+            if not _loaded_any:
+                # 적재된 파일이 없으면 변환하지 않음 — 이전 업로드의 스테이징 잔존분으로 그래프가
+                # 만들어져 '성공'처럼 보이는 것 방지
+                raise RuntimeError("적재된 파일이 없어 그래프 변환을 건너뜀")
             success, stats = RdbToGraphService.transfer_data(graph_name)
             if success and isinstance(stats, dict):
                 layer_results['L4'].update({
@@ -1761,15 +1784,30 @@ def pipeline_csv_to_v40_graph():
                 except: pass
 
     elapsed = time.time() - t0
+    # 최상위 상태: 하위 단계 실패를 success 로 덮지 않는다 (감사 F07)
+    #   success = 전 파일 적재 + L4 성공 / partial = 일부 파일 실패·미지원(L4 는 성공)
+    #   error   = 적재된 파일 없음 또는 L4 실패
+    frecs = layer_results.get('L2', {}).get('files', [])
+    errors = [f"{f['name']}: {f.get('error')}" for f in frecs if f['status'] in ('failed', 'unsupported')]
+    loaded = [f for f in frecs if f['status'] in ('loaded', 'public_only')]
+    l4_ok = bool(layer_results.get('L4', {}).get('success'))
+    if not loaded:
+        status, http = 'error', 422
+    elif not l4_ok:
+        status, http = 'error', 500
+        errors.append(f"L4 그래프 변환 실패: {layer_results.get('L4', {}).get('error')}")
+    else:
+        status, http = ('partial' if errors else 'success'), 200
     return jsonify({
-        'status': 'success',
+        'status': status,
+        'errors': errors,
         'pipeline': 'V4.0 L1→L5',
         'graph_name': graph_name,
         'source_domain': source_domain,
         'target_schema': 'test_v40',
         'elapsed_sec': round(elapsed, 2),
         'layers': layer_results,
-    }), 200
+    }), http
 
 
 # ============================================

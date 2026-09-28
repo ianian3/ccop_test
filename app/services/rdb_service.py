@@ -57,6 +57,13 @@ class RDBService:
         import psycopg2
         import uuid
         from flask import current_app
+        # 규격 판정을 적재·TRUNCATE 보다 먼저 — 미지원 파일이 INSERT 0회 success=True 로 보고되거나
+        # clear_existing 으로 기존 데이터만 지우고 끝나는 일이 없도록 (감사 F07)
+        from app.core.csv_spec_v48 import ui_support
+        _kind, _ok, _why = ui_support(filename)
+        if not _ok:
+            logger.warning(f"[V4.0] 미지원 규격 파일 거부: {_why}")
+            return False, _why
         # V4.0 격리 스키마 (test_v40) 기본 사용 — public 충돌 회피
         target_schema = current_app.config.get('_V40_TARGET_SCHEMA', 'test_v40')
         logger.info(f"[V4.0] import_predefined_schema source_domain={source_domain} source_id={source_id} target_schema={target_schema}")

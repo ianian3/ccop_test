@@ -2664,9 +2664,13 @@ function showTruncateBanner(metas){
                 });
                 const data = await res.json();
 
-                if (data.status !== 'success') {
+                // 파일별 실패·미지원 목록 (파일명 포함 → 이스케이프)
+                const _e = t => String(t ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+                const errList = (data.errors || []).map(x => `<li>${_e(x)}</li>`).join('');
+                if (data.status !== 'success' && data.status !== 'partial') {
                     ['L1','L2','L3','L4','L5'].forEach(s => setV40Step(s, 'error'));
-                    resultDiv.innerHTML = `<div style="color:#d63031;">❌ 실패: ${data.message || '오류'}</div>`;
+                    resultDiv.innerHTML = `<div style="color:#d63031;">❌ 실패: ${_e(data.message || '오류')}</div>` +
+                        (errList ? `<ul style="color:#d63031;font-size:11px;margin:6px 0 0 16px;">${errList}</ul>` : '');
                     return;
                 }
 
@@ -2681,7 +2685,8 @@ function showTruncateBanner(metas){
                 // 결과 렌더
                 const html = `
                     <div style="background:rgba(0,184,148,0.1); border:1px solid rgba(0,184,148,0.4); border-radius:6px; padding:10px;">
-                        <div style="color:#55efc4; font-weight:bold; margin-bottom:8px;">✅ 파이프라인 완료 — ${data.elapsed_sec}초</div>
+                        <div style="color:#55efc4; font-weight:bold; margin-bottom:8px;">${data.status === 'partial' ? '⚠️ 일부 파일 미적재' : '✅ 파이프라인 완료'} — ${data.elapsed_sec}초</div>
+                        ${errList ? `<ul style="color:#fdcb6e;font-size:11px;margin:0 0 8px 16px;">${errList}</ul>` : ''}
                         <table style="width:100%; font-size:11px;">
                             <tr><td style="color:#0984e3; padding:3px 0;">L1 수집</td><td>${L.L1?.files?.length || 0} 파일 / ${L.L1?.total_rows || 0} 행</td></tr>
                             <tr><td style="color:#0984e3;">L2 표준화 (test_v40)</td><td>RDB 적재: ${L.L2?.rdb_actual_total || L.L2?.total_inserted || 0} 행${L.L2?.rdb_actual ? ' (' + Object.entries(L.L2.rdb_actual).map(([k,v])=>`${k}:${v}`).join(', ') + ')' : ''}</td></tr>
