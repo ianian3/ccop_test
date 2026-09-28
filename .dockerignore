@@ -103,7 +103,7 @@ age/
 /docker-compose.airgap.yml
 /docker-compose.airgap.nativedb.yml
 /docker-compose.cslee.yml
-/requirements.airgap.txt
+# requirements.airgap.txt 는 제외 금지 — Dockerfile.airgap 이 같은 컨텍스트에서 COPY 한다 (감사 F09)
 /requirements-rag-eval.txt
 /*.bak.*
 

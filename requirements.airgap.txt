@@ -31,3 +31,6 @@ requests==2.31.0
 
 # System Monitoring — disk/mem 통계 (폐쇄망 VM 디스크 감시에 유용)
 psutil==5.9.8
+
+# 그래프 분석 엔진 — graph_algo_service(/api/graph/algo·자연어 알고리즘 질의) 지연 import (감사 F09)
+networkx==3.2.1
