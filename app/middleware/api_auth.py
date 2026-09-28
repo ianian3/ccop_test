@@ -13,6 +13,8 @@ import fcntl
 from datetime import datetime, timezone
 from collections import defaultdict
 
+from app.models.api_key import APIKey
+
 logger = logging.getLogger(__name__)
 
 # ============================================
@@ -156,7 +158,10 @@ def validate_api_key(api_key: str) -> dict:
     
     if not partner_data.get('is_active', False):
         return None
-    
+
+    if APIKey.is_expired(partner_data):
+        return None
+
     return partner_data
 
 def require_api_key(f):
@@ -210,6 +215,8 @@ def require_api_key(f):
 
         return f(*args, **kwargs)
 
+    # 전역 Basic Auth 가 이 경로의 Bearer 인증을 가로채지 않도록 표식 (app/__init__.py)
+    decorated_function._accepts_bearer = True
     return decorated_function
 
 
@@ -255,6 +262,7 @@ def require_api_or_ui(f):
             "message": "UI 세션 또는 유효한 API 키(Authorization: Bearer)가 필요합니다."
         }), 401
 
+    decorated_function._accepts_bearer = True
     return decorated_function
 
 def check_endpoint_permission(endpoint: str) -> bool:

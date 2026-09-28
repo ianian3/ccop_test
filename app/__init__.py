@@ -28,6 +28,14 @@ def create_app():
         def _require_basic_auth():
             if request.path == '/api/v1/health':
                 return None
+            # 파트너 API: Bearer 를 받는 경로(require_api_key/require_api_or_ui 표식)는
+            # Basic 을 건너뛰고 경로 데코레이터가 키를 검증한다. Authorization 헤더 하나에
+            # Basic·Bearer 를 동시에 실을 수 없으므로 경로별 인증 정책으로 분리.
+            # (Bearer 키로 UI 경로가 열리지는 않음 — 표식 없는 경로는 Basic 필수)
+            if request.headers.get('Authorization', '').startswith('Bearer '):
+                view = app.view_functions.get(request.endpoint)
+                if view is not None and getattr(view, '_accepts_bearer', False):
+                    return None
             auth = request.authorization
             if (auth and (auth.password is not None) and
                     hmac.compare_digest((auth.username or '').encode('utf-8'), _ba_user.encode('utf-8')) and

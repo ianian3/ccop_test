@@ -4,7 +4,7 @@ API 키 생성, 검증, 관리를 담당합니다.
 """
 import secrets
 import hashlib
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict
 
 class APIKey:
@@ -111,16 +111,22 @@ class APIKey:
     
     @staticmethod
     def is_expired(partner_data: Dict) -> bool:
-        """API 키 만료 여부 확인"""
+        """API 키 만료 여부 확인.
+
+        expires_at 없음 → 무기한(False). 시간대 없는 값은 UTC 로 간주.
+        파싱 불가 값은 만료로 처리(fail-closed) — 형식 오류 키가 무기한 통과하지 않도록.
+        """
         expires_at = partner_data.get('expires_at')
         if not expires_at:
             return False
-        
+
         try:
-            expiry_date = datetime.fromisoformat(expires_at.replace('Z', '+00:00'))
-            return datetime.utcnow() > expiry_date.replace(tzinfo=None)
-        except:
-            return False
+            expiry_date = datetime.fromisoformat(str(expires_at).replace('Z', '+00:00'))
+        except (TypeError, ValueError):
+            return True
+        if expiry_date.tzinfo is None:
+            expiry_date = expiry_date.replace(tzinfo=timezone.utc)
+        return datetime.now(timezone.utc) > expiry_date
 
 
 # 파트너 티어 설정

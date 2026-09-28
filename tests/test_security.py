@@ -346,3 +346,107 @@ class TestUiOrApiAuth:
             assert r.status_code == 200
         finally:
             api_auth.API_KEYS_STORE.pop(h, None)
+
+
+# ══════════════════════════════════════════════════════════════════
+# F03 (감사 2026-09-17): API 키 만료 미검사 + Basic/Bearer 인증 충돌
+# ══════════════════════════════════════════════════════════════════
+class TestApiKeyExpiry:
+
+    def _inject(self, key, expires_at):
+        from app.middleware import api_auth
+        h = api_auth.generate_api_key_hash(key)
+        data = {"partner_name": "pytest", "tier": "test", "rate_limit": 100000,
+                "allowed_endpoints": ["*"], "is_active": True}
+        if expires_at is not None:
+            data["expires_at"] = expires_at
+        api_auth.API_KEYS_STORE[h] = data
+        return h
+
+    @pytest.mark.parametrize("expires_at,valid", [
+        ("2000-01-01T00:00:00Z", False),          # 만료
+        ("2999-01-01T00:00:00Z", True),           # 유효
+        ("2999-01-01T00:00:00", True),            # 시간대 없음 → UTC 간주
+        ("2999-01-01T00:00:00+09:00", True),      # 시간대 있음
+        ("not-a-date", False),                    # 파싱 불가 → fail-closed
+        (None, True),                             # 만료일 없음 → 무기한
+    ])
+    def test_validate_api_key_checks_expiry(self, expires_at, valid):
+        from app.middleware import api_auth
+        key = f"pytest-exp-{expires_at}"
+        h = self._inject(key, expires_at)
+        try:
+            assert (api_auth.validate_api_key(key) is not None) is valid
+        finally:
+            api_auth.API_KEYS_STORE.pop(h, None)
+
+    def test_expired_key_rejected_on_endpoint(self, app, client):
+        from app.middleware import api_auth
+        key = "pytest-expired-endpoint"
+        h = self._inject(key, "2000-01-01T00:00:00Z")
+        try:
+            r = client.get("/api/v1/visual-style",
+                           headers={"Authorization": f"Bearer {key}"})
+            assert r.status_code == 401
+        finally:
+            api_auth.API_KEYS_STORE.pop(h, None)
+
+
+class TestBasicAuthBearerSplit:
+    """Basic Auth 활성 앱에서도 Bearer 경로는 키로 인증, UI 경로는 Basic 필수."""
+
+    @pytest.fixture
+    def basic_client(self, monkeypatch, app):
+        monkeypatch.setenv("BASIC_AUTH_USER", "u")
+        monkeypatch.setenv("BASIC_AUTH_PASS", "p")
+        from app import create_app
+        a = create_app()
+        a.config["TESTING"] = True
+        return a.test_client()
+
+    def _inject(self, key):
+        from app.middleware import api_auth
+        h = api_auth.generate_api_key_hash(key)
+        api_auth.API_KEYS_STORE[h] = {
+            "partner_name": "pytest", "tier": "test", "rate_limit": 100000,
+            "allowed_endpoints": ["*"], "is_active": True,
+        }
+        return h
+
+    def test_valid_bearer_passes_basic_on_api_route(self, basic_client):
+        from app.middleware import api_auth
+        key = "pytest-basic-bearer"
+        h = self._inject(key)
+        try:
+            r = basic_client.get("/api/v1/visual-style",
+                                 headers={"Authorization": f"Bearer {key}"})
+            assert r.status_code == 200
+        finally:
+            api_auth.API_KEYS_STORE.pop(h, None)
+
+    def test_invalid_bearer_still_rejected(self, basic_client):
+        r = basic_client.get("/api/v1/visual-style",
+                             headers={"Authorization": "Bearer nope"})
+        assert r.status_code == 401
+
+    def test_bearer_does_not_open_ui_route(self, basic_client):
+        from app.middleware import api_auth
+        key = "pytest-basic-bearer-ui"
+        h = self._inject(key)
+        try:
+            r = basic_client.get("/", headers={"Authorization": f"Bearer {key}"})
+            assert r.status_code == 401
+            assert "Basic" in r.headers.get("WWW-Authenticate", "")
+        finally:
+            api_auth.API_KEYS_STORE.pop(h, None)
+
+    def test_no_auth_rejected_by_basic(self, basic_client):
+        assert basic_client.get("/api/v1/visual-style").status_code == 401
+
+    def test_basic_credentials_still_work(self, basic_client):
+        import base64
+        tok = base64.b64encode(b"u:p").decode()
+        r = basic_client.get("/api/v1/health", headers={"Authorization": f"Basic {tok}"})
+        assert r.status_code != 401
+        r = basic_client.get("/", headers={"Authorization": f"Basic {tok}"})
+        assert r.status_code == 200
