@@ -4,6 +4,12 @@
 > **대상**: `docs/CYBERCOP_STANDARD_TABLE_DDL_20260804.sql`(DA팀 V3.7 표준 DDL, 51테이블) · `docs/6. CCOP-DE53-테이블명세서...xlsx`(컬럼정의서 근거문서)
 > **기준**: 온톨로지 SoT(`ontology_service.py` 25노드) · 적재코드(`rdb_service.py` INSERT, `rdb_to_graph_service.py` SELECT)
 > **목적**: 표준 DDL의 CCOP 적용 갭 진단 + **마이그레이션 SoT 크로스워크** 확정
+>
+> **기준판 갱신 (2026-09-28)**: 최신 표준 DDL = `docs/CYBERCOP_STANDARD_TABLE_DDL_20260911.sql`
+> (명세서 v0.9.6). 8/4판 대비 변경은 8/12·8/13 적용분뿐 — `TB_INST_RPRSV_REL_T` 신설,
+> `TB_PSN_M.CR_NM`·`TB_SYS_LGN_EVT_T.CNTN_TYP_CD` 추가, 코드 컬럼 4종 타입 확대(모두 온톨로지 v4.7 반영 완료).
+> 본 문서의 테이블 크로스워크는 그대로 유효. `TB_INCDNT_M.FLNM` 주석('성명')은 9/11판도 동일 —
+> 의미 확인 요청: `docs/DA_확인요청_FLNM_사건관리번호_20260928.md`
 
 ---
 
