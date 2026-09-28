@@ -597,6 +597,7 @@ def analyze_csv_for_inference():
 
 
 @api_v1.route('/etl/infer-import', methods=['POST'])
+@require_api_or_ui
 def import_with_inference():
     """
     추론된 매핑으로 그래프 적재
@@ -693,6 +694,7 @@ def import_with_inference():
 # ============================================
 
 @api_v1.route('/etl/analyze-extended', methods=['POST'])
+@require_api_or_ui
 def analyze_csv_extended():
     """
     KICS 확장 스키마 기반 CSV 분석 (4-Layer)
@@ -773,6 +775,7 @@ def analyze_csv_extended():
 
 
 @api_v1.route('/schema/layers', methods=['GET'])
+@require_api_or_ui
 def get_schema_layers():
     """
     KICS 확장 스키마 Layer 정보 조회
@@ -1188,6 +1191,7 @@ def rdb_to_graph():
 # ============================================
 
 @api_v1.route('/rdb/stats', methods=['GET'])
+@require_api_or_ui
 def rdb_gdb_stats():
     """RDB 및 GDB 통합 통계 조회 (대시보드용)"""
     import psycopg2
@@ -1294,6 +1298,7 @@ def gdb_detail_stats():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 @api_v1.route('/rdb/tables', methods=['GET'])
+@require_api_or_ui
 def list_rdb_tables():
     """RDB 테이블 목록 조회"""
     tables = [
@@ -1314,6 +1319,7 @@ def list_rdb_tables():
 
 
 @api_v1.route('/rdb/query/<table_name>', methods=['GET'])
+@require_api_or_ui
 def query_rdb_table(table_name):
     """RDB 테이블 데이터 조회"""
     import psycopg2
@@ -1563,6 +1569,7 @@ def execute_workflow(name):
 
 
 @api_v1.route('/ontology/meta', methods=['GET'])
+@require_api_or_ui
 def ontology_meta():
     """V4.0 온톨로지 메타 (NODE_ID_STANDARD / DOMAIN_USAGE / INFERENCE_RULES_V37) 통합 반환."""
     from app.services.ontology_service import KICSCrimeDomainOntology as Ont

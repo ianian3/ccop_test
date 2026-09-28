@@ -21,7 +21,9 @@ import sys
 import os
 import json
 import time
+import urllib.parse
 import urllib.request
+from http.cookiejar import CookieJar
 
 API = os.getenv("CCOP_API", "http://localhost:5002/api/query/ai")
 GRAPH = os.getenv("TEST_GRAPH_PATH", "ccop_ep_integrated")
@@ -233,12 +235,32 @@ ITEMS = [
 ]
 
 
+# 앱 전역 접근 정책(F01): 내부 API 는 UI 세션 필요 → UI 페이지('/')로 세션 쿠키를 받아 재사용.
+# (CCOP_API_KEY 가 있으면 admin Bearer 키로 대신 인증)
+_OPENER = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(CookieJar()))
+_session_ready = False
+
+
+def _ensure_session():
+    global _session_ready
+    if _session_ready or os.getenv("CCOP_API_KEY"):
+        return
+    root = urllib.parse.urljoin(API, "/")
+    with _OPENER.open(root, timeout=30) as r:
+        r.read()
+    _session_ready = True
+
+
 def ask(question, timeout=120):
     body = json.dumps({"question": question, "graph_path": GRAPH}).encode()
-    req = urllib.request.Request(API, data=body, headers={"Content-Type": "application/json"})
+    headers = {"Content-Type": "application/json"}
+    if os.getenv("CCOP_API_KEY"):
+        headers["Authorization"] = f"Bearer {os.getenv('CCOP_API_KEY')}"
+    req = urllib.request.Request(API, data=body, headers=headers)
     t0 = time.time()
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as r:
+        _ensure_session()
+        with _OPENER.open(req, timeout=timeout) as r:
             return json.loads(r.read().decode()), time.time() - t0, None
     except Exception as e:
         return {}, time.time() - t0, str(e)

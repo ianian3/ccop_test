@@ -38,6 +38,15 @@ def _csv(text):
     return {"file": (io.BytesIO(text.encode("utf-8")), "t.csv")}
 
 
+@pytest.fixture
+def client(app):
+    """UI 세션을 가진 클라이언트 (main 내부 API 는 전역 접근 정책상 UI 세션 필요)."""
+    c = app.test_client()
+    with c.session_transaction() as sess:
+        sess["ui_authorized"] = True
+    return c
+
+
 class TestEtlAiSuggest:
 
     def test_single_row_csv_returns_mapping(self, client, monkeypatch):

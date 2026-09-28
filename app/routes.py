@@ -77,31 +77,11 @@ logger = logging.getLogger(__name__)
 bp = Blueprint('main', __name__)
 
 
-# ── 그래프 노출 제한 (외부 공개 배포용) ────────────────────────────────────────
-# ALLOWED_GRAPHS 환경변수(콤마 구분)가 설정되면 그 그래프만 조회할 수 있다.
-# 미설정이면 제한 없음 — 로컬 개발·내부 운영 동작은 그대로다.
-# 목록에서 감추는 것만으로는 부족하다: API 에 graph_path 를 직접 넣으면 조회되므로
-# 요청 진입점에서 함께 막는다(외부 URL 로 운영 수사데이터가 나가는 것을 차단).
-_ALLOWED_GRAPHS = frozenset(
-    g.strip() for g in os.getenv('ALLOWED_GRAPHS', '').split(',') if g.strip())
-
-
-def graph_allowed(name):
-    return (not _ALLOWED_GRAPHS) or (name in _ALLOWED_GRAPHS)
-
-
-@bp.before_request
-def _restrict_graph_access():
-    if not _ALLOWED_GRAPHS:
-        return None
-    body = request.get_json(silent=True) if request.is_json else None
-    target = (body or {}).get('graph_path') or request.args.get('graph_path') \
-        or request.form.get('graph_path')
-    if target and not graph_allowed(target):
-        logger.warning(f"⛔ 허용되지 않은 그래프 접근 차단: {target}")
-        return jsonify({"status": "error",
-                        "message": f"이 배포에서는 '{target}' 그래프에 접근할 수 없습니다."}), 403
-    return None
+# ── 그래프 노출 제한 ─────────────────────────────────────────────────────────
+# ALLOWED_GRAPHS 검사는 앱 전역 정책(app/core/access_policy.py)으로 이동 — 이전 main 전용
+# 훅은 graph_path 만 봐서 graph_name·다른 Blueprint·기본 그래프로 우회됐다 (감사 F01).
+from app.core.access_policy import allowed_graphs, graph_allowed  # noqa: E402
+_ALLOWED_GRAPHS = allowed_graphs()
 
 
 # ── 수사 세션 저장소 (서버 메모리, 최대 200개 LRU) ──────────────────

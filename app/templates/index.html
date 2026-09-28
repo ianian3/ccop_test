@@ -3,6 +3,25 @@
 
 <head>
     <meta charset="UTF-8">
+    <script>
+    // UI 세션 만료(1시간 유휴) 시 API 가 401 {reauth} 반환 → '/' 재요청으로 세션을 재발급하고
+    // 1회 재시도한다 (전역 접근 정책, app/core/access_policy.py). 화면 상태는 유지된다.
+    (function () {
+        const _fetch = window.fetch.bind(window);
+        let renewing = null;
+        window.fetch = async function (input, init) {
+            const res = await _fetch(input, init);
+            if (res.status !== 401 || !(typeof input === 'string' || input instanceof URL)) return res;
+            if (new URL(String(input), location.href).origin !== location.origin) return res;
+            let body = null;
+            try { body = await res.clone().json(); } catch (e) { return res; }
+            if (!body || !body.reauth) return res;
+            renewing = renewing || _fetch('/', { credentials: 'same-origin' }).finally(() => { renewing = null; });
+            await renewing;
+            return _fetch(input, init);
+        };
+    })();
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CYBER C.O.P — 사이버범죄 수사지원 통합분석·추론 시스템</title>
     <!-- 로컬 벤더링(폐쇄망 대응): 원본 버전은 app/static/vendor/VENDOR.md 참고 -->

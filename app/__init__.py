@@ -143,4 +143,8 @@ def create_app():
     from app.routes_admin import admin
     app.register_blueprint(admin)
 
+    # 전역 접근 정책 (기본 거부 + 그래프 제한) — 모든 Blueprint 등록 후 (감사 F01)
+    from app.core import access_policy
+    access_policy.init_app(app)
+
     return app
