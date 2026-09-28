@@ -1,6 +1,7 @@
 import json
 import logging
 from app.database import get_db_connection, safe_props, safe_set_graph_path, validate_graph_path
+from app.core import query_guard
 from app.services.subgraph_service import SubGraphService
 from app.services.ai_service import AIService
 
@@ -1140,20 +1141,24 @@ class GraphService:
             if graph_path in WRITABLE_GRAPHS:
                 allow_write = True
             if not allow_write:
-                import re as _re
-                _w = _re.search(r"\b(DELETE|DETACH|MERGE|CREATE|REMOVE|DROP|SET)\b",
-                                real_query, _re.I)
+                # 공용 가드(감사 F02): SQL 쓰기·위험 함수·다중 문장까지 차단 +
+                # DB 세션 읽기 전용·실행 시간 상한 (호출마다 새 연결이라 설정이 새지 않음)
+                _w = query_guard.check_read_only(real_query)
                 if _w:
                     logger.warning(f"⛔ [GraphService] WRITE_BLOCKED — 읽기전용 위반"
-                                   f"({_w.group(0)}): {real_query[:100]}")
+                                   f"({_w}): {real_query[:100]}")
                     return False, (f"WRITE_BLOCKED: 읽기 전용 조회 경로에서 쓰기 명령"
-                                   f"({_w.group(0).upper()})은 실행할 수 없습니다.")
+                                   f"({_w})은 실행할 수 없습니다.")
+                query_guard.apply_read_only_session(cur)
 
             logger.info(f"▶ [GraphService] 실행 Cypher: {real_query}")
             cur.execute(real_query)
             
             # 3. 결과 파싱 (노드와 엣지 구분 처리)
-            rows = cur.fetchall()
+            row_cap = query_guard.max_rows()
+            rows, truncated = query_guard.fetch_capped(cur, row_cap)
+            if truncated:
+                logger.warning(f"[GraphService] 결과 {row_cap}행 상한 초과 — 절단: {real_query[:100]}")
             elements = []
             
             node_ids = set()

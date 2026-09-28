@@ -124,15 +124,14 @@ def graph_query():
         if not cypher:
             return jsonify({"error": "cypher field is required"}), 400
 
-        # 읽기 전용 보안 검증 (쓰기 명령어 차단)
-        upper_cypher = cypher.upper()
-        forbidden = ["DELETE", "SET", "REMOVE", "MERGE", "DROP", "CREATE", "DETACH"]
-        for kw in forbidden:
-            if re.search(r'\b' + kw + r'\b', upper_cypher):
-                return jsonify({
-                    "error": "Read-only violation",
-                    "message": f"데이터 변경 명령어({kw})는 허용되지 않습니다."
-                }), 403
+        # 읽기 전용 보안 검증 (공용 가드 — SQL 쓰기·위험 함수·다중 문장 포함, 감사 F02)
+        from app.core.query_guard import check_read_only
+        violation = check_read_only(cypher)
+        if violation:
+            return jsonify({
+                "error": "Read-only violation",
+                "message": f"데이터 변경 명령어({violation})는 허용되지 않습니다."
+            }), 403
 
         # 파트너 티어에 따른 결과 제한
         tier_config = get_tier_config(request.partner_data.get('tier', 'free'))

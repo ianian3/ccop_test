@@ -14,24 +14,25 @@ import os, re, json, hmac
 from flask import Blueprint, request, jsonify, current_app
 import psycopg2
 
+from app.core import query_guard
+
 graph_read_bp = Blueprint('graph_read', __name__, url_prefix='/api/v1/graph')
 
 
 # ─── 안전 검증: read-only Cypher만 허용 ─────────────────────────
-_WRITE_PATTERNS = re.compile(
-    r'\b(CREATE|DELETE|MERGE|SET|DETACH|DROP|UPDATE|INSERT|ALTER|TRUNCATE|REMOVE|CALL)\b',
-    re.IGNORECASE
-)
-
-
+# 공용 가드(app/core/query_guard.py, 감사 F02). 이전 구현은 `//` 주석을 먼저 벗겨내
+# `'http://x' CREATE ...` 처럼 문자열 속 // 뒤에 쓰기 구문을 숨길 수 있었다 → 원문 검사.
 def _is_read_only(cypher: str) -> bool:
     """Cypher가 read-only 인지 검증."""
-    if not cypher:
-        return False
-    # 주석 제거
-    cleaned = re.sub(r'//.*$', '', cypher, flags=re.MULTILINE)
-    cleaned = re.sub(r'/\*.*?\*/', '', cleaned, flags=re.DOTALL)
-    return not _WRITE_PATTERNS.search(cleaned)
+    return query_guard.check_read_only(cypher) is None
+
+
+def _parse_limit(raw, default=500, cap=5000):
+    """limit 파라미터 → 1..cap 정수 (형식 오류는 기본값)."""
+    try:
+        return max(1, min(int(raw), cap))
+    except (TypeError, ValueError):
+        return default
 
 
 def _check_api_key(req):
@@ -66,7 +67,7 @@ def graph_read():
     data = request.get_json() or {}
     cypher = data.get('cypher', '').strip()
     graph_path = data.get('graph_path', 'my_v40_demo')
-    limit = min(int(data.get('limit', 500)), 5000)
+    limit = _parse_limit(data.get('limit', 500))
 
     if not cypher:
         return jsonify({"error": "cypher required"}), 400
@@ -85,18 +86,23 @@ def graph_read():
     try:
         conn = psycopg2.connect(**current_app.config['DB_CONFIG'])
         conn.autocommit = True
-        cur = conn.cursor()
-        cur.execute(f"SET graph_path = {graph_path}")
-        cur.execute(cypher)
-        rows = cur.fetchall()
-        cols = [d[0] for d in cur.description] if cur.description else []
-        conn.close()
+        try:
+            cur = conn.cursor()
+            query_guard.apply_read_only_session(cur)
+            cur.execute(f"SET graph_path = {graph_path}")
+            cur.execute(cypher)
+            # 쿼리에 LIMIT 999999 가 있어도 요청 limit 이상은 가져오지 않음
+            rows, truncated = query_guard.fetch_capped(cur, limit)
+            cols = [d[0] for d in cur.description] if cur.description else []
+        finally:
+            conn.close()
 
         return jsonify({
             "graph_path": graph_path,
             "cypher": cypher,
             "columns": cols,
             "row_count": len(rows),
+            "truncated": truncated,
             "rows": [list(map(_serialize, row)) for row in rows],
         })
     except Exception:
@@ -118,7 +124,7 @@ def graph_dump():
         return jsonify({"error": "Invalid API key"}), 401
 
     graph_path = request.args.get('graph_path', '')
-    limit = min(int(request.args.get('limit', 500)), 5000)
+    limit = _parse_limit(request.args.get('limit', 500))
     fmt = request.args.get('format', 'json')
 
     if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', graph_path):
@@ -128,6 +134,7 @@ def graph_dump():
         conn = psycopg2.connect(**current_app.config['DB_CONFIG'])
         conn.autocommit = True
         cur = conn.cursor()
+        query_guard.apply_read_only_session(cur)
         cur.execute(f"SET graph_path = {graph_path}")
 
         # 노드+엣지 추출 (운영 코드와 동일 패턴)
