@@ -541,7 +541,7 @@ class LangGraphAgent:
             "from_account", "to_account", "transferred_to",
             "caller", "callee", "contacted",
             "sent_msg", "received_msg",
-            "recorded_in", "occurred_at",
+            "recorded_in", "located_at",
             "belongs_to", "resolves_to", "contains_file", "sourced_from",
             "same_as", "used_for", "targets",
             "eg_used_account", "eg_used_phone", "eg_used_ip",
@@ -571,7 +571,7 @@ class LangGraphAgent:
             "sent_msg":      ("vt_telno",    "vt_msg"),
             "received_msg":  ("vt_msg",      "vt_telno"),
             "recorded_in":   ("vt_vhcl",     "vt_movement"),
-            "occurred_at":   ("vt_movement", "vt_loc"),
+            "located_at":    (None,          "vt_loc"),     # V4.9 occurred_at 통합 (객체·이벤트 다형 domain)
             "accessed_from": ("vt_access",   "vt_ip"),
             "performed_by":  ("vt_access",   "vt_psn"),
             "belongs_to":    ("vt_bacnt",    "vt_org"),
@@ -592,11 +592,9 @@ class LangGraphAgent:
             "belongs_to_campaign": ("vt_site",     "site_cluster"),
             # V4.3 시나리오 직접 엣지 (속성적 연결)
             "knows":         ("vt_psn",      "vt_psn"),
-            "linked_id":     (None,          "vt_id"),      # 계좌/전화 → 계정 (다형 domain)
             "mentions":      ("vt_msg",      None),         # V4.9 mentions_* 통합 → id/bacnt/loc (다형 range)
             # V4.4 reification 참여 엣지
             "access_via":         ("vt_access",   None),        # → telno/id/bacnt (다형 range)
-            "via_ip":             ("vt_transfer", "vt_ip"),
         },
     }
 
@@ -1158,7 +1156,7 @@ SELECT * FROM cypher('{state['graph_path']}', $$ MATCH ... RETURN ... $$) AS (�
 - 사칭: (vt_telno)-[:used_for]->(vt_impersonation)-[:targets]->(vt_org)  [V3.3]
 - 진정서→사건: (vt_petition)-[:filed_as]->(vt_case)
 - 계좌귀속: (vt_bacnt)-[:belongs_to]->(vt_org)
-- 위치: (vt_movement)-[:occurred_at]->(vt_loc)
+- 위치: (vt_movement)-[:located_at]->(vt_loc)
 
 {entity_context}
 {reflection_context}

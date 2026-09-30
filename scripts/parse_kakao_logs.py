@@ -14,7 +14,7 @@ V4.7 매핑 (신규 타입 0):
   방향                → 행위자=상대: sent_msg(행위자→msg)+received_msg(msg→가입자) 확정
                         행위자=가입자: sent_msg만 (수신자 불명 — 방향 추정 금지)
   접속 IP             → used_ip(행위자→IP) valid_from/to=당일 min~max 관측 (V4.6 백필 규칙)
-                        + sent_from_ip(msg집계→IP, V4.5 G2)
+                        + accessed_from(msg집계→IP; V4.9 sent_from_ip 통합)
 출력: batch_doc_to_graph.py 와 동일 envelope(entities/relations/…) — 비교·적재 도구 재사용.
 실행: python3 scripts/parse_kakao_logs.py --root "/path/2차년도" --out results/kakao_logs_graph.json
 """
@@ -129,7 +129,7 @@ def main():
             rel('received_msg', m_k, r_k, {'confidence': 1.0}, src)
         for ip in b['ips']:
             ip_k = ent('vt_ip', ip, {'ip_addr': ip}, src)
-            rel('sent_from_ip', m_k, ip_k, {'confidence': 1.0}, src)
+            rel('accessed_from', m_k, ip_k, {'confidence': 1.0}, src)   # V4.9 sent_from_ip → accessed_from
     for (actor, ip, d, src), ib in ip_agg.items():
         a_k = ent('vt_telno', actor, {'telno': actor}, src)
         ip_k = ent('vt_ip', ip, {'ip_addr': ip}, src)

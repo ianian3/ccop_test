@@ -1,6 +1,6 @@
 """CCOP 온톨로지 V4.9 — 정의 스펙 (전달본)
 
-노드 24종 · 엣지 57종(활성 57, deprecated 0). 사이버범죄 수사 그래프 표준.
+노드 24종 · 엣지 53종(활성 53, deprecated 0). 사이버범죄 수사 그래프 표준.
 제공: 스카이월드와이드 · 기준 V4.9
 
 외부 의존 0 — 표준 라이브러리조차 import 하지 않는 순수 선언이므로
@@ -472,7 +472,7 @@ class KICSCrimeDomainOntology:
                           'description': '사칭 이벤트 노드 — V3.3에서 impersonates 엣지에서 승격 (전기통신금융사기법 제3조)'},
     }
 
-    # ── 엣지 57종 — domain/range·properties·meaning·legal_significance  (57종) ──
+    # ── 엣지 53종 — domain/range·properties·meaning·legal_significance  (53종) ──
     RELATIONSHIPS = {
         'suspect_in': {'domain': 'Person',
                        'range': 'Case',
@@ -506,12 +506,6 @@ class KICSCrimeDomainOntology:
                   'meaning': '두 인물의 사회적 지인 관계 (고향친구/동창 등 — 공범 여부는 그래프 엣지가 아니라 탐지 결과로 판단)',
                   'legal_significance': '관계정보',
                   'properties': ['relation_type', 'confidence', 'valid_from', 'source_id', 'rec_created']},
-        'linked_id': {'domain': 'Object|NetworkTrace',
-                      'range': 'DigitalID',
-                      'label_ko': '식별자연결',
-                      'meaning': '계좌·전화 등 객체에 연결된 온라인 식별자 (공인인증서 발급 ID / 포털 역조회 계정)',
-                      'legal_significance': '신원확인',
-                      'properties': ['link_basis', 'confidence', 'valid_from', 'source_id', 'rec_created']},
         'mentions': {'domain': 'Message',
                      'range': 'DigitalID|BankAccount|Location',
                      'label_ko': '기재',
@@ -545,7 +539,6 @@ class KICSCrimeDomainOntology:
                    'legal_significance': '차량정보',
                    'properties': ['valid_from', 'valid_to', 'source_id', 'rec_created']},
         'recorded_in': {'domain': 'Any', 'range': 'Movement', 'label_ko': '이동기록', 'meaning': '차량/전화번호가 이동이벤트에 기록됨', 'legal_significance': '위치정보'},
-        'occurred_at': {'domain': 'Any', 'range': 'Location', 'label_ko': '발생위치', 'meaning': '이벤트의 발생 위치', 'legal_significance': '위치정보'},
         'owns_phone': {'domain': 'Person',
                        'range': 'Phone',
                        'label_ko': '전화소유',
@@ -570,7 +563,12 @@ class KICSCrimeDomainOntology:
                                     'max': ('valid_to',),
                                     'sum': ('usage_count',),
                                     'union': ('access_type', 'source_id')}},
-        'linked_to': {'domain': 'Any', 'range': 'Any', 'label_ko': '연결됨', 'meaning': '두 증거가 연결됨', 'legal_significance': None},
+        'linked_to': {'domain': 'Any',
+                      'range': 'Any',
+                      'label_ko': '연결됨',
+                      'meaning': '두 증거가 연결됨 — 계좌·전화·IP → 계정 역조회 연결 포함(V4.9 linked_id 통합, 근거는 link_basis)',
+                      'legal_significance': None,
+                      'properties': ['link_basis', 'confidence', 'source_id', 'rec_created']},
         'transferred_to': {'domain': 'BankAccount',
                            'range': 'BankAccount|CryptoWallet',
                            'label_ko': '이체',
@@ -598,7 +596,12 @@ class KICSCrimeDomainOntology:
         'to_account': {'domain': 'Transfer', 'range': 'BankAccount|CryptoWallet|ATM', 'label_ko': '입금계좌', 'meaning': '이체의 입금 계좌', 'legal_significance': '금융거래정보'},
         'caller': {'domain': 'Phone', 'range': 'Call', 'label_ko': '발신', 'meaning': '통화의 발신 번호', 'legal_significance': '통신사실확인자료'},
         'callee': {'domain': 'Call', 'range': 'Phone', 'label_ko': '수신', 'meaning': '통화의 수신 번호', 'legal_significance': '통신사실확인자료'},
-        'accessed_from': {'domain': 'Access', 'range': 'NetworkTrace', 'label_ko': '접속IP', 'meaning': '접속의 출발 IP', 'legal_significance': '통신자료'},
+        'accessed_from': {'domain': 'Access|Transfer|Message',
+                          'range': 'NetworkTrace',
+                          'label_ko': '접속IP',
+                          'meaning': '이벤트(접속·이체·메시지 발신)가 일어난 출발 IP — 이벤트 종류는 출발 라벨로 구분',
+                          'legal_significance': '통신자료',
+                          'properties': ['source_id', 'rec_created']},
         'sent_msg': {'domain': 'Phone|DigitalID', 'range': 'Message', 'label_ko': '발신', 'meaning': '메시지 발신 번호', 'legal_significance': '통신사실확인자료'},
         'received_msg': {'domain': 'Message',
                          'range': 'Phone|DigitalID',
@@ -611,12 +614,6 @@ class KICSCrimeDomainOntology:
                        'meaning': '접속 이벤트에 사용된 통신수단/계정/모바일뱅킹 (vt_access 주체 다형)',
                        'legal_significance': '통신자료',
                        'properties': ['valid_from', 'confidence', 'source_id', 'rec_created']},
-        'via_ip': {'domain': 'Transfer',
-                   'range': 'NetworkTrace',
-                   'label_ko': '이체접속IP',
-                   'meaning': '이체 이벤트의 접속 IP (모바일뱅킹 등)',
-                   'legal_significance': '통신자료',
-                   'properties': ['source_id', 'rec_created']},
         'sourced_from': {'domain': 'Any',
                          'range': 'Source',
                          'label_ko': '출처',
@@ -761,16 +758,10 @@ class KICSCrimeDomainOntology:
         'located_at': {'domain': 'Any',
                        'range': 'Location',
                        'label_ko': '위치',
-                       'meaning': '고정 객체(ATM·기관 등)의 정적 위치 (이벤트 경유 occurred_at과 구별)',
+                       'meaning': '객체의 위치 또는 이벤트의 발생 위치 — 출발 라벨로 구분 (V4.9: occurred_at 통합)',
                        'legal_significance': '위치정보',
                        'properties': ['source_id', 'rec_created', 'first_dt', 'last_dt', 'evt_count'],
                        'aggregation': {'key': ('subject', 'location'), 'min': ('first_dt',), 'max': ('last_dt',), 'sum': ('evt_count',), 'union': ('source_id',)}},
-        'sent_from_ip': {'domain': 'Message',
-                         'range': 'NetworkTrace',
-                         'label_ko': '발신IP',
-                         'meaning': '메시지가 특정 IP에서 발신됨 — 착발신내역이 메시지+접속을 한 레코드로 제공(V4.5 G2)',
-                         'legal_significance': '통신사실확인자료',
-                         'properties': ['sent_at', 'source_id', 'rec_created']},
         'exchanged_to': {'domain': 'BankAccount',
                          'range': 'CryptoWallet',
                          'label_ko': '환전',

@@ -91,7 +91,7 @@ class GraphService:
         "accessed_to":   ("vt_access",   "vt_site"),   # v3.5 복원: 접속 목적지 사이트
         "sent_msg":      ("vt_telno",    "vt_msg"),    # sent_via 대체
         "received_msg":  ("vt_msg",      "vt_telno"),  # received_by 대체
-        "occurred_at":   ("vt_transfer", "vt_loc"),    # 이벤트 발생 위치 (범용)
+        "occurred_at":   ("vt_transfer", "vt_loc"),    # V4.9 삭제(→ located_at) — 이전 적재분 조회 호환
         "recorded_in":   ("vt_vhcl",     "vt_movement"),
         # ── 사칭 범죄 엣지 (v3.3+) ────────────────────────────────────
         "used_for":      ("vt_telno",    "vt_impersonation"),

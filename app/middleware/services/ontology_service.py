@@ -35,7 +35,7 @@ CCOP V4.9 온톨로지 — POLE 정렬 6레이어 아키텍처 (현행 SSOT)
           reification 우선). + sameAs→same_as 개명(AgensGraph 미인용 식별자 소문자화로 DB 실현명이
           'sameas'가 되던 문제 — snake_case 전면 통일, DB 4건 마이그레이션). 엣지 수 불변(72).
   - V4.9 (2026-09-30): 식별자·집계 규칙 정정 — 의미가 바뀐 변경을 V4.8 이름으로 재배포하지 않기 위해
-          버전 분리(docs/ONTOLOGY_V48_VALIDATION_20260918.md §6-1 권고). 노드 25→24 · 엣지 72→57.
+          버전 분리(docs/ONTOLOGY_V48_VALIDATION_20260918.md §6-1 권고). 노드 25→24 · 엣지 72→53.
           ① vt_case 정경 식별자 flnm → incdnt_no(경찰청 공식 사건번호, 2026-09-18), flnm 은 보조 속성
           ② used_ip·located_at 쌍 단위 집계 규칙 명시(RELATIONSHIPS[*]['aggregation']) — used_ip +usage_count·
              access_type(valid_from=최초, valid_to=마지막 관측), located_at +first_dt·last_dt·evt_count
@@ -55,11 +55,13 @@ CCOP V4.9 온톨로지 — POLE 정렬 6레이어 아키텍처 (현행 SSOT)
           ⑩ vt_email 노드를 vt_id(platform='email')로 흡수(노드 25→24) — uses_email→uses_id, eg_used_email→eg_used_id.
              법적 분류(통신자료)·표준 테이블(TB_EML_ADDR_M)은 platform 별로 보존. 기존 적재 5건(ep5·통합·ku)은 재빌드/이관 필요
           ⑪ mentions_id·mentions_account·mentions_location → mentions(도착 라벨로 종류 구분). 엣지 61→57
-노드: 24 | 엣지: 57 (deprecated 0) | 추론 규칙: 13종 통합 dict (탐지 9 + enrichment 4)
+          ⑫ 같은 의미 엣지 4종 통합(57→53, 전 그래프 적재 occurred_at 2건 외 0건): via_ip·sent_from_ip →
+             accessed_from(이벤트→IP, T2C 학습 표기 유지) · occurred_at → located_at · linked_id → linked_to(link_basis)
+노드: 24 | 엣지: 53 (deprecated 0) | 추론 규칙: 13종 통합 dict (탐지 9 + enrichment 4)
 """
 
 class KICSCrimeDomainOntology:
-    """KICS 기반 한국형 사이버 범죄 온톨로지 (V4.9 POLE 6레이어 · 노드 24 · 엣지 57 · 추론규칙 13종)"""
+    """KICS 기반 한국형 사이버 범죄 온톨로지 (V4.9 POLE 6레이어 · 노드 24 · 엣지 53 · 추론규칙 13종)"""
 
     # 엣지 공통 메타속성 스키마 (EDGE_META_SCHEMA)
     EDGE_META_SCHEMA = {
@@ -547,7 +549,6 @@ class KICSCrimeDomainOntology:
         'same_as':             {'color': '#999999', 'width': 2, 'arrow': 'none',     'style': 'dashed'},
         # V4.3 시나리오 직접 엣지 (속성적 연결)
         'knows':              {'color': '#7F8C8D', 'width': 2, 'arrow': 'none',     'style': 'solid'},
-        'linked_id':          {'color': '#5499C7', 'width': 2, 'arrow': 'triangle', 'style': 'solid'},
         'mentions':           {'color': '#A569BD', 'width': 2, 'arrow': 'triangle', 'style': 'dotted'},
         # Event 흐름
         'from_account':       {'color': '#F39C12', 'width': 2, 'arrow': 'triangle', 'style': 'solid'},
@@ -585,12 +586,10 @@ class KICSCrimeDomainOntology:
         'registered_to':      {'color': '#5499C7', 'width': 1, 'arrow': 'triangle', 'style': 'solid'},
         'operates':           {'color': '#9B59B6', 'width': 2, 'arrow': 'triangle', 'style': 'solid'},
         'transferred_to':     {'color': '#F39C12', 'width': 1, 'arrow': 'triangle', 'style': 'solid'},
-        'occurred_at':        {'color': '#A04000', 'width': 1, 'arrow': 'triangle', 'style': 'dotted'},
         'recorded_in':        {'color': '#7F8C8D', 'width': 1, 'arrow': 'triangle', 'style': 'dotted'},
         'performed_by':       {'color': '#3498DB', 'width': 1, 'arrow': 'triangle', 'style': 'dotted'},
         # V4.4 reification 참여 엣지
         'access_via':         {'color': '#D35400', 'width': 2, 'arrow': 'triangle', 'style': 'solid'},
-        'via_ip':             {'color': '#1ABC9C', 'width': 1, 'arrow': 'triangle', 'style': 'dotted'},
         'linked_to':          {'color': '#BDC3C7', 'width': 1, 'arrow': 'triangle-tee', 'style': 'dashed'},
         'contacted':          {'color': '#E67E22', 'width': 1, 'arrow': 'triangle-tee', 'style': 'solid'},
         # Deprecated (시각화는 표시하되 색을 흐리게)
@@ -1000,7 +999,7 @@ class KICSCrimeDomainOntology:
                            'card_no', 'tk_pnm', 'gf_pnm', 'vhcl_no', 'mv_sn',
                            # immigration (V4.7+ 2026-08-25: 2차년도 EP8 시나리오 요구 — 출입국 회신.
                            #   출입국일시→timestamp, 구분(출국/입국)→imgr_se_cd, 항공편→flight_no,
-                           #   출입국항→port_nm(+occurred_at→vt_loc), 원본키→imgr_sn(Bridge Key).
+                           #   출입국항→port_nm(+located_at→vt_loc), 원본키→imgr_sn(Bridge Key).
                            #   ⚠️ 표준 DDL에 출입국 테이블 미보유 — 실데이터 확보/DA 협의 시 std_columns 확정)
                            'imgr_se_cd', 'flight_no', 'port_nm', 'imgr_sn',
                            'source_id', 'rec_created', 'verified', 'confidence'],
@@ -1246,16 +1245,6 @@ class KICSCrimeDomainOntology:
             'legal_significance': '관계정보',
             'properties': ['relation_type', 'confidence', 'valid_from', 'source_id', 'rec_created']
         },
-        'linked_id': {
-            'domain': 'Object|NetworkTrace',  # V4.5 G4: 역조회 입력이 IP인 경우
-            'range': 'DigitalID',
-            'source_types': [('account', 'id'), ('phone', 'id')],
-            'semantic_relation': 'linkedToDigitalID',
-            'label_ko': '식별자연결',
-            'meaning': '계좌·전화 등 객체에 연결된 온라인 식별자 (공인인증서 발급 ID / 포털 역조회 계정)',
-            'legal_significance': '신원확인',
-            'properties': ['link_basis', 'confidence', 'valid_from', 'source_id', 'rec_created']
-        },
         'mentions': {
             'domain': 'Message',
             'range': 'DigitalID|BankAccount|Location',
@@ -1325,15 +1314,6 @@ class KICSCrimeDomainOntology:
             'meaning': '차량/전화번호가 이동이벤트에 기록됨',
             'legal_significance': '위치정보',
         },
-        'occurred_at': {
-            'domain': 'Any',  # Event nodes
-            'range': 'Location',
-            'source_types': [('event', 'location')],
-            'semantic_relation': 'occurredAt',
-            'label_ko': '발생위치',
-            'meaning': '이벤트의 발생 위치',
-            'legal_significance': '위치정보',
-        },
         # ═══════════════════════════════════════════════════════════
         # [Layer 2 → Layer 4] Actor (행위자) → Evidence (증거) [소유관계]
         # 행위자가 직접 소유하거나 귀속된 증거 객체
@@ -1384,11 +1364,13 @@ class KICSCrimeDomainOntology:
         'linked_to': {
             'domain': 'Any',
             'range': 'Any',
-            'source_types': [('phone', 'account')],
+            'source_types': [('phone', 'account'), ('account', 'id'), ('phone', 'id')],
             'semantic_relation': 'linkedResource',
             'label_ko': '연결됨',
-            'meaning': '두 증거가 연결됨',
-            'legal_significance': None
+            'meaning': '두 증거가 연결됨 — 계좌·전화·IP → 계정 역조회 연결 포함(V4.9 linked_id 통합, 근거는 link_basis)',
+            'legal_significance': None,
+            'properties': ['link_basis', 'confidence', 'source_id', 'rec_created'],
+            # V4.9: valid_from 은 두지 않음 — 시간 연속성 분류(N형) 유지, 기존 적재 128건에 시각 없음
         },
         # ═══════════════════════════════════════════════════════════
         # 간접 관계 (Phase 1 확장)
@@ -1479,13 +1461,15 @@ class KICSCrimeDomainOntology:
             'legal_significance': '통신사실확인자료'
         },
         'accessed_from': {
-            'domain': 'Access',
+            'domain': 'Access|Transfer|Message',   # V4.9: via_ip(이체)·sent_from_ip(메시지) 통합
             'range': 'NetworkTrace',
-            'source_types': [('access', 'ip'), ('접속', 'ip')],
+            'source_types': [('access', 'ip'), ('접속', 'ip'), ('transfer', 'ip'), ('message', 'ip')],
             'semantic_relation': 'accessedFromIP',
             'label_ko': '접속IP',
-            'meaning': '접속의 출발 IP',
-            'legal_significance': '통신자료'
+            'meaning': '이벤트(접속·이체·메시지 발신)가 일어난 출발 IP — 이벤트 종류는 출발 라벨로 구분',
+            'legal_significance': '통신자료',
+            'properties': ['source_id', 'rec_created'],
+            # V4.9: 이벤트 시각은 이벤트 노드(access_dt·trnsfr_dt·sent_at)에 있으므로 엣지에 두지 않는다
         },
         'sent_msg': {
             'domain': 'Phone|DigitalID',              # V4.4 다형화: 계정도 메시지 발신 주체
@@ -1517,16 +1501,6 @@ class KICSCrimeDomainOntology:
             'meaning': '접속 이벤트에 사용된 통신수단/계정/모바일뱅킹 (vt_access 주체 다형)',
             'legal_significance': '통신자료',
             'properties': ['valid_from', 'confidence', 'source_id', 'rec_created']
-        },
-        'via_ip': {
-            'domain': 'Transfer',
-            'range': 'NetworkTrace',
-            'source_types': [('transfer', 'ip')],
-            'semantic_relation': 'transferViaIP',
-            'label_ko': '이체접속IP',
-            'meaning': '이체 이벤트의 접속 IP (모바일뱅킹 등)',
-            'legal_significance': '통신자료',
-            'properties': ['source_id', 'rec_created']
         },
         'sourced_from': {                # §4.7 Meta/Provenance (v3.6 확정)
             'domain': 'Any',
@@ -1674,7 +1648,7 @@ class KICSCrimeDomainOntology:
             'legal_significance': '디지털증거',
             'properties': ['file_role', 'detected_at', 'source_id', 'rec_created']
         },
-        # located_at 정의는 하단 [V4.0 정합화 C단계] 블록으로 단일화 (occurred_at과 구별)
+        # located_at 정의는 하단 [V4.0 정합화 C단계] 블록으로 단일화 (V4.9 occurred_at 통합)
         'used_in_device': {
             'domain': 'Phone',
             'range': 'Device',
@@ -1814,34 +1788,25 @@ class KICSCrimeDomainOntology:
             'properties': ['confidence', 'source_id', 'rec_created']
         },
         'located_at': {
-            'domain': 'Any',  # ATM / Organization 등 고정 객체
+            'domain': 'Any',  # 고정 객체(ATM·기관) + 이벤트(이동·이체 등) — V4.9 occurred_at 통합
             'range': 'Location',
-            'source_types': [],
+            'source_types': [('event', 'location')],
             'semantic_relation': 'locatedAt',
             'label_ko': '위치',
-            'meaning': '고정 객체(ATM·기관 등)의 정적 위치 (이벤트 경유 occurred_at과 구별)',
+            'meaning': '객체의 위치 또는 이벤트의 발생 위치 — 출발 라벨로 구분 (V4.9: occurred_at 통합)',
             'legal_significance': '위치정보',
             'properties': ['source_id', 'rec_created', 'first_dt', 'last_dt', 'evt_count'],
             # V4.9 (2026-09-28) (주체, 위치) 쌍당 1엣지 — 고정 객체의 정적 위치라 합치는 것은 설계 의도.
             #   시각 있는 원천 행(tbl_eg_loc_use.evt_ymdhm · 통화 발신기지국 bgng_ymdhm · 이체 거래점 rmt_ymdhm)을
             #   접을 때 first_dt/last_dt = 관측 시각 최솟값/최댓값, evt_count = 시각 있는 행 수. 시각 없는 정적
-            #   위치(ATM 설치 위치 등)는 세 속성 없이 둔다. 건별 시각이 필요한 이동 분석은 occurred_at(vt_movement).
+            #   위치(ATM 설치 위치 등)는 세 속성 없이 둔다. 건별 시각이 필요한 이동 분석은 이벤트 노드
+            #   (vt_movement)-[:located_at]->(vt_loc) — 이벤트 노드가 건별이라 쌍 집계해도 1이벤트 1엣지.
             'aggregation': {'key': ('subject', 'location'), 'min': ('first_dt',), 'max': ('last_dt',),
                             'sum': ('evt_count',), 'union': ('source_id',)},
         },
         # ══════════════════════════════════════════════════════════════════════
         # V4.5 반영 (ccop-analysis 번들 대조 — 2차년도 실적재 검증에서 발견한 신규 엣지)
         # ══════════════════════════════════════════════════════════════════════
-        'sent_from_ip': {
-            'domain': 'Message',
-            'range': 'NetworkTrace',
-            'source_types': [],
-            'semantic_relation': 'sentFromIp',
-            'label_ko': '발신IP',
-            'meaning': '메시지가 특정 IP에서 발신됨 — 착발신내역이 메시지+접속을 한 레코드로 제공(V4.5 G2)',
-            'legal_significance': '통신사실확인자료',
-            'properties': ['sent_at', 'source_id', 'rec_created']
-        },
         'exchanged_to': {
             'domain': 'BankAccount',
             'range': 'CryptoWallet',

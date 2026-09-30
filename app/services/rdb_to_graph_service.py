@@ -229,7 +229,7 @@ class RdbToGraphService:
                 # v3.0 신규: 인물 → 디지털 증거
                 'uses_id', 'owns_wallet', 'uses_device',   # V4.9: uses_email → uses_id
                 # v3.0 신규: 기타
-                'filed_as', 'occurred_at', 'accessed_from', 'performed_by',
+                'filed_as', 'located_at', 'accessed_from', 'performed_by',
                 'resolves_to',
                 # v3.3 사칭 패턴 (impersonates 는 V4.9 삭제 — used_for·targets)
                 'used_for', 'targets',
@@ -1406,9 +1406,9 @@ class RdbToGraphService:
                                  f"is_outdoor: '{outdoor}', type: 'ATM'}}")
                         cur.execute(f"MERGE (n:vt_atm {{atm_id: '{atm_no}'}}) SET n = {props}")
                         stats["nodes"] += 1
-                        # ATM → 위치 연결
+                        # ATM → 위치 연결 (V4.9: 고정 위치는 located_at — occurred_at 통합)
                         if loc_id:
-                            cur.execute(f"MATCH (a:vt_atm {{atm_id: '{atm_no}'}}), (l:vt_loc {{loc_id: '{loc_id}'}}) MERGE (a)-[:occurred_at]->(l)")
+                            cur.execute(f"MATCH (a:vt_atm {{atm_id: '{atm_no}'}}), (l:vt_loc {{loc_id: '{loc_id}'}}) MERGE (a)-[:located_at]->(l)")
                             stats["edges"] += 1
                     except Exception as _e:
                         logger.debug("행/항목 처리 실패(건너뜀): %s", _e)

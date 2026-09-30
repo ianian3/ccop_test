@@ -345,7 +345,7 @@ class AIService:
         "received_msg":   ("vt_msg",      "vt_telno"),
         # 이동·위치
         "recorded_in":    ("vt_vhcl",     "vt_movement"),
-        "occurred_at":    ("vt_movement", "vt_loc"),
+        "located_at":     ("vt_movement", "vt_loc"),   # V4.9 occurred_at 통합
         # 귀속·메타
         "belongs_to":     ("vt_bacnt",    "vt_org"),
         "resolves_to":    ("vt_site",     "vt_ip"),
