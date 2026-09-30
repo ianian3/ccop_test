@@ -47,6 +47,8 @@ CCOP V4.9 온톨로지 — POLE 정렬 6레이어 아키텍처 (현행 SSOT)
              RecruitChainAccomplice·MoneyLaundering 은 엣지 대신 탐지 후보 목록 출력. 엣지 72→68
           ⑥ transferred_to 를 '다단계 추론 엣지'에서 직접(원천 사실) 쌍 집계 엣지로 재정의 — inferred·transitive 제거
           ⑦ same_as 를 엔티티 해소 엣지로 명시(같은 라벨끼리) + 속성명 통일(confidence·match_basis·review_status)
+          ⑧ belongs_to_cluster·belongs_to_campaign 은 유지(데모·OSINT 90건 적재) — inferred 대신 derived(군집 결과,
+             derived_by=PtClusterDetection·SiteClusterDetection)로 명시. 원천 사실 엣지와 구분되는 파생 엣지
 노드: 25 | 엣지: 68 (활성 67 + deprecated 1: owns_device) | 추론 규칙: 13종 통합 dict (탐지 9 + enrichment 4)
 """
 
@@ -1297,10 +1299,11 @@ class KICSCrimeDomainOntology:
             'source_types': [],
             'semantic_relation': 'belongsToCluster',
             'label_ko': '군집소속',
-            'meaning': '진정서가 진정서군집(pt_cluster) 허브 노드에 소속됨 (v3.7)',
+            'meaning': '진정서가 진정서군집(pt_cluster) 허브 노드에 소속됨 (v3.7) — 파생: 군집 탐지 결과(원천 기록 아님)',
             'legal_significance': None,
-            'properties': ['sim_score', 'rec_created'],
-            'inferred': True
+            'properties': ['sim_score', 'source_id', 'rec_created'],
+            'derived': True,             # V4.9: 추론 엣지가 아니라 파생(군집 결과) — 원천 엣지와 구분해 재계산 대상
+            'derived_by': 'PtClusterDetection',   # INFERENCE_RULES enrichment 규칙이 생성 (sim_score 는 선택)
         },
         # ═══════════════════════════════════════════════════════════
         # [New] Temporal Relationships (Dynamic Ontology)
@@ -1749,10 +1752,11 @@ class KICSCrimeDomainOntology:
             'source_types': [('site', 'site_cluster')],
             'semantic_relation': 'belongsToCampaign',
             'label_ko': '캠페인소속',
-            'meaning': '사이트가 피싱캠페인군집(site_cluster) 허브 노드에 소속됨 (v3.7)',
+            'meaning': '사이트가 피싱캠페인군집(site_cluster) 허브 노드에 소속됨 (v3.7) — 파생: 군집 탐지 결과(원천 기록 아님)',
             'legal_significance': '인터넷기록',
             'properties': ['sim_score', 'detected_at', 'source_id', 'rec_created'],
-            'inferred': True
+            'derived': True,             # V4.9: 추론 엣지가 아니라 파생(군집 결과) — 원천 엣지와 구분해 재계산 대상
+            'derived_by': 'SiteClusterDetection',   # INFERENCE_RULES enrichment 규칙이 생성 (sim_score 는 선택)
         },
 
         # ═══════════════════════════════════════════════════════════

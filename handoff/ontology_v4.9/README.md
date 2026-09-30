@@ -18,6 +18,7 @@ V4.8 로 적재기·검증기를 만드셨다면 아래 항목을 확인하시�
 | 4 | 추론 결과 엣지 | `contradicts`·`clusters_with`·`accomplice_of`·`related_case` 정의 | **삭제**(적재 실적 0건). 추론 결과는 원천 온톨로지가 아니라 분석 산출물 — 탐지 규칙은 엣지 대신 후보 목록을 낸다 |
 | 5 | `transferred_to` | "다단계 추론 엣지 — 직접 생성 금지" | **직접(원천 사실) 쌍 집계 엣지** — `txn_count`·`total_amount`·`first_dlng_dt`·`last_dlng_dt`·`channel`. 다단계 흐름은 경로 조회로 |
 | 6 | `same_as` 속성 | `match_score`·`match_basis`(구현마다 `conf`·`method`) | **`confidence`(숫자)·`match_basis`·`review_status`(confirmed·candidate)·`traversal_policy`**, 양끝 같은 라벨 |
+| 7 | `belongs_to_cluster`·`belongs_to_campaign` | 추론 엣지 | **유지** · 파생 엣지(군집 결과, `derived_by` 규칙 명시) — 원천 사실 엣지와 구분 |
 
 - 집계 규칙은 정의 스펙의 `RELATIONSHIPS['used_ip'|'located_at']['aggregation']` 에 기계 판독 형태로 들어 있습니다.
 - CSV 적재 규격(`csv_spec_v4.8`)은 **형식 변경이 없어 V4.8 그대로**입니다 — 참조 적재기가 위 규칙대로 만듭니다.
