@@ -279,7 +279,7 @@ class AIService:
               Cypher: MATCH (i:vt_id)-[:used_for]->(imp:vt_impersonation)-[:targets]->(o:vt_org) RETURN i, imp, o
           예) "사칭 이벤트 전체 목록" -> labels: ["vt_impersonation"]
               Cypher: MATCH (imp:vt_impersonation) RETURN imp LIMIT 20
-          ※ 구버전 impersonates 엣지는 deprecated — 신규 쿼리에 사용 금지
+          ※ 구버전 impersonates 엣지는 V4.9 에서 삭제 — used_for·targets 사용
 
         [출력 JSON 포맷]
         {{
@@ -324,7 +324,6 @@ class AIService:
         "suspect_in":     ("vt_psn",      "vt_case"),
         "victim_in":      ("vt_psn",      "vt_case"),
         "witness_in":     ("vt_psn",      "vt_case"),
-        "involves":       ("vt_case",     "vt_psn"),
         # 사건·진정서
         "filed_as":       ("vt_petition", "vt_case"),
         # 소유 (Person → Object)
@@ -334,7 +333,6 @@ class AIService:
         "owns_vehicle":   ("vt_psn",      "vt_vhcl"),
         "used_ip":        ("vt_psn",      "vt_ip"),
         "member_of":      ("vt_psn",      "vt_org"),
-        "works_at":       ("vt_psn",      "vt_org"),
         "uses_id":        ("vt_psn",      "vt_id"),
         # 금융 이벤트
         "from_account":   ("vt_bacnt",    "vt_transfer"),
@@ -362,7 +360,6 @@ class AIService:
         "used_for":       ("vt_telno",    "vt_impersonation"),  # 수단 → 사칭이벤트
         "targets":        ("vt_impersonation", "vt_org"),       # 사칭이벤트 → 대상기관
         # 사칭 V3.2 레거시 (deprecated — 읽기 전용)
-        "impersonates":   ("vt_telno",    "vt_org"),
         # 엔티티 해소
         "same_as":        ("vt_psn",      "vt_psn"),
     }

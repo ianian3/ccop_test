@@ -38,9 +38,8 @@ class RelationshipInferencer:
         # [Layer 1 → Layer 2] Case (사건) → Actor (행위자)
         # 사건은 오직 행위자(인물/조직/기기)와만 직접 연결
         # ═══════════════════════════════════════════════════════════
-        ("case_id", "person"): {"type": "involves", "description": "관련 인물"},
-        ("case_id", "organization"): {"type": "involves", "description": "관련 조직"},
-        ("case_id", "device"): {"type": "involves", "description": "관련 기기"},
+        # V4.9: involves 삭제 — 인물은 역할 엣지(방향 Person→Case), 역할 미상은 witness_in {role:'unknown'}
+        ("person", "case_id"): {"type": "witness_in", "description": "관련 인물(역할 미상)"},
         
         # ═══════════════════════════════════════════════════════════
         # [Layer 2 → Layer 3] Actor (행위자) → Action (행위)

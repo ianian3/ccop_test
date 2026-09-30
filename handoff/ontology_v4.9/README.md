@@ -1,11 +1,11 @@
 # CCOP 온톨로지 V4.9 — 전달 패키지
 
-> 사이버범죄 수사 그래프 온톨로지 표준. **노드 25종 · 엣지 68종**(활성 67, deprecated 1).
+> 사이버범죄 수사 그래프 온톨로지 표준. **노드 25종 · 엣지 61종**(deprecated 0).
 > 제공: 스카이월드와이드 · 기준일 2026-09-30 · 대상: 통합 플랫폼 구축 기관
 
 ---
 
-## V4.9 변경점 (V4.8 대비 — 노드 25 불변 · 엣지 72→68)
+## V4.9 변경점 (V4.8 대비 — 노드 25 불변 · 엣지 72→61)
 
 V4.8 이후 **의미가 바뀐 변경**이 있어 같은 V4.8 이름으로 재배포하지 않고 버전을 올렸습니다.
 V4.8 로 적재기·검증기를 만드셨다면 아래 항목을 확인하시면 됩니다.
@@ -19,6 +19,7 @@ V4.8 로 적재기·검증기를 만드셨다면 아래 항목을 확인하시�
 | 5 | `transferred_to` | "다단계 추론 엣지 — 직접 생성 금지" | **직접(원천 사실) 쌍 집계 엣지** — `txn_count`·`total_amount`·`first_dlng_dt`·`last_dlng_dt`·`channel`. 다단계 흐름은 경로 조회로 |
 | 6 | `same_as` 속성 | `match_score`·`match_basis`(구현마다 `conf`·`method`) | **`confidence`(숫자)·`match_basis`·`review_status`(confirmed·candidate)·`traversal_policy`**, 양끝 같은 라벨 |
 | 7 | `belongs_to_cluster`·`belongs_to_campaign` | 추론 엣지 | **유지** · 파생 엣지(군집 결과, `derived_by` 규칙 명시) — 원천 사실 엣지와 구분 |
+| 8 | 중복·폐기 엣지 7종 | `owns_device`·`impersonates`·`involves`·`owns`·`verified_by`·`linked_petition`·`works_at` | **삭제** — `uses_device`·`used_for`/`targets`·`witness_in`(role=unknown)·구체 소유 엣지·엣지 메타 `verified_by`·`filed_as`(status)·`member_of`(role)로 흡수 |
 
 - 집계 규칙은 정의 스펙의 `RELATIONSHIPS['used_ip'|'located_at']['aggregation']` 에 기계 판독 형태로 들어 있습니다.
 - CSV 적재 규격(`csv_spec_v4.8`)은 **형식 변경이 없어 V4.8 그대로**입니다 — 참조 적재기가 위 규칙대로 만듭니다.
@@ -38,20 +39,20 @@ V4.8 로 적재기·검증기를 만드셨다면 아래 항목을 확인하시�
 
 ---
 
-## 1. 가장 먼저 알아야 할 것 — **정의 68종 ≠ 사용 19종**
+## 1. 가장 먼저 알아야 할 것 — **정의 61종 ≠ 사용 19종**
 
 V4.9는 3차년도까지의 도메인 확장을 내다본 정의이고, **2차년도 실적재는 그 일부**입니다.
 정의 전체를 구현 목표로 잡으면 낭비이니, 아래 구분을 먼저 잡으십시오.
 
 | 구분 | 규모 | 성격 |
 |---|---|---|
-| 정의된 엣지 | **68종**(활성 67) | 마약·OSINT·차량 등 미도래 도메인 포함 |
+| 정의된 엣지 | **61종** | 마약·OSINT·차량 등 미도래 도메인 포함 |
 | **2차년도 실사용 엣지** | **19종** | EP1~EP10 원본에 실제로 존재한 관계만 |
 | 실사용 노드 | **12라벨** / 정의 25 | |
 | 실적재 규모 | 24,720 노드 · 26,089 엣지 | 통합 그래프(`ccop_ep_integrated`) |
 
 **우선 구현 대상은 19종**입니다. 목록·의미·방향·속성·건수는 `SCHEMA_CATALOG_ACTUAL.html`
-② 섹션에 실측으로 정리돼 있습니다. 나머지 49종은 해당 원본 데이터가 도착할 때 채우면 됩니다
+② 섹션에 실측으로 정리돼 있습니다. 나머지 42종은 해당 원본 데이터가 도착할 때 채우면 됩니다
 (정의만 있어도 무해합니다 — 런타임에 미사용 정의는 아무 영향이 없습니다).
 
 ### 실사용 19종 요약
@@ -79,7 +80,7 @@ from ccop_ontology_v49 import KICSCrimeDomainOntology as O
 # ── 정의 본체 ──
 O.LAYERS / O.LAYERS_GDB   # 4계층 골격
 O.ENTITIES                # 25 — 노드 정의(layer·properties(키)·attributes(전속성)·legal_category)
-O.RELATIONSHIPS           # 68 — 엣지 정의(domain·range·properties·meaning·legal_significance)
+O.RELATIONSHIPS           # 61 — 엣지 정의(domain·range·properties·meaning·legal_significance)
 O.GDB_LABEL_MAP           # 개념명(Person) → 라벨(vt_psn)   / O.CONCEPT_LOOKUP 은 역방향
 O.LABEL_KO_MAP            # 라벨 → 한글명(보고서·UI 표기)
 O.EDGE_META_SCHEMA        # 전 엣지 공통 메타 속성과 타입
@@ -113,7 +114,7 @@ print(json.dumps({'entities':O.ENTITIES,'relationships':O.RELATIONSHIPS}, ensure
 - **8종은 `domain: 'Any'`** (`recorded_in`·`occurred_at`·`linked_to`·`sourced_from`·
   `used_for`·`contains_file` 등) — 여러 주체가 붙을 수 있는 범용 엣지이며, 감사에서
   와일드카드로 취급됩니다. 확장 여유를 여기서 확보하십시오.
-- **deprecated 1종**(`owns_device` → `uses_device`)은 신규 적재에 쓰지 마십시오.
+- V4.9 부터 **deprecated 엣지는 없습니다**(폐기 대상은 모두 삭제·통합).
 
 ---
 

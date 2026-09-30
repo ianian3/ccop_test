@@ -50,21 +50,18 @@ class GraphService:
         "eg_used_account": ("vt_case",   "vt_bacnt"),
         "eg_used_phone":   ("vt_case",   "vt_telno"),
         "eg_used_ip":      ("vt_case",   "vt_ip"),
-        # ── [호환성] involves — 신규 생성 금지, 기존 DB 데이터 읽기 전용
-        "involves":      ("vt_case",     "vt_psn"),
+        # ── (V4.9) involves 삭제 — 사건 관련 인물은 suspect_in·victim_in·witness_in
         "involves_org":  ("vt_case",     "vt_org"),
         # ── PERSON 소유/귀속 엣지 ─────────────────────────────────────
         "has_account":   ("vt_psn",      "vt_bacnt"),
         "controls":      ("vt_psn",      "vt_bacnt"),
         "owns_phone":    ("vt_psn",      "vt_telno"),
-        "owns_device":   ("vt_psn",      "vt_dev"),
         "uses_id":       ("vt_psn",      "vt_id"),
         "uses_email":    ("vt_psn",      "vt_email"),
         "drives":        ("vt_psn",      "vt_vhcl"),   # 운행 (LPR·CDR 기반)
         "owns_vehicle":  ("vt_psn",      "vt_vhcl"),   # v3.5: 법적 소유 (등록원부)
         "used_ip":       ("vt_psn",      "vt_ip"),
         "member_of":     ("vt_psn",      "vt_org"),
-        "works_at":      ("vt_psn",      "vt_org"),
         # ── PERSON 간 관계 ────────────────────────────────────────────
         "same_as":        ("vt_psn",      "vt_psn"),
         # ── PERSON v3.4 신규 ──────────────────────────────────────────
@@ -100,7 +97,6 @@ class GraphService:
         "used_for":      ("vt_telno",    "vt_impersonation"),
         "targets":       ("vt_impersonation", "vt_org"),
         # ── META (Provenance) ─────────────────────────────────────────
-        "verified_by":   ("vt_psn",      "vt_psn"),
         # sourced_from: 모든 노드 타입 → vt_src (None = Any)
         # 버그수정 v3.7: ("vt_psn", "vt_src") 로 제한되어 있어 vt_case 등에서 방향 교정 불가
         "sourced_from":  (None,          "vt_src"),
@@ -971,14 +967,17 @@ class GraphService:
                 except:
                     continue
             
-            # 4. 관련 사건도 추가
+            # 4. 관련 사건도 추가 — V4.9: involves 삭제, 역할 엣지 3종을 각각 조회
             try:
-                cur.execute(f"""
-                    MATCH (c:vt_case)-[:involves]->(p)
-                    WHERE id(p) = '{node_id}'
-                    RETURN id(c), labels(c), properties(c)
-                """)
-                for r in cur.fetchall():
+                case_rows = []
+                for role_edge in ('suspect_in', 'victim_in', 'witness_in'):
+                    cur.execute(f"""
+                        MATCH (p)-[:{role_edge}]->(c:vt_case)
+                        WHERE id(p) = '{node_id}'
+                        RETURN id(c), labels(c), properties(c)
+                    """)
+                    case_rows += [(r, role_edge) for r in cur.fetchall()]
+                for r, role_edge in case_rows:
                     cid = str(r[0])
                     if cid not in node_set:
                         node_set.add(cid)
@@ -989,8 +988,8 @@ class GraphService:
                         })
                         elements_edges.append({
                             "group": "edges",
-                            "data": {"id": f"inv_{cid}_{sid}", "source": cid, "target": sid,
-                                     "label": "involves", "props": {}}
+                            "data": {"id": f"inv_{cid}_{sid}", "source": sid, "target": cid,
+                                     "label": role_edge, "props": {}}
                         })
             except:
                 pass
@@ -1027,7 +1026,7 @@ class GraphService:
                     MATCH (p:vt_psn)
                     WHERE p.name <> '불상' AND p.name <> '미상'
                     RETURN id(p), p.name,
-                           size((p)<-[:involves]-()) AS cases,
+                           size((p)-[:suspect_in]->()) + size((p)-[:victim_in]->()) + size((p)-[:witness_in]->()) AS cases,
                            size((p)-[:has_account]->()) AS accounts,
                            size((p)-[:owns_phone]->()) AS phones,
                            0 AS accomplices

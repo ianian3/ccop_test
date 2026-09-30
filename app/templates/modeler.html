@@ -778,9 +778,7 @@ const KICS_EDGES = [
   { type:'filed_as',      srcLabel:'vt_petition', tgtLabel:'vt_case',     desc:'사건전환' },
   // Person 관계
   { type:'same_as',       srcLabel:'vt_psn',      tgtLabel:'vt_psn',      desc:'동일인물' },
-  { type:'impersonates',  srcLabel:'vt_psn',      tgtLabel:'vt_org',      desc:'사칭' },
   // 소유/사용
-  { type:'owns',          srcLabel:'vt_psn',      tgtLabel:'vt_telno',    desc:'소유' },
   { type:'has_account',   srcLabel:'vt_psn',      tgtLabel:'vt_bacnt',    desc:'계좌보유' },
   { type:'uses',          srcLabel:'vt_psn',      tgtLabel:'vt_id',       desc:'사용' },
   { type:'located_at',    srcLabel:'vt_psn',      tgtLabel:'vt_loc',      desc:'위치' },
@@ -795,7 +793,6 @@ const KICS_EDGES = [
   { type:'accessed',      srcLabel:'vt_id',       tgtLabel:'vt_site',     desc:'접속' },
   { type:'linked_to',     srcLabel:'vt_ip',       tgtLabel:'vt_site',     desc:'연결' },
   // [호환] 구버전 엣지 (DB 읽기용)
-  { type:'involves',      srcLabel:'vt_case',     tgtLabel:'vt_psn',      desc:'관련(구버전)' },
 ];
 
 let schema = { nodes: [], edges: [] };
@@ -1881,7 +1878,7 @@ const CRIME_TEMPLATES = [
       { id:'node-vt_transfer', label:'vt_transfer', displayName:'이체',      color:'#e17055', pos:{x:640,y:180}, key_property:'',        properties:[{name:'amount',type:'string',desc:'금액',sample:'500000'},{name:'timestamp',type:'string',desc:'일시',sample:'2025-01-01 09:00:00'}] },
     ],
     edges: [
-      { id:'te-1', source_id:'node-vt_case',     target_id:'node-vt_psn',      type:'involves',      properties:[] },
+      { id:'te-1', source_id:'node-vt_psn',      target_id:'node-vt_case',     type:'suspect_in',    properties:[] },
       { id:'te-2', source_id:'node-vt_psn',      target_id:'node-vt_bacnt',    type:'has_account',   properties:[] },
       { id:'te-3', source_id:'node-vt_psn',      target_id:'node-vt_telno',    type:'owns_phone',    properties:[] },
       { id:'te-4', source_id:'node-vt_bacnt',    target_id:'node-vt_transfer', type:'from_account',  properties:[] },
@@ -1900,7 +1897,7 @@ const CRIME_TEMPLATES = [
       { id:'node-vt_site',  label:'vt_site',  displayName:'사이트',   color:'#00b894', pos:{x:660,y:200}, key_property:'url',     properties:[{name:'url',type:'string',desc:'URL',sample:'http://malicious.com'}] },
     ],
     edges: [
-      { id:'te-1', source_id:'node-vt_case', target_id:'node-vt_psn',   type:'involves',   properties:[] },
+      { id:'te-1', source_id:'node-vt_psn', target_id:'node-vt_case',  type:'suspect_in', properties:[] },
       { id:'te-2', source_id:'node-vt_psn',  target_id:'node-vt_ip',    type:'used_ip',    properties:[] },
       { id:'te-3', source_id:'node-vt_psn',  target_id:'node-vt_id',    type:'uses_id',    properties:[] },
       { id:'te-4', source_id:'node-vt_psn',  target_id:'node-vt_telno', type:'owns_phone', properties:[] },
@@ -1919,7 +1916,7 @@ const CRIME_TEMPLATES = [
       { id:'node-vt_atm',      label:'vt_atm',      displayName:'ATM',   color:'#55efc4', pos:{x:520,y:260},  key_property:'atm_id', properties:[{name:'atm_id',type:'string',desc:'ATM번호',sample:'ATM-001'}] },
     ],
     edges: [
-      { id:'te-1', source_id:'node-vt_case',     target_id:'node-vt_psn',      type:'involves',      properties:[] },
+      { id:'te-1', source_id:'node-vt_psn',      target_id:'node-vt_case',     type:'suspect_in',    properties:[] },
       { id:'te-2', source_id:'node-vt_psn',      target_id:'node-vt_bacnt',    type:'has_account',   properties:[] },
       { id:'te-3', source_id:'node-vt_bacnt',    target_id:'node-vt_transfer', type:'from_account',  properties:[] },
       { id:'te-4', source_id:'node-vt_transfer', target_id:'node-vt_bacnt',    type:'to_account',    properties:[] },

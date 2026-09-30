@@ -535,10 +535,10 @@ class LangGraphAgent:
                                  "start_dt", "end_dt", "source_id", "verified"],
         },
         "edge_types": [
-            "suspect_in", "victim_in", "witness_in", "involves",
+            "suspect_in", "victim_in", "witness_in",
             "filed_as",
             "has_account", "controls", "owns_phone", "owns_vehicle",
-            "used_ip", "member_of", "works_at", "uses_id",
+            "used_ip", "member_of", "uses_id",
             "from_account", "to_account", "transferred_to",
             "caller", "callee", "contacted",
             "sent_msg", "received_msg",
@@ -553,7 +553,6 @@ class LangGraphAgent:
             "suspect_in":    ("vt_psn",      "vt_case"),
             "victim_in":     ("vt_psn",      "vt_case"),
             "witness_in":    ("vt_psn",      "vt_case"),
-            "involves":      ("vt_case",     "vt_psn"),
             "filed_as":      ("vt_petition", "vt_case"),
             "has_account":   ("vt_psn",      "vt_bacnt"),
             "controls":      ("vt_psn",      "vt_bacnt"),
@@ -561,7 +560,6 @@ class LangGraphAgent:
             "owns_vehicle":  ("vt_psn",      "vt_vhcl"),
             "used_ip":       ("vt_psn",      "vt_ip"),
             "member_of":     ("vt_psn",      "vt_org"),
-            "works_at":      ("vt_psn",      "vt_org"),
             "uses_id":       ("vt_psn",      "vt_id"),
             "uses_email":    ("vt_psn",      "vt_email"),
             "owns_wallet":   ("vt_psn",      "vt_crypto"),
@@ -1156,7 +1154,7 @@ SELECT * FROM cypher('{state['graph_path']}', $$ MATCH ... RETURN ... $$) AS (�
 
 [엣지 방향 규칙]
 - 피의자/피해자/참고인 → suspect_in/victim_in/witness_in: (vt_psn)-[:rel]->(vt_case)
-- 구형 호환: (vt_case)-[:involves]->(vt_psn)
+- 역할 미상 관련자: (vt_psn)-[:witness_in {{role:'unknown'}}]->(vt_case)
 - 계좌소유: (vt_psn)-[:has_account]->(vt_bacnt)
 - 이체: (vt_bacnt)-[:from_account]->(vt_transfer)-[:to_account]->(vt_bacnt)
 - 통화: (vt_telno)-[:caller]->(vt_call)-[:callee]->(vt_telno)
@@ -1184,8 +1182,8 @@ A: SELECT * FROM cypher('{state['graph_path']}', $$ MATCH (t:vt_telno)-[r1:used_
 Q: "피의자1 소속 조직"
 A: SELECT * FROM cypher('{state['graph_path']}', $$ MATCH (p:vt_psn {{name: '피의자1'}})-[r:member_of]->(o:vt_org) RETURN p, r, o $$) AS (p agtype, r agtype, o agtype);
 
-Q: "CASE-99 사건 연루 인물"
-A: SELECT * FROM cypher('{state['graph_path']}', $$ MATCH (c:vt_case {{flnm: 'CASE-99'}})-[r:involves]->(p:vt_psn) RETURN c, r, p $$) AS (c agtype, r agtype, p agtype);
+Q: "CASE-99 사건 참고인·관련자"
+A: SELECT * FROM cypher('{state['graph_path']}', $$ MATCH (p:vt_psn)-[r:witness_in]->(c:vt_case {{incdnt_no: 'CASE-99'}}) RETURN p, r, c $$) AS (p agtype, r agtype, c agtype);
 
 Q: "조지영 찾아줘" / "이진아 노드" / "홍길동 관련 정보 모두"   ← 단순 개체 조회(관계 지정 없음)
 A: SELECT * FROM cypher('{state['graph_path']}', $$ MATCH (p:vt_psn {{name: '조지영'}}) OPTIONAL MATCH (p)-[r]-(m) RETURN p, r, m $$) AS (p agtype, r agtype, m agtype);

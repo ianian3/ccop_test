@@ -223,7 +223,7 @@ class RdbToGraphService:
                 'sent_msg', 'received_msg', 'recorded_in',
                 # 소유/관계
                 'owns_vehicle', 'contains_file',
-                'belongs_to', 'works_at',
+                'belongs_to',
                 # 출처
                 'sourced_from',
                 # v3.0 신규: 인물 → 디지털 증거
@@ -231,12 +231,11 @@ class RdbToGraphService:
                 # v3.0 신규: 기타
                 'filed_as', 'occurred_at', 'accessed_from', 'performed_by',
                 'resolves_to',
-                # v3.3 사칭 패턴 (impersonates는 하위호환 읽기용)
-                'used_for', 'targets', 'impersonates',
+                # v3.3 사칭 패턴 (impersonates 는 V4.9 삭제 — used_for·targets)
+                'used_for', 'targets',
                 # v3.7 신규 엣지
                 'belongs_to_cluster', 'belongs_to_campaign', 'used_in_device',
                 # (구) 호환
-                'involves',
             ]
             
             for vl in vertex_labels:
@@ -746,7 +745,7 @@ class RdbToGraphService:
                     logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
             conn.commit()
 
-            # 5-3. involves 엣지 (vt_case → vt_psn) — 사건·인물 직접 연결
+            # 5-3. 사건·인물 역할 엣지 (vt_psn → vt_case) — 역할 미상은 witness_in role=unknown (V4.9 involves 삭제)
             # TB_INCDNT_PRSN 조인 테이블 기반 (tbl_eg_case_prsn.csv에서 적재)
             try:
                 cur.execute("""
@@ -761,8 +760,10 @@ class RdbToGraphService:
                         case_no, pid, role = safe_str(r[0]), safe_str(r[1]), safe_str(r[2])
                         if case_no and pid:
                             # v3.2 Role-as-Edge: ROLE_CD → 역할별 엣지 타입
-                            role_edge = 'suspect_in' if role == 'SUSPECT' else 'victim_in' if role == 'VICTIM' else 'witness_in' if role == 'WITNESS' else 'involves'
-                            cur.execute(f"MATCH (c:vt_case {{incdnt_no: '{case_no}'}}), (p:vt_psn {{id: '{pid}'}}) MERGE (p)-[r:{role_edge}]->(c) SET r.evid_grade = 'A', r.src_tier = 1")
+                            # V4.9: involves 삭제 — 역할 미상은 witness_in {role:'unknown'}
+                            role_edge = 'suspect_in' if role == 'SUSPECT' else 'victim_in' if role == 'VICTIM' else 'witness_in'
+                            role_prop = '' if role in ('SUSPECT', 'VICTIM', 'WITNESS') else ", r.role = 'unknown'"
+                            cur.execute(f"MATCH (c:vt_case {{incdnt_no: '{case_no}'}}), (p:vt_psn {{id: '{pid}'}}) MERGE (p)-[r:{role_edge}]->(c) SET r.evid_grade = 'A', r.src_tier = 1{role_prop}")
                             stats["edges"] += 1
                     except Exception as _e:
                         logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
@@ -2067,8 +2068,10 @@ class RdbToGraphService:
                                f"gender: '{gndr}', type: '인물'}}")
                     cur.execute(f"MERGE (p:vt_psn {{id: '{pid}'}}) SET p = {props_p}")
                     stats["nodes"] += 1
-                    role_edge = 'suspect_in' if role == 'SUSPECT' else 'victim_in' if role == 'VICTIM' else 'witness_in' if role == 'WITNESS' else 'involves'
-                    cur.execute(f"MATCH (c:vt_case {{incdnt_no: '{case_s}'}}), (p:vt_psn {{id: '{pid}'}}) MERGE (p)-[r:{role_edge}]->(c) SET r.evid_grade = 'A', r.src_tier = 1")
+                    # V4.9: involves 삭제 — 역할 미상은 witness_in {role:'unknown'}
+                    role_edge = 'suspect_in' if role == 'SUSPECT' else 'victim_in' if role == 'VICTIM' else 'witness_in'
+                    role_prop = '' if role in ('SUSPECT', 'VICTIM', 'WITNESS') else ", r.role = 'unknown'"
+                    cur.execute(f"MATCH (c:vt_case {{incdnt_no: '{case_s}'}}), (p:vt_psn {{id: '{pid}'}}) MERGE (p)-[r:{role_edge}]->(c) SET r.evid_grade = 'A', r.src_tier = 1{role_prop}")
                     stats["edges"] += 1
                     # sourced_from: 인물 → vt_src (v3.6 확정: tier 1은 엣지 생성)
                     cur.execute(f"MATCH (s:vt_src {{src_id: 'src-kics-official'}}), (p:vt_psn {{id: '{pid}'}}) MERGE (p)-[:sourced_from {{src_tier: 1, rec_created: toString(datetime())}}]->(s)")

@@ -35,7 +35,7 @@ CCOP V4.9 온톨로지 — POLE 정렬 6레이어 아키텍처 (현행 SSOT)
           reification 우선). + sameAs→same_as 개명(AgensGraph 미인용 식별자 소문자화로 DB 실현명이
           'sameas'가 되던 문제 — snake_case 전면 통일, DB 4건 마이그레이션). 엣지 수 불변(72).
   - V4.9 (2026-09-30): 식별자·집계 규칙 정정 — 의미가 바뀐 변경을 V4.8 이름으로 재배포하지 않기 위해
-          버전 분리(docs/ONTOLOGY_V48_VALIDATION_20260918.md §6-1 권고). 노드 25 · 엣지 72→68.
+          버전 분리(docs/ONTOLOGY_V48_VALIDATION_20260918.md §6-1 권고). 노드 25 · 엣지 72→61.
           ① vt_case 정경 식별자 flnm → incdnt_no(경찰청 공식 사건번호, 2026-09-18), flnm 은 보조 속성
           ② used_ip·located_at 쌍 단위 집계 규칙 명시(RELATIONSHIPS[*]['aggregation']) — used_ip +usage_count·
              access_type(valid_from=최초, valid_to=마지막 관측), located_at +first_dt·last_dt·evt_count
@@ -49,11 +49,14 @@ CCOP V4.9 온톨로지 — POLE 정렬 6레이어 아키텍처 (현행 SSOT)
           ⑦ same_as 를 엔티티 해소 엣지로 명시(같은 라벨끼리) + 속성명 통일(confidence·match_basis·review_status)
           ⑧ belongs_to_cluster·belongs_to_campaign 은 유지(데모·OSINT 90건 적재) — inferred 대신 derived(군집 결과,
              derived_by=PtClusterDetection·SiteClusterDetection)로 명시. 원천 사실 엣지와 구분되는 파생 엣지
-노드: 25 | 엣지: 68 (활성 67 + deprecated 1: owns_device) | 추론 규칙: 13종 통합 dict (탐지 9 + enrichment 4)
+          ⑨ 중복·폐기 엣지 7종 삭제(68→61, 전 그래프 적재 0건): owns_device(→uses_device)·impersonates(→used_for·
+             targets)·involves(→witness_in role=unknown)·owns(→구체 소유 엣지)·verified_by(→엣지 메타 verified_by)·
+             linked_petition(→filed_as status)·works_at(→member_of role). filed_as 는 적재 299건이라 존치 쪽으로 통합
+노드: 25 | 엣지: 61 (deprecated 0) | 추론 규칙: 13종 통합 dict (탐지 9 + enrichment 4)
 """
 
 class KICSCrimeDomainOntology:
-    """KICS 기반 한국형 사이버 범죄 온톨로지 (V4.9 POLE 6레이어 · 68종 엣지[활성 67] · 추론규칙 13종)"""
+    """KICS 기반 한국형 사이버 범죄 온톨로지 (V4.9 POLE 6레이어 · 61종 엣지 · 추론규칙 13종)"""
 
     # 엣지 공통 메타속성 스키마 (EDGE_META_SCHEMA)
     EDGE_META_SCHEMA = {
@@ -528,7 +531,6 @@ class KICSCrimeDomainOntology:
         'suspect_in':         {'color': '#C0392B', 'width': 3, 'arrow': 'triangle', 'style': 'solid'},
         'victim_in':          {'color': '#27AE60', 'width': 3, 'arrow': 'triangle', 'style': 'solid'},
         'witness_in':         {'color': '#F39C12', 'width': 2, 'arrow': 'triangle', 'style': 'solid'},
-        'involves':           {'color': '#7F8C8D', 'width': 2, 'arrow': 'triangle', 'style': 'solid'},
         'filed_as':           {'color': '#16A085', 'width': 2, 'arrow': 'triangle', 'style': 'solid'},
         # Evidence 엣지
         'eg_used_account':    {'color': '#3498DB', 'width': 2, 'arrow': 'triangle', 'style': 'solid'},
@@ -540,7 +542,6 @@ class KICSCrimeDomainOntology:
         'owns_vehicle':       {'color': '#34495E', 'width': 2, 'arrow': 'triangle', 'style': 'solid'},
         'drives':             {'color': '#34495E', 'width': 2, 'arrow': 'triangle', 'style': 'solid'},
         'member_of':          {'color': '#5DADE2', 'width': 2, 'arrow': 'triangle', 'style': 'solid'},
-        'works_at':           {'color': '#5499C7', 'width': 2, 'arrow': 'triangle', 'style': 'solid'},
         'recruits':           {'color': '#922B21', 'width': 3, 'arrow': 'triangle', 'style': 'solid'},
         'blackmails':         {'color': '#641E16', 'width': 3, 'arrow': 'triangle', 'style': 'solid'},
         'same_as':             {'color': '#999999', 'width': 2, 'arrow': 'none',     'style': 'dashed'},
@@ -569,7 +570,6 @@ class KICSCrimeDomainOntology:
         'targets':            {'color': '#922B21', 'width': 2, 'arrow': 'triangle', 'style': 'solid'},
         # 출처/검증
         'sourced_from':       {'color': '#BDC3C7', 'width': 1, 'arrow': 'triangle', 'style': 'dotted'},
-        'verified_by':        {'color': '#27AE60', 'width': 1, 'arrow': 'triangle', 'style': 'dashed'},
         # V3.7 신규 엣지 (군집)
         'belongs_to_cluster': {'color': '#FFD93D', 'width': 2, 'arrow': 'triangle', 'style': 'solid'},
         'belongs_to_campaign':{'color': '#F39C12', 'width': 2, 'arrow': 'triangle', 'style': 'solid'},
@@ -581,10 +581,8 @@ class KICSCrimeDomainOntology:
         'uses_device':        {'color': '#7D3C98', 'width': 2, 'arrow': 'triangle', 'style': 'solid'},
         # [V4.0 정합화] 의미 카탈로그에만 있던 실사용 엣지 스타일 등재 (2026-07-31)
         'used_ip':            {'color': '#5499C7', 'width': 1, 'arrow': 'triangle', 'style': 'solid'},    # Person→Digital 계열 (uses_id 동계열)
-        'owns':               {'color': '#0066CC', 'width': 1, 'arrow': 'triangle', 'style': 'dashed'},   # 범용 소유 — has_account 계열의 보조형(얇은 대시)
         'controls':           {'color': '#0052A3', 'width': 2, 'arrow': 'triangle', 'style': 'dashed'},   # 실질지배 — 소유(진파랑)의 강조 대시
         'located_at':         {'color': '#00B894', 'width': 1, 'arrow': 'triangle', 'style': 'dotted'},   # Location 계열 (정적 위치, 점선)
-        'owns_device':        {'color': '#7D3C98', 'width': 2, 'arrow': 'triangle', 'style': 'dashed'},   # uses_device 별칭(deprecated) — 동색 대시로 구분
         # 기타
         'registered_to':      {'color': '#5499C7', 'width': 1, 'arrow': 'triangle', 'style': 'solid'},
         'operates':           {'color': '#9B59B6', 'width': 2, 'arrow': 'triangle', 'style': 'solid'},
@@ -598,7 +596,6 @@ class KICSCrimeDomainOntology:
         'mentions_location':  {'color': '#A04000', 'width': 2, 'arrow': 'triangle', 'style': 'dotted'},
         'linked_to':          {'color': '#BDC3C7', 'width': 1, 'arrow': 'triangle-tee', 'style': 'dashed'},
         'contacted':          {'color': '#E67E22', 'width': 1, 'arrow': 'triangle-tee', 'style': 'solid'},
-        'impersonates':       {'color': '#CB4335', 'width': 2, 'arrow': 'triangle', 'style': 'dashed'},  # V3.3 read-only
         # Deprecated (시각화는 표시하되 색을 흐리게)
     }
 
@@ -1226,9 +1223,9 @@ class KICSCrimeDomainOntology:
             'source_types': [('person', 'case'), ('witness', 'case_id')],
             'semantic_relation': 'witnessIn',
             'label_ko': '참고인',
-            'meaning': '인물이 사건의 참고인으로 관련',
+            'meaning': '인물이 사건의 참고인·관련자로 연결 — 역할 미상은 role=\'unknown\'. V4.9: involves(Case→Person, 역할 미상) 통합',
             'legal_significance': '참고인진술',
-            'properties': ['statement_date', 'source_id', 'rec_created']
+            'properties': ['role', 'statement_date', 'source_id', 'rec_created']
         },
         # ═══════════════════════════════════════════════════════════
         # [ENTITY RESOLUTION] 동일인물/모순 엣지
@@ -1289,9 +1286,9 @@ class KICSCrimeDomainOntology:
             'source_types': [('petition', 'case')],
             'semantic_relation': 'filedAs',
             'label_ko': '사건전환',
-            'meaning': '진정서가 수사 사건으로 전환됨',
+            'meaning': '진정서가 수사 사건으로 전환·연계됨 — status 로 구분(converted 전환 · linked 연계). V4.9: linked_petition 통합',
             'legal_significance': '수사개시',
-            'properties': ['converted_dt', 'converted_by', 'source_id', 'rec_created']
+            'properties': ['status', 'converted_dt', 'converted_by', 'source_id', 'rec_created']
         },
         'belongs_to_cluster': {
             'domain': 'Petition',
@@ -1360,16 +1357,6 @@ class KICSCrimeDomainOntology:
         # [Layer 2 → Layer 4] Actor (행위자) → Evidence (증거) [소유관계]
         # 행위자가 직접 소유하거나 귀속된 증거 객체
         # ═══════════════════════════════════════════════════════════
-        'owns': {
-            'domain': 'Person',
-            'range': 'Any',              # 범용 소유 (owns_phone/has_account 등으로 분기 권장)
-            'source_types': [('person', 'phone')],
-            'semantic_relation': 'owns',
-            'label_ko': '소유',
-            'meaning': '인물이 객체를 소유함 (범용 — 구체 엣지 우선 사용)',
-            'legal_significance': '피의자정보',
-            'properties': ['start_date', 'end_date', 'verification_source']
-        },
         'owns_phone': {
             'domain': 'Person',
             'range': 'Phone',
@@ -1455,17 +1442,17 @@ class KICSCrimeDomainOntology:
         # ═══════════════════════════════════════════════════════════
         # [Layer 2 → Layer 2] Actor 간 관계 (KICS 확장)
         # ═══════════════════════════════════════════════════════════
-        # [주의] Person→Organization 소속은 member_of / works_at 으로 분리됨
+        # [주의] Person→Organization 소속은 member_of 하나(role: member·employee) — V4.9 works_at 통합
         # belongs_to (Person→Org) 중복 키 제거 — 아래 belongs_to (Account→Org) 단일 유지
         # controls 정의는 하단 [V4.0 정합화 C단계] 블록으로 단일화 (중복 제거)
-        # owns_device 정의는 하단 [V4.0 정합화 C단계] 블록으로 단일화 (deprecated·alias_of=uses_device)
+        # owns_device 는 V4.9 에서 삭제 — uses_device 사용
         'member_of': {
             'domain': 'Person',
             'range': 'Organization',
             'source_types': [('person', 'org'), ('member', 'organization')],
             'semantic_relation': 'memberOf',
             'label_ko': '조직소속',
-            'meaning': '인물이 조직(범죄단체 포함)에 소속됨',
+            'meaning': '인물이 조직(범죄단체·직장 포함)에 소속됨 — role 로 구분(member 구성원 · employee 직원). V4.9: works_at 통합',
             'legal_significance': '피의자정보',
             'properties': ['role', 'valid_from', 'valid_to', 'source_id', 'rec_created']
         },
@@ -1592,7 +1579,7 @@ class KICSCrimeDomainOntology:
         },
         # Note: Case→Action 직접 연결 제거됨 (4계층 모델 준수)
         # Case는 Actor를 통해서만 Action에 연결됨:
-        # Case → Actor (involves) → Action (performed)
+        # Actor → Case (suspect_in·victim_in·witness_in) → Action (performed)
         
         # ═══════════════════════════════════════════════════════════
         # [Enhancement] 보강 엣지 — 교차 도메인 관계
@@ -1605,15 +1592,6 @@ class KICSCrimeDomainOntology:
             'label_ko': '소속기관',
             'meaning': '계좌 소속 금융기관',
             'legal_significance': '금융거래정보'
-        },
-        'works_at': {
-            'domain': 'Person',
-            'range': 'Organization',
-            'source_types': [('person', 'org'), ('인물', '조직')],
-            'semantic_relation': 'worksAt',
-            'label_ko': '소속',
-            'meaning': '인물의 소속 조직',
-            'legal_significance': '내부자 식별'
         },
         'represents': {                             # 수사단서 스키마 5건 보완 — DDL 신설 반영(TB_INST_RPRS_REL_T)
             'domain': 'Person',
@@ -1811,16 +1789,6 @@ class KICSCrimeDomainOntology:
         # [V4.0 정합화] 시각 카탈로그(EDGE_STYLE_V40)에만 있던 실사용 엣지 8종
         #   — 의미 정의를 CCOP_Ontology_V4.0.xlsx 엣지카탈로그 기준으로 등재 (2026-07-31)
         # ═══════════════════════════════════════════════════════════
-        'involves': {
-            'domain': 'Case',
-            'range': 'Person',
-            'source_types': [],
-            'semantic_relation': 'involves',
-            'label_ko': '사건관련',
-            'meaning': '사건에 관련된 인물 (역할 미상 시 suspect_in/victim_in/witness_in 대신 사용)',
-            'legal_significance': '사건관련성',
-            'properties': ['source_id', 'rec_created']
-        },
         'communicated_with': {
             'domain': 'NetworkTrace',
             'range': 'NetworkTrace',
@@ -1842,16 +1810,6 @@ class KICSCrimeDomainOntology:
             'properties': ['source_id', 'rec_created', 'channel',  # V4.8: channel='call'|'kakao'|'sms' — 연락 수단 구분
                            'first_dt', 'last_dt', 'call_count', 'msg_count', 'total_dur_sec'],
             # V4.9 집계(CSV 규격 §4): (상대방 쌍, channel)당 1엣지 — 적재기가 쓰던 집계 속성을 SoT 에 명시
-        },
-        'impersonates': {
-            'domain': 'Person',
-            'range': 'Organization',
-            'source_types': [],
-            'semantic_relation': 'impersonates',
-            'label_ko': '사칭',
-            'meaning': '인물이 기관/조직을 사칭 (v3.3에서 vt_impersonation 노드로 승격 — 본 직접 엣지는 read-only 유지)',
-            'legal_significance': '사칭수법',
-            'properties': ['source_id', 'rec_created']
         },
         'owns_wallet': {
             'domain': 'Person',
@@ -1879,19 +1837,9 @@ class KICSCrimeDomainOntology:
             'source_types': [],
             'semantic_relation': 'usesDevice',
             'label_ko': '기기사용',
-            'meaning': '인물이 기기를 소유/사용',
+            'meaning': '인물이 기기를 소유/사용 (V4.9: deprecated owns_device 삭제·통합)',
             'legal_significance': '디지털증거',
             'properties': ['valid_from', 'valid_to', 'source_id', 'rec_created']
-        },
-        'verified_by': {
-            'domain': 'Person',
-            'range': 'Person',
-            'source_types': [],
-            'semantic_relation': 'verifiedBy',
-            'label_ko': '검증자',
-            'meaning': '수사관(인물)이 대상 정보를 검증함 (Provenance 계열)',
-            'legal_significance': '증거검증',
-            'properties': ['verified_dt', 'source_id', 'rec_created']
         },
         # ── [V4.0 정합화 C단계] 의미-only 였던 3종 처리 (2026-07-31) ──
         'controls': {
@@ -1920,18 +1868,6 @@ class KICSCrimeDomainOntology:
             'aggregation': {'key': ('subject', 'location'), 'min': ('first_dt',), 'max': ('last_dt',),
                             'sum': ('evt_count',), 'union': ('source_id',)},
         },
-        'owns_device': {
-            'domain': 'Person',
-            'range': 'Device',
-            'source_types': [],
-            'semantic_relation': 'usesDevice',
-            'label_ko': '기기소유',
-            'meaning': '[DEPRECATED — uses_device 사용] 인물이 기기를 소유. 신규 데이터는 uses_device로 통일',
-            'legal_significance': '디지털증거',
-            'deprecated': True,
-            'alias_of': 'uses_device',
-            'properties': ['source_id', 'rec_created']
-        },
         # ══════════════════════════════════════════════════════════════════════
         # V4.5 반영 (ccop-analysis 번들 대조 — 2차년도 실적재 검증에서 발견한 신규 엣지)
         # ══════════════════════════════════════════════════════════════════════
@@ -1954,16 +1890,6 @@ class KICSCrimeDomainOntology:
             'meaning': '계좌 자금이 가상자산 지갑으로 환전됨 — 자금 종단 브리지(V4.5 G6)',
             'legal_significance': '자금추적',
             'properties': ['amount', 'exchanged_at', 'source_id', 'rec_created']
-        },
-        'linked_petition': {
-            'domain': 'Petition',
-            'range': 'Case',
-            'source_types': [],
-            'semantic_relation': 'linkedPetition',
-            'label_ko': '진정연계',
-            'meaning': '진정서가 사건에 연계됨 — 기존 linked_to(Petition→Case) 대체(V4.5 R2)',
-            'legal_significance': '사건관리',
-            'properties': ['source_id', 'rec_created']
         },
         'eg_used_id': {
             'domain': 'Case',
@@ -2452,13 +2378,11 @@ class OntologyEnricher:
             'filed_as':       {'semantic_relation': 'filedAs',           'domain_meaning': '진정서 → 사건 전환',       'legal_significance': '수사개시'},
             # ── Person 관계 ──
             'same_as':         {'semantic_relation': 'same_as',            'domain_meaning': '동일인물 해소',            'legal_significance': '신원확인'},
-            'impersonates':   {'semantic_relation': 'impersonates',      'domain_meaning': '사칭 대상(구)',            'legal_significance': '사기범죄'},
             'represents':     {'semantic_relation': 'represents',        'domain_meaning': '법인 대표',                'legal_significance': '법인등기'},
             # V3.3 사칭 노드 패턴
             'used_for':       {'semantic_relation': 'usedForImpersonation','domain_meaning': '사칭 수단',              'legal_significance': '전기통신금융사기법 제3조'},
             'targets':        {'semantic_relation': 'targetsOrganization', 'domain_meaning': '사칭 대상 기관',         'legal_significance': '전기통신금융사기법 제3조'},
             # ── 소유/사용 ──
-            'owns':           {'semantic_relation': 'owns',              'domain_meaning': '소유',                    'legal_significance': '소유관계'},
             'has_account':    {'semantic_relation': 'hasFinancialAccount','domain_meaning': '계좌 보유',               'legal_significance': '금융거래정보'},
             'uses':           {'semantic_relation': 'uses',              'domain_meaning': '사용',                    'legal_significance': '증거물'},
             'controls':       {'semantic_relation': 'controls',          'domain_meaning': '통제',                    'legal_significance': '범죄사실'},
@@ -2494,7 +2418,6 @@ class OntologyEnricher:
             'drops':          {'semantic_relation': 'drops',             'domain_meaning': '악성파일 드롭',           'legal_significance': '디지털증거'},
             'part_of_campaign':{'semantic_relation':'partOfCampaign',    'domain_meaning': '캠페인 소속',             'legal_significance': '디지털증거'},
             # ── Deprecated 호환 ──
-            'involves':       {'semantic_relation': 'involvesPerson',    'domain_meaning': '관련 인물 (구버전)',       'legal_significance': '피의자정보'},
             'involves_org':   {'semantic_relation': 'involvesOrg',       'domain_meaning': '관련 조직 (구버전)',       'legal_significance': '피의자정보'},
             # ── 레거시 ──
             'digital_trace':  {'semantic_relation': 'investigatesDigitalTrace','domain_meaning': '디지털 흔적',       'legal_significance': '디지털증거'},
