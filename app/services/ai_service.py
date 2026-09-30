@@ -170,8 +170,8 @@ class AIService:
     # 온톨로지 별칭에 없는 영문·약어 별칭 보강 (SoT 는 손대지 않는다)
     _EN_LABEL_HINTS = {
         'vt_ip': (r'\bip\b', r'아이피'), 'vt_atm': (r'\batm\b', r'현금인출'),
-        'vt_site': (r'\burl\b', r'\bdomain\b'), 'vt_email': (r'\bemail\b', r'\bmail\b'),
-        'vt_id': (r'\bid\b', r'아이디', r'계정'), 'vt_crypto': (r'지갑', r'코인', r'가상화폐'),
+        'vt_site': (r'\burl\b', r'\bdomain\b'),
+        'vt_id': (r'\bid\b', r'아이디', r'계정', r'\bemail\b', r'\bmail\b'),   # V4.9 이메일 흡수 'vt_crypto': (r'지갑', r'코인', r'가상화폐'),
     }
 
     @staticmethod
@@ -253,7 +253,7 @@ class AIService:
         - 사이트 군집/피싱 캠페인/사이트 클러스터 -> site_cluster  [V3.7 신규]
         - 파일/악성코드/해시 -> vt_file
         - ID/계정/닉네임/아이디 -> vt_id (익명 가능 is_anonymous=true)
-        - 이메일/메일주소 -> vt_email
+        - 이메일/메일주소 -> vt_id {{platform:'email'}} (V4.9 vt_email 흡수)
         - 가상화폐/지갑/코인/블록체인 -> vt_crypto
         - 차량/번호판/자동차 -> vt_vhcl
         - 기기/스마트폰/PC/단말/중계기/relay/IMEI -> vt_dev (중계기는 dev_type='relay_station')

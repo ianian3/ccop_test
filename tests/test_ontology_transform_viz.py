@@ -31,7 +31,7 @@ class TestOntologyDefinition:
         'vt_src', 'vt_case', 'vt_petition',
         'vt_psn', 'vt_org',
         'vt_bacnt', 'vt_crypto', 'vt_ip', 'vt_site', 'vt_file',
-        'vt_id', 'vt_email', 'vt_telno', 'vt_vhcl', 'vt_dev', 'vt_atm',
+        'vt_id', 'vt_telno', 'vt_vhcl', 'vt_dev', 'vt_atm',
         'vt_loc',
         'vt_transfer', 'vt_call', 'vt_access', 'vt_msg', 'vt_movement',
         'vt_impersonation',   # V3.3 신설
@@ -41,9 +41,9 @@ class TestOntologyDefinition:
     EXPECTED_LAYERS = {'Source', 'Case', 'Person', 'Object', 'Location', 'Event'}
 
     def test_entity_count(self):
-        """25개 엔티티 타입 정의 확인 (V3.7: pt_cluster/site_cluster 추가)"""
+        """24개 엔티티 타입 정의 확인 (V4.9: vt_email → vt_id 흡수)"""
         count = len(Onto.ENTITIES)
-        assert count == 25, f"엔티티 수 불일치: 기대 25개, 실제 {count}개"
+        assert count == 24, f"엔티티 수 불일치: 기대 24개, 실제 {count}개"
         print(f"  ✅ 엔티티 수 정상: {count}개")
 
     def test_all_node_labels_defined(self):
@@ -60,7 +60,7 @@ class TestOntologyDefinition:
             assert reverse == concept, (
                 f"역매핑 불일치: {label} → {reverse} (기대: {concept})"
             )
-        assert len(Onto.GDB_LABEL_MAP) == 25, f"GDB_LABEL_MAP 크기 불일치: {len(Onto.GDB_LABEL_MAP)}"
+        assert len(Onto.GDB_LABEL_MAP) == 24, f"GDB_LABEL_MAP 크기 불일치: {len(Onto.GDB_LABEL_MAP)}"
         print(f"  ✅ 양방향 매핑 일관성 정상 ({len(Onto.GDB_LABEL_MAP)}개)")
 
     def test_label_ko_map_coverage(self):
@@ -165,7 +165,6 @@ class TestOntologyEnrichment:
         ('vt_site',     {'url_addr': 'http://phish.com'},                         'Object',   'Object'),
         ('vt_file',     {'hash_val': 'abc123', 'file_nm': 'malware.exe'},         'Object',   'Object'),
         ('vt_id',       {'id_val': 'user99', 'platform': 'Telegram'},             'Object',   'Object'),
-        ('vt_email',    {'email_addr': 'test@naver.com'},                         'Object',   'Object'),
         ('vt_telno',    {'telno': '01012345678'},                                  'Object',   'Object'),
         ('vt_vhcl',     {'vhclno': '12가3456'},                                   'Object',   'Object'),
         ('vt_dev',      {'device_id': 'dev-001', 'imei': '354000000000001'},      'Object',   'Object'),
@@ -373,11 +372,11 @@ class TestVisualizationDataStructure:
         return nodes + edges
 
     def test_ontology_graph_node_count(self):
-        """시각화 그래프 노드 수 = 25개 (V3.7: pt_cluster/site_cluster 포함)"""
+        """시각화 그래프 노드 수 = 24개 (V4.9: vt_email 흡수)"""
         elements = self._build_ontology_graph()
         node_count = sum(1 for e in elements if e['group'] == 'nodes')
-        assert node_count == 25, f"시각화 노드 수 불일치: {node_count}"
-        print(f"  ✅ 시각화 노드 25개 생성 정상 (V3.7)")
+        assert node_count == 24, f"시각화 노드 수 불일치: {node_count}"
+        print(f"  ✅ 시각화 노드 24개 생성 정상 (V4.9)")
 
     def test_ontology_graph_edge_minimum(self):
         """시각화 그래프 엣지 수 >= 20개 (유효 관계)"""
@@ -415,13 +414,13 @@ class TestVisualizationDataStructure:
         assert summary['Source']['count'] == 1
         assert summary['Case']['count'] == 3      # V3.7: pt_cluster 추가 (2→3)
         assert summary['Person']['count'] == 2
-        assert summary['Object']['count'] == 12   # V3.7: site_cluster 추가 (11→12)
+        assert summary['Object']['count'] == 11   # V4.9: vt_email 흡수 (12→11)
         assert summary['Location']['count'] == 1
         assert summary['Event']['count'] == 6, \
             f"Event 레이어 노드 수 불일치: {summary['Event']['count']} (V3.3: vt_impersonation 포함 6개)"
 
         total = sum(v['count'] for v in summary.values())
-        assert total == 25, f"레이어 요약 총합 불일치: {total} (V3.7: 25개)"
+        assert total == 24, f"레이어 요약 총합 불일치: {total} (V4.9: 24개)"
         assert 'vt_impersonation' in summary['Event']['labels'], "vt_impersonation이 Event 레이어에 없음"
         print(f"  ✅ 레이어 요약 정상: {json.dumps({k: v['count'] for k, v in summary.items()})}")
 
@@ -454,7 +453,7 @@ class TestVisualizationDataStructure:
             'relationship_count': len(relationships),
         }
 
-        assert payload['entity_count'] == 25, f"entity_count 불일치: {payload['entity_count']} (V3.7: 25)"
+        assert payload['entity_count'] == 24, f"entity_count 불일치: {payload['entity_count']} (V4.9: 24)"
         assert payload['relationship_count'] == len(Onto.RELATIONSHIPS)
         assert 'Source' in payload['layers']
         # JSON 직렬화 가능 여부 확인
@@ -475,7 +474,7 @@ class TestColumnPatterns:
         ('전화번호',      'phone',    'vt_telno',    'telno'),
         ('ip주소',        'ip',       'vt_ip',       'ip_addr'),
         ('사건번호',      'case',     'vt_case',     'flnm'),
-        ('이메일',        'email',    'vt_email',    'email_addr'),
+        ('이메일',        'email',    'vt_id',       'id_val'),      # V4.9 vt_email 흡수
         ('차량번호',      'vehicle',  'vt_vhcl',     'vhclno'),
         ('wallet_addr',  'crypto',   'vt_crypto',   'wallet_addr'),
         ('닉네임',        'nickname', 'vt_id',       'id_val'),

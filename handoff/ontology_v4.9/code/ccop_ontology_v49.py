@@ -1,6 +1,6 @@
 """CCOP 온톨로지 V4.9 — 정의 스펙 (전달본)
 
-노드 25종 · 엣지 61종(활성 61, deprecated 0). 사이버범죄 수사 그래프 표준.
+노드 24종 · 엣지 57종(활성 57, deprecated 0). 사이버범죄 수사 그래프 표준.
 제공: 스카이월드와이드 · 기준 V4.9
 
 외부 의존 0 — 표준 라이브러리조차 import 하지 않는 순수 선언이므로
@@ -35,18 +35,7 @@ class KICSCrimeDomainOntology:
         'Source': ['Source'],
         'Case': ['Case', 'Petition', 'PetitionCluster'],
         'Person': ['Person', 'Organization'],
-        'Object': ['BankAccount',
-                   'CryptoWallet',
-                   'NetworkTrace',
-                   'WebTrace',
-                   'SiteCluster',
-                   'FileTrace',
-                   'DigitalID',
-                   'Email',
-                   'Phone',
-                   'Vehicle',
-                   'Device',
-                   'ATM'],
+        'Object': ['BankAccount', 'CryptoWallet', 'NetworkTrace', 'WebTrace', 'SiteCluster', 'FileTrace', 'DigitalID', 'Phone', 'Vehicle', 'Device', 'ATM'],
         'Location': ['Location'],
         'Event': ['Transfer', 'Call', 'Access', 'Message', 'Movement', 'Impersonation'],
     }
@@ -56,12 +45,12 @@ class KICSCrimeDomainOntology:
         'Source': ['vt_src'],
         'Case': ['vt_case', 'vt_petition', 'pt_cluster'],
         'Person': ['vt_psn', 'vt_org'],
-        'Object': ['vt_bacnt', 'vt_crypto', 'vt_ip', 'vt_site', 'site_cluster', 'vt_file', 'vt_id', 'vt_email', 'vt_telno', 'vt_vhcl', 'vt_dev', 'vt_atm'],
+        'Object': ['vt_bacnt', 'vt_crypto', 'vt_ip', 'vt_site', 'site_cluster', 'vt_file', 'vt_id', 'vt_telno', 'vt_vhcl', 'vt_dev', 'vt_atm'],
         'Location': ['vt_loc'],
         'Event': ['vt_transfer', 'vt_call', 'vt_access', 'vt_msg', 'vt_movement', 'vt_impersonation'],
     }
 
-    # ── 노드 25종 — layer·properties(키)·attributes(전속성)·legal_category  (25종) ──
+    # ── 노드 24종 — layer·properties(키)·attributes(전속성)·legal_category  (24종) ──
     ENTITIES = {
         'Source': {'layer': 'Source',
                    'label': 'vt_src',
@@ -284,16 +273,20 @@ class KICSCrimeDomainOntology:
                       'label': 'vt_id',
                       'label_ko': '디지털ID',
                       'properties': ['id_val', 'platform'],
-                      'attributes': ['id_type', 'profile_url', 'is_active', 'real_name', 'source_id', 'rec_created', 'verified', 'confidence'],
+                      'attributes': ['id_type',
+                                     'profile_url',
+                                     'is_active',
+                                     'real_name',
+                                     'domain',
+                                     'provider',
+                                     'is_disposable',
+                                     'source_id',
+                                     'rec_created',
+                                     'verified',
+                                     'confidence'],
                       'legal_category': '신원정보',
-                      'description': '플랫폼 계정 ID·닉네임 (vt_persona 흡수)'},
-        'Email': {'layer': 'Object',
-                  'sublayer': 'Digital',
-                  'label': 'vt_email',
-                  'label_ko': '이메일',
-                  'properties': ['email_addr'],
-                  'attributes': ['domain', 'provider', 'is_disposable', 'source_id', 'rec_created', 'verified', 'confidence'],
-                  'legal_category': '통신자료'},
+                      'legal_category_by_platform': {'email': '통신자료'},
+                      'description': "플랫폼 계정 ID·닉네임·이메일 주소 (vt_persona 흡수, V4.9 vt_email 흡수 — platform='email')"},
         'Phone': {'layer': 'Object',
                   'sublayer': 'Communication',
                   'label': 'vt_telno',
@@ -479,7 +472,7 @@ class KICSCrimeDomainOntology:
                           'description': '사칭 이벤트 노드 — V3.3에서 impersonates 엣지에서 승격 (전기통신금융사기법 제3조)'},
     }
 
-    # ── 엣지 61종 — domain/range·properties·meaning·legal_significance  (61종) ──
+    # ── 엣지 57종 — domain/range·properties·meaning·legal_significance  (57종) ──
     RELATIONSHIPS = {
         'suspect_in': {'domain': 'Person',
                        'range': 'Case',
@@ -519,12 +512,12 @@ class KICSCrimeDomainOntology:
                       'meaning': '계좌·전화 등 객체에 연결된 온라인 식별자 (공인인증서 발급 ID / 포털 역조회 계정)',
                       'legal_significance': '신원확인',
                       'properties': ['link_basis', 'confidence', 'valid_from', 'source_id', 'rec_created']},
-        'mentions_id': {'domain': 'Message',
-                        'range': 'DigitalID',
-                        'label_ko': '계정기재',
-                        'meaning': '게시물/메시지에 기재된 온라인 계정 (광고글의 텔레그램 ID Zion7950 등)',
-                        'legal_significance': '증거물',
-                        'properties': ['confidence', 'source_id', 'rec_created']},
+        'mentions': {'domain': 'Message',
+                     'range': 'DigitalID|BankAccount|Location',
+                     'label_ko': '기재',
+                     'meaning': '메시지·게시물 본문에 계정·계좌·장소가 기재됨 (광고글의 텔레그램 ID, 입금 계좌, 거래 장소 등). 종류는 도착 라벨로 구분',
+                     'legal_significance': '증거물',
+                     'properties': ['confidence', 'extract_method', 'source_id', 'rec_created']},
         'filed_as': {'domain': 'Petition',
                      'range': 'Case',
                      'label_ko': '사건전환',
@@ -545,12 +538,6 @@ class KICSCrimeDomainOntology:
                     'meaning': '인물이 플랫폼 ID/닉네임을 사용',
                     'legal_significance': '신원확인',
                     'properties': ['platform', 'valid_from', 'valid_to', 'source_id', 'rec_created']},
-        'uses_email': {'domain': 'Person',
-                       'range': 'Email',
-                       'label_ko': '이메일사용',
-                       'meaning': '인물이 이메일 주소를 사용',
-                       'legal_significance': '신원확인',
-                       'properties': ['valid_from', 'valid_to', 'source_id', 'rec_created']},
         'drives': {'domain': 'Person',
                    'range': 'Vehicle',
                    'label_ko': '차량운행',
@@ -630,12 +617,6 @@ class KICSCrimeDomainOntology:
                    'meaning': '이체 이벤트의 접속 IP (모바일뱅킹 등)',
                    'legal_significance': '통신자료',
                    'properties': ['source_id', 'rec_created']},
-        'mentions_location': {'domain': 'Message',
-                              'range': 'Location',
-                              'label_ko': '위치기재',
-                              'meaning': '메시지/게시물에 언급된 장소 (거래 장소/은닉 좌표 등)',
-                              'legal_significance': '증거물',
-                              'properties': ['confidence', 'source_id', 'rec_created']},
         'sourced_from': {'domain': 'Any',
                          'range': 'Source',
                          'label_ko': '출처',
@@ -663,13 +644,6 @@ class KICSCrimeDomainOntology:
                         'meaning': '도메인이 IP 주소로 조회됨 (DNS A/AAAA 레코드)',
                         'inference': True,
                         'legal_significance': '네트워크 추적'},
-        'mentions_account': {'domain': 'Message',
-                             'range': 'BankAccount',
-                             'label_ko': '계좌언급',
-                             'meaning': '메시지 내 계좌번호 언급',
-                             'inference': True,
-                             'confidence': 0.85,
-                             'legal_significance': '보이스피싱 핵심증거'},
         'used_for': {'domain': 'Any',
                      'range': 'Impersonation',
                      'label_ko': '사칭수단',
@@ -809,15 +783,9 @@ class KICSCrimeDomainOntology:
                        'meaning': '사건에서 사용·언급된 디지털ID(V4.5 R3 신설)',
                        'legal_significance': '수사대상',
                        'properties': ['source_id', 'rec_created']},
-        'eg_used_email': {'domain': 'Case',
-                          'range': 'Email',
-                          'label_ko': '사건사용이메일',
-                          'meaning': '사건에서 사용·언급된 이메일(V4.5 R3 신설)',
-                          'legal_significance': '수사대상',
-                          'properties': ['source_id', 'rec_created']},
     }
 
-    # ── 개념명 → 그래프 라벨 (Person → vt_psn)  (25종) ──
+    # ── 개념명 → 그래프 라벨 (Person → vt_psn)  (24종) ──
     GDB_LABEL_MAP = {
         'Source': 'vt_src',
         'Case': 'vt_case',
@@ -832,7 +800,6 @@ class KICSCrimeDomainOntology:
         'SiteCluster': 'site_cluster',
         'FileTrace': 'vt_file',
         'DigitalID': 'vt_id',
-        'Email': 'vt_email',
         'Phone': 'vt_telno',
         'Vehicle': 'vt_vhcl',
         'Device': 'vt_dev',
@@ -846,7 +813,7 @@ class KICSCrimeDomainOntology:
         'Impersonation': 'vt_impersonation',
     }
 
-    # ── 그래프 라벨 → 개념명 (역방향)  (25종) ──
+    # ── 그래프 라벨 → 개념명 (역방향)  (24종) ──
     CONCEPT_LOOKUP = {
         'vt_src': 'Source',
         'vt_case': 'Case',
@@ -861,7 +828,6 @@ class KICSCrimeDomainOntology:
         'site_cluster': 'SiteCluster',
         'vt_file': 'FileTrace',
         'vt_id': 'DigitalID',
-        'vt_email': 'Email',
         'vt_telno': 'Phone',
         'vt_vhcl': 'Vehicle',
         'vt_dev': 'Device',
@@ -875,7 +841,7 @@ class KICSCrimeDomainOntology:
         'vt_impersonation': 'Impersonation',
     }
 
-    # ── 라벨 → 한글명 (UI·보고서 표기용)  (25종) ──
+    # ── 라벨 → 한글명 (UI·보고서 표기용)  (24종) ──
     LABEL_KO_MAP = {
         'vt_src': '소스',
         'vt_case': '사건',
@@ -890,7 +856,6 @@ class KICSCrimeDomainOntology:
         'site_cluster': '피싱캠페인군집',
         'vt_file': '파일',
         'vt_id': '디지털ID',
-        'vt_email': '이메일',
         'vt_telno': '전화번호',
         'vt_vhcl': '차량',
         'vt_dev': '기기',
@@ -919,7 +884,7 @@ class KICSCrimeDomainOntology:
         'verified_at': str,
     }
 
-    # ── 노드 식별자 규약 — canonical_field·정규화·해시 형식 (적재 멱등성의 근거)  (25종) ──
+    # ── 노드 식별자 규약 — canonical_field·정규화·해시 형식 (적재 멱등성의 근거)  (24종) ──
     NODE_ID_STANDARD = {
         'vt_bacnt': {'canonical_field': 'account_no',
                      'id_formats': ['plain_dash', 'md5', 'sha256'],
@@ -943,7 +908,6 @@ class KICSCrimeDomainOntology:
         'vt_case': {'canonical_field': 'incdnt_no', 'id_formats': ['plain'], 'default_format': 'plain'},
         'vt_petition': {'canonical_field': 'petition_id', 'id_formats': ['plain'], 'default_format': 'plain'},
         'vt_org': {'canonical_field': 'org_id', 'id_formats': ['plain'], 'default_format': 'plain'},
-        'vt_email': {'canonical_field': 'email_addr', 'id_formats': ['normalized'], 'default_format': 'normalized'},
         'vt_crypto': {'canonical_field': 'wallet_addr', 'id_formats': ['base58check'], 'default_format': 'base58check'},
         'vt_vhcl': {'canonical_field': 'vhclno', 'id_formats': ['plain'], 'default_format': 'plain'},
         'vt_dev': {'canonical_field': 'dev_id', 'id_formats': ['plain', 'imei'], 'default_format': 'plain'},
@@ -957,7 +921,7 @@ class KICSCrimeDomainOntology:
         'vt_impersonation': {'canonical_field': 'impersonation_id', 'id_formats': ['uuid'], 'default_format': 'uuid'},
     }
 
-    # ── RDB 표준테이블 크로스워크 (standard 키가 현행)  (25종) ──
+    # ── RDB 표준테이블 크로스워크 (standard 키가 현행)  (24종) ──
     STANDARD_TABLE_MAP = {
         'vt_src': {'standard': 'TB_DATA_SOU_A', 'public_v2': 'TB_DATA_SRC', 'test_v40': None},
         'vt_case': {'standard': 'TB_INCDNT_M', 'public_v2': 'TB_INCDNT_MST', 'test_v40': 'tb_incdnt_mst'},
@@ -970,8 +934,10 @@ class KICSCrimeDomainOntology:
         'vt_site': {'standard': 'TB_WEB_DMN_M', 'public_v2': 'TB_WEB_DMN', 'test_v40': None},
         'vt_file': {'standard': 'TB_DGTL_FILE_LIST_M', 'public_v2': 'TB_DGTL_FILE_INVNT', 'test_v40': None},
         'vt_vhcl': {'standard': 'TB_VHCL_M', 'public_v2': 'TB_VHCL_MST', 'test_v40': None},
-        'vt_id': {'standard': 'TB_DGTL_ID_M', 'public_v2': 'TB_DGTL_ID_MST', 'test_v40': None},
-        'vt_email': {'standard': 'TB_EML_ADDR_M', 'public_v2': 'TB_EMAIL_MST', 'test_v40': None},
+        'vt_id': {'standard': ['TB_DGTL_ID_M', 'TB_EML_ADDR_M'],
+                  'public_v2': ['TB_DGTL_ID_MST', 'TB_EMAIL_MST'],
+                  'test_v40': None,
+                  'by_platform': {'email': {'standard': 'TB_EML_ADDR_M', 'public_v2': 'TB_EMAIL_MST'}}},
         'vt_crypto': {'standard': None, 'public_v2': 'TB_CRYPTO_WALLET_MST', 'test_v40': None},
         'vt_dev': {'standard': 'TB_ISTR_M', 'public_v2': 'TB_DEV_MST', 'test_v40': None},
         'vt_atm': {'standard': 'TB_ATM_M', 'public_v2': 'TB_ATM_MST', 'test_v40': None},
@@ -1037,8 +1003,8 @@ class KICSCrimeDomainOntology:
                     'description': '디지털 ID/계정'},
         'nickname': {'patterns': ['닉네임', 'nickname', 'nick', '별명', 'alias'], 'kics_label': 'vt_id', 'kics_property': 'id_val', 'description': '닉네임/별명'},
         'email': {'patterns': ['이메일', 'email', 'e-mail', 'mail', 'email_addr', '전자우편'],
-                  'kics_label': 'vt_email',
-                  'kics_property': 'email_addr',
+                  'kics_label': 'vt_id',
+                  'kics_property': 'id_val',
                   'description': '이메일 주소'},
         'vehicle': {'patterns': ['차량', 'vehicle', '차량번호', 'vhclno', 'car', '번호판'], 'kics_label': 'vt_vhcl', 'kics_property': 'vhclno', 'description': '차량 번호'},
         'crypto': {'patterns': ['지갑', 'wallet', 'wallet_addr', '가상자산', 'crypto', 'btc', 'eth'],

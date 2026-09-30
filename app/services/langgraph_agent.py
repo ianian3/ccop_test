@@ -411,7 +411,6 @@ _BRIDGE_KEY_MAP: Dict[str, tuple] = {
     "vt_site":     ("TB_WEB_DMN",           "DMN_NM",         "domain"),
     "vt_file":     ("TB_DGTL_FILE_INVNT",   "FILE_HASH",      "file_hash"),
     "vt_id":       ("TB_DGTL_ID_MST",       "ID_VAL",         "id_val"),
-    "vt_email":    ("TB_EMAIL_MST",         "EMAIL_ADDR",     "email_addr"),
     "vt_crypto":   ("TB_CRYPTO_WALLET_MST", "WALLET_ADDR",    "wallet_addr"),
     "vt_vhcl":     ("TB_VHCL_MST",          "VHCLNO",         "vhclno"),
     "vt_dev":      ("TB_DEV_MST",           "DEV_ID",         "dev_id"),
@@ -510,8 +509,8 @@ class LangGraphAgent:
                             "risk_grd", "source_id"],
             "vt_file":     ["hash_val", "file_nm", "file_ext", "file_sz",
                             "is_malicious", "vt_score", "source_id"],
-            "vt_id":       ["id_val", "platform", "id_type", "is_active", "source_id"],
-            "vt_email":    ["email_addr", "domain", "provider", "is_disposable", "source_id"],
+            "vt_id":       ["id_val", "platform", "id_type", "is_active",
+                            "domain", "provider", "is_disposable", "source_id"],   # V4.9 이메일=platform 'email'
             "vt_crypto":   ["wallet_addr", "blockchain", "exchange", "risk_score",
                             "balance", "tx_cnt", "source_id"],
             "vt_vhcl":     ["vhclno", "vhcl_model", "owner_nm", "source_id"],
@@ -546,7 +545,7 @@ class LangGraphAgent:
             "belongs_to", "resolves_to", "contains_file", "sourced_from",
             "same_as", "used_for", "targets",
             "eg_used_account", "eg_used_phone", "eg_used_ip",
-            "uses_email", "owns_wallet", "uses_device",
+            "owns_wallet", "uses_device",
             "accessed_from", "performed_by",
         ],
         "edge_directions": {
@@ -561,7 +560,6 @@ class LangGraphAgent:
             "used_ip":       ("vt_psn",      "vt_ip"),
             "member_of":     ("vt_psn",      "vt_org"),
             "uses_id":       ("vt_psn",      "vt_id"),
-            "uses_email":    ("vt_psn",      "vt_email"),
             "owns_wallet":   ("vt_psn",      "vt_crypto"),
             "uses_device":   ("vt_psn",      "vt_dev"),
             "from_account":  ("vt_bacnt",    "vt_transfer"),
@@ -595,11 +593,10 @@ class LangGraphAgent:
             # V4.3 시나리오 직접 엣지 (속성적 연결)
             "knows":         ("vt_psn",      "vt_psn"),
             "linked_id":     (None,          "vt_id"),      # 계좌/전화 → 계정 (다형 domain)
-            "mentions_id":   ("vt_msg",      "vt_id"),
+            "mentions":      ("vt_msg",      None),         # V4.9 mentions_* 통합 → id/bacnt/loc (다형 range)
             # V4.4 reification 참여 엣지
             "access_via":         ("vt_access",   None),        # → telno/id/bacnt (다형 range)
             "via_ip":             ("vt_transfer", "vt_ip"),
-            "mentions_location":  ("vt_msg",      "vt_loc"),
         },
     }
 

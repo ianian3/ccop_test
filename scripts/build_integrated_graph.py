@@ -14,13 +14,16 @@ import psycopg2
 
 KP = {'vt_bacnt': 'account_no', 'vt_case': 'incdnt_no', 'vt_id': 'id_val', 'vt_psn': 'name',
       'vt_telno': 'telno', 'vt_ip': 'ip_addr', 'vt_org': 'org_name', 'vt_atm': 'atm_nm',
-      'vt_email': 'email_addr', 'vt_src': 'src_name',
+      'vt_src': 'src_name',
       'vt_movement': 'mov_id',  # EP9/10 시드: 출입국 이벤트 (V4.8)
       'vt_loc': 'loc_id'}        # EP5-030-ibk: 거래점 위치 (located_at)
 EDGES = ['eg_used_account', 'eg_used_phone', 'eg_used_id', 'has_account', 'victim_in',
          'transferred_to', 'belongs_to', 'registered_to', 'used_ip', 'contacted',
-         'sourced_from', 'linked_to', 'uses_id', 'uses_email', 'owns_phone', 'same_as',
+         'sourced_from', 'linked_to', 'uses_id', 'owns_phone', 'same_as',
          'suspect_in', 'performed_by', 'located_at']   # V4.8: same_as 개명 + EP9/10 시드 + 거래점 위치
+# V4.9 흡수 — 원본 EP 그래프(이전 적재분)의 라벨·엣지를 통합 그래프에서는 V4.9 표기로 번역해 적재
+LEGACY_KP = {'vt_email': 'email_addr'}          # vt_email → vt_id {platform:'email'}
+LEGACY_EDGES = {'uses_email': 'uses_id'}
 GRAPHS = ['ep1_graph', 'ep2_graph', 'ep3_graph', 'ep4_graph',
           'ep5_graph', 'ep6_graph', 'ep7_graph', 'ep8_graph',
           'ep9_graph', 'ep10_graph']   # EP9/10: 정형 없음 → 수동 확정 시드(docs/EP910_SEED_DRAFT_20260902.md)
@@ -29,6 +32,17 @@ INTEG = 'ccop_ep_integrated'
 
 def esc(v):
     return str(v).replace("\\", "\\\\").replace("'", "''")
+
+
+def _canon(label, props):
+    """원본 (라벨, 속성) → 통합 그래프 (라벨, 속성). V4.9: vt_email 은 vt_id(platform='email', id_val=소문자)."""
+    if label != 'vt_email':
+        return label, props
+    addr = props.get('email_addr')
+    props = {a: b for a, b in props.items() if a != 'email_addr'}
+    if addr not in (None, ''):
+        props.update({'id_val': str(addr).strip().lower(), 'platform': 'email'})
+    return 'vt_id', props
 
 
 def _case_kv(label, props):
@@ -64,15 +78,16 @@ def main():
         for g in src_graphs:
             gs = g.replace('_graph', '')
             safe_set_graph_path(cur, g)
-            for label, kp in KP.items():
+            for src_label, kp in {**KP, **LEGACY_KP}.items():
                 try:
-                    cur.execute(f"MATCH (n:{label}) RETURN properties(n)")
+                    cur.execute(f"MATCH (n:{src_label}) RETURN properties(n)")
                 except Exception:
                     safe_set_graph_path(cur, g); continue
                 for (props,) in cur.fetchall():
                     if not props:
                         continue
-                    kv = props.get(kp)
+                    label, props = _canon(src_label, props)   # V4.9 vt_email → vt_id
+                    kv = props.get(KP[label])
                     # vt_case: canonical=incdnt_no 지만 EP 시드 데이터는 flnm(예:'EP1-01-01')만
                     # 있고 incdnt_no 가 빈다 → flnm 으로 폴백해 키를 잡고, incdnt_no 속성에도 채운다.
                     if label == 'vt_case' and kv in (None, ''):
@@ -86,15 +101,21 @@ def main():
                     if label == 'vt_case' and not props.get('incdnt_no'):
                         nodes[k]['props']['incdnt_no'] = str(kv)   # 폴백값을 canonical 속성에 보존
                     nodes[k]['origins'].add(gs)
-            for el in EDGES:
+            for src_el in EDGES + list(LEGACY_EDGES):
+                el = LEGACY_EDGES.get(src_el, src_el)   # V4.9 uses_email → uses_id
                 try:
-                    cur.execute(f"MATCH (a)-[r:{el}]->(b) "
+                    cur.execute(f"MATCH (a)-[r:{src_el}]->(b) "
                                 f"RETURN label(a),properties(a),label(b),properties(b),properties(r)")
                 except Exception:
                     safe_set_graph_path(cur, g); continue
                 for la, pa, lb, pb, pr in cur.fetchall():
-                    if la not in KP or lb not in KP or not pa or not pb:
+                    if not pa or not pb:
                         continue
+                    (la, pa), (lb, pb) = _canon(la, pa), _canon(lb, pb)
+                    if la not in KP or lb not in KP:
+                        continue
+                    if src_el == 'uses_email':
+                        pr = dict(pr or {}, platform='email')
                     va, vb = _case_kv(la, pa), _case_kv(lb, pb)   # vt_case 는 incdnt_no→flnm 폴백
                     if va not in (None, '') and vb not in (None, ''):
                         edges.append((el, (la, str(va)), (lb, str(vb)), pr or {}))

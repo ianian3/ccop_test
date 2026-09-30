@@ -6,7 +6,7 @@ v3.5 POLE 6계층 온톨로지에 따라 RDB(49개 테이블) 데이터를 그�
   Layer 2 (Case)     → vt_case, vt_petition   [TB_INCDNT_MST, TB_PETTN_MST]
   Layer 3 (Person)   → vt_psn, vt_org         [TB_PRSN, TB_INST]
   Layer 4 (Object)   → vt_bacnt, vt_telno, vt_ip, vt_site, vt_file,
-                        vt_id, vt_email, vt_crypto, vt_dev, vt_atm, vt_vhcl
+                        vt_id(이메일 포함, V4.9), vt_crypto, vt_dev, vt_atm, vt_vhcl
   Layer 5 (Location) → vt_loc          [TB_LOC_MST]
   Layer 6 (Event)    → vt_transfer, vt_call, vt_msg, vt_access, vt_movement,
                         vt_impersonation  [V3.3 신설 — TB_IMPRSN_REL, used_for/targets 패턴]
@@ -83,7 +83,7 @@ class RdbToGraphService:
             ('TB_VHCL_MST',          'vt_vhcl',     '차량'),
             # Object — v3.0 신규
             ('TB_DGTL_ID_MST',       'vt_id',       '디지털ID'),
-            ('TB_EMAIL_MST',         'vt_email',    '이메일'),
+            ('TB_EMAIL_MST',         'vt_id',       '이메일(platform=email)'),   # V4.9 vt_email 흡수
             ('TB_CRYPTO_WALLET_MST', 'vt_crypto',   '가상자산지갑'),
             ('TB_DEV_MST',           'vt_dev',      '기기'),
             ('TB_ATM_MST',           'vt_atm',      'ATM'),
@@ -204,7 +204,7 @@ class RdbToGraphService:
                 'vt_src', 'vt_case', 'vt_petition',
                 'vt_psn', 'vt_org',
                 'vt_bacnt', 'vt_crypto', 'vt_ip', 'vt_site', 'vt_file',
-                'vt_id', 'vt_email', 'vt_telno', 'vt_vhcl', 'vt_dev', 'vt_atm',
+                'vt_id', 'vt_telno', 'vt_vhcl', 'vt_dev', 'vt_atm',   # V4.9: vt_email 은 vt_id 로 흡수
                 'vt_loc',
                 'vt_transfer', 'vt_call', 'vt_access', 'vt_msg', 'vt_movement',
                 'vt_impersonation',  # V3.3 신설
@@ -227,7 +227,7 @@ class RdbToGraphService:
                 # 출처
                 'sourced_from',
                 # v3.0 신규: 인물 → 디지털 증거
-                'uses_id', 'uses_email', 'owns_wallet', 'uses_device',
+                'uses_id', 'owns_wallet', 'uses_device',   # V4.9: uses_email → uses_id
                 # v3.0 신규: 기타
                 'filed_as', 'occurred_at', 'accessed_from', 'performed_by',
                 'resolves_to',
@@ -1292,7 +1292,7 @@ class RdbToGraphService:
                 conn.commit()
             except: conn.rollback()
 
-            # 6E-2. 이메일 (TB_EMAIL_MST) → vt_email
+            # 6E-2. 이메일 (TB_EMAIL_MST) → vt_id {platform:'email'} (V4.9 vt_email 흡수, id_val=소문자 정규화)
             try:
                 cur.execute("""
                     SELECT EMAIL_SN, EMAIL_ADDR, DMN_ADDR, PROVIDER_NM,
@@ -1306,14 +1306,15 @@ class RdbToGraphService:
                             safe_str(r[0]), safe_str(r[1]), safe_str(r[2]),
                             safe_str(r[3]), safe_str(r[4]), safe_str(r[5]), safe_str(r[6])
                         )
-                        props = (f"{{email_sn: '{sn}', email_addr: '{addr}', "
+                        addr = addr.lower()
+                        props = (f"{{id_val: '{addr}', platform: 'email', id_type: 'email', email_sn: '{sn}', "
                                  f"domain: '{dmn}', provider: '{provider}', "
                                  f"is_disposable: '{disposable}', is_valid: '{valid}', "
                                  f"src_id: '{src_id}', type: '이메일'}}")
-                        cur.execute(f"MERGE (n:vt_email {{email_addr: '{addr}'}}) SET n = {props}")
+                        cur.execute(f"MERGE (n:vt_id {{id_val: '{addr}', platform: 'email'}}) SET n = {props}")
                         stats["nodes"] += 1
                         if src_id:
-                            cur.execute(f"MATCH (n:vt_email {{email_addr: '{addr}'}}), (s:vt_src {{src_id: '{src_id}'}}) MERGE (n)-[:sourced_from]->(s)")
+                            cur.execute(f"MATCH (n:vt_id {{id_val: '{addr}', platform: 'email'}}), (s:vt_src {{src_id: '{src_id}'}}) MERGE (n)-[:sourced_from]->(s)")
                             stats["edges"] += 1
                     except Exception as _e:
                         logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
@@ -1487,7 +1488,7 @@ class RdbToGraphService:
             # 6J. 사칭 관계 (TB_IMPRSN_REL) → V3.3 패턴
             #   1) vt_impersonation 노드 MERGE
             #   2) (vt_impersonation)-[targets]->(vt_org)
-            #   3) (vt_telno/vt_id/vt_email)-[used_for]->(vt_impersonation)
+            #   3) (vt_telno/vt_id — 이메일은 vt_id platform='email')-[used_for]->(vt_impersonation)
             try:
                 cur.execute("""
                     SELECT IMPRSN_SN, IMPRSN_ORG_ID, IMPRSN_TYPE_CD,
@@ -1545,9 +1546,9 @@ class RdbToGraphService:
                             """)
                             stats["edges"] += 1; imprsn_cnt += 1
                         if email:
-                            em_s = safe_str(email)
+                            em_s = safe_str(email).lower()
                             cur.execute(f"""
-                                MATCH (em:vt_email {{email_addr: '{em_s}'}}),
+                                MATCH (em:vt_id {{id_val: '{em_s}', platform: 'email'}}),
                                       (imp:vt_impersonation {{event_id: '{eid_s}'}})
                                 MERGE (em)-[e:used_for {{source_id: '{sn_s}',
                                             rec_created: toString(now())}}]->(imp)
@@ -1586,7 +1587,7 @@ class RdbToGraphService:
                 logger.info(f"  ✓ uses_id 엣지 (인물→디지털ID): {len(rows)}건")
             except: conn.rollback()
 
-            # 7-2. Person → Email (TB_EMAIL_MST.REAL_NM ↔ TB_PRSN.KORN_FLNM)
+            # 7-2. Person → Email (TB_EMAIL_MST.REAL_NM ↔ TB_PRSN.KORN_FLNM) — V4.9: uses_id → vt_id(platform='email')
             try:
                 cur.execute("""
                     SELECT E.EMAIL_ADDR, P.PRSN_ID
@@ -1597,17 +1598,17 @@ class RdbToGraphService:
                 rows = cur.fetchall()
                 for r in rows:
                     try:
-                        email, pid = safe_str(r[0]), safe_str(r[1])
+                        email, pid = safe_str(r[0]).lower(), safe_str(r[1])
                         cur.execute(f"""
                             MATCH (p:vt_psn {{id: '{pid}'}}),
-                                  (e:vt_email {{email_addr: '{email}'}})
-                            MERGE (p)-[r:uses_email {{evid_grade: 'B', src_tier: 2}}]->(e)
+                                  (e:vt_id {{id_val: '{email}', platform: 'email'}})
+                            MERGE (p)-[r:uses_id {{evid_grade: 'B', src_tier: 2, platform: 'email'}}]->(e)
                         """)
                         stats["edges"] += 1
                     except Exception as _e:
                         logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
                 conn.commit()
-                logger.info(f"  ✓ uses_email 엣지 (인물→이메일): {len(rows)}건")
+                logger.info(f"  ✓ uses_id 엣지 (인물→이메일 vt_id): {len(rows)}건")
             except: conn.rollback()
 
             # 7-3. Person → Crypto Wallet (TB_CRYPTO_WALLET_MST.OWNER_NM ↔ TB_PRSN.KORN_FLNM)

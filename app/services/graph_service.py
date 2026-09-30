@@ -57,7 +57,7 @@ class GraphService:
         "controls":      ("vt_psn",      "vt_bacnt"),
         "owns_phone":    ("vt_psn",      "vt_telno"),
         "uses_id":       ("vt_psn",      "vt_id"),
-        "uses_email":    ("vt_psn",      "vt_email"),
+        "uses_email":    ("vt_psn",      "vt_email"),   # V4.9 삭제 — 이전 적재분 조회 호환 (신규는 uses_id)
         "drives":        ("vt_psn",      "vt_vhcl"),   # 운행 (LPR·CDR 기반)
         "owns_vehicle":  ("vt_psn",      "vt_vhcl"),   # v3.5: 법적 소유 (등록원부)
         "used_ip":       ("vt_psn",      "vt_ip"),
@@ -78,7 +78,7 @@ class GraphService:
         "belongs_to":    ("vt_bacnt",    "vt_org"),    # 계좌 소속 금융기관
         "contains_file": ("vt_site",     "vt_file"),   # 파일 내장·배포
         "located_at":    ("vt_atm",      "vt_loc"),    # 객체 고정 위치
-        "mentions_account": ("vt_msg",   "vt_bacnt"),  # v3.5: 메시지 내 계좌 언급
+        "mentions_account": ("vt_msg",   "vt_bacnt"),  # V4.9 삭제(→ mentions) — 이전 적재분 조회 호환
         # ── [호환성] deprecated, 신규 생성 금지 ──────────────────────
         "hosted_at":     ("vt_site",     "vt_ip"),     # → hosts 대체됨
         "contacted":     ("vt_telno",    "vt_telno"),  # → caller/callee 대체됨
@@ -210,7 +210,7 @@ class GraphService:
 
         # 이메일
         if 'email_addr' in props or 'email' in props:
-            return 'vt_email'
+            return 'vt_id'   # V4.9: 이메일은 vt_id(platform='email')
 
         # 계좌번호 (v3: account_no/bank_cd 경찰청 표준, 구형 actno/bank 호환)
         if 'account_no' in props or 'bank_cd' in props \

@@ -1,11 +1,11 @@
 # CCOP 온톨로지 V4.9 — 전달 패키지
 
-> 사이버범죄 수사 그래프 온톨로지 표준. **노드 25종 · 엣지 61종**(deprecated 0).
+> 사이버범죄 수사 그래프 온톨로지 표준. **노드 24종 · 엣지 57종**(deprecated 0).
 > 제공: 스카이월드와이드 · 기준일 2026-09-30 · 대상: 통합 플랫폼 구축 기관
 
 ---
 
-## V4.9 변경점 (V4.8 대비 — 노드 25 불변 · 엣지 72→61)
+## V4.9 변경점 (V4.8 대비 — 노드 25→24 · 엣지 72→57)
 
 V4.8 이후 **의미가 바뀐 변경**이 있어 같은 V4.8 이름으로 재배포하지 않고 버전을 올렸습니다.
 V4.8 로 적재기·검증기를 만드셨다면 아래 항목을 확인하시면 됩니다.
@@ -20,10 +20,12 @@ V4.8 로 적재기·검증기를 만드셨다면 아래 항목을 확인하시�
 | 6 | `same_as` 속성 | `match_score`·`match_basis`(구현마다 `conf`·`method`) | **`confidence`(숫자)·`match_basis`·`review_status`(confirmed·candidate)·`traversal_policy`**, 양끝 같은 라벨 |
 | 7 | `belongs_to_cluster`·`belongs_to_campaign` | 추론 엣지 | **유지** · 파생 엣지(군집 결과, `derived_by` 규칙 명시) — 원천 사실 엣지와 구분 |
 | 8 | 중복·폐기 엣지 7종 | `owns_device`·`impersonates`·`involves`·`owns`·`verified_by`·`linked_petition`·`works_at` | **삭제** — `uses_device`·`used_for`/`targets`·`witness_in`(role=unknown)·구체 소유 엣지·엣지 메타 `verified_by`·`filed_as`(status)·`member_of`(role)로 흡수 |
+| 9 | `vt_email` 노드 | 별도 노드(`email_addr`) + `uses_email`·`eg_used_email` | **`vt_id` 로 흡수** — `platform='email'`, `id_val`=소문자 정규화 주소. `uses_id`·`eg_used_id` 사용. 법적 분류(통신자료)는 `legal_category_by_platform`, 표준 테이블(TB_EML_ADDR_M)은 `STANDARD_TABLE_MAP['vt_id']['by_platform']` 에 보존 |
+| 10 | 메시지 기재 엣지 | `mentions_id`·`mentions_account`·`mentions_location` | **`mentions`** 1종(Message→DigitalID·BankAccount·Location) — 종류는 도착 라벨로 구분. `mentions_account` 의 추론 표시 제거(본문 추출 사실, 신뢰도는 `confidence`) |
 
 - 집계 규칙은 정의 스펙의 `RELATIONSHIPS['used_ip'|'located_at']['aggregation']` 에 기계 판독 형태로 들어 있습니다.
 - CSV 적재 규격(`csv_spec_v4.8`)은 **형식 변경이 없어 V4.8 그대로**입니다 — 참조 적재기가 위 규칙대로 만듭니다.
-- 설계 이력은 `spec/CCOP_ONTOLOGY_DESIGN_HISTORY.md`, 엑셀 `변경이력` 시트 R18·R19.
+- 설계 이력은 `spec/CCOP_ONTOLOGY_DESIGN_HISTORY.md`, 엑셀 `변경이력` 시트 R18~R26.
 
 ---
 
@@ -39,30 +41,32 @@ V4.8 로 적재기·검증기를 만드셨다면 아래 항목을 확인하시�
 
 ---
 
-## 1. 가장 먼저 알아야 할 것 — **정의 61종 ≠ 사용 19종**
+## 1. 가장 먼저 알아야 할 것 — **정의 57종 ≠ 사용 18종**
 
 V4.9는 3차년도까지의 도메인 확장을 내다본 정의이고, **2차년도 실적재는 그 일부**입니다.
 정의 전체를 구현 목표로 잡으면 낭비이니, 아래 구분을 먼저 잡으십시오.
 
 | 구분 | 규모 | 성격 |
 |---|---|---|
-| 정의된 엣지 | **61종** | 마약·OSINT·차량 등 미도래 도메인 포함 |
-| **2차년도 실사용 엣지** | **19종** | EP1~EP10 원본에 실제로 존재한 관계만 |
-| 실사용 노드 | **12라벨** / 정의 25 | |
+| 정의된 엣지 | **57종** | 마약·OSINT·차량 등 미도래 도메인 포함 |
+| **2차년도 실사용 엣지** | **18종** | EP1~EP10 원본에 실제로 존재한 관계만 (V4.9 표기 기준) |
+| 실사용 노드 | **11라벨** / 정의 24 | V4.9 표기 기준 (이메일은 `vt_id`) |
 | 실적재 규모 | 24,720 노드 · 26,089 엣지 | 통합 그래프(`ccop_ep_integrated`) |
 
-**우선 구현 대상은 19종**입니다. 목록·의미·방향·속성·건수는 `SCHEMA_CATALOG_ACTUAL.html`
-② 섹션에 실측으로 정리돼 있습니다. 나머지 42종은 해당 원본 데이터가 도착할 때 채우면 됩니다
+**우선 구현 대상은 18종**입니다. 목록·의미·방향·속성·건수는 `SCHEMA_CATALOG_ACTUAL.html`
+② 섹션에 실측으로 정리돼 있습니다. 나머지 39종은 해당 원본 데이터가 도착할 때 채우면 됩니다
 (정의만 있어도 무해합니다 — 런타임에 미사용 정의는 아무 영향이 없습니다).
 
-### 실사용 19종 요약
+### 실사용 18종 요약
 ```
 used_ip 15,348 · contacted 4,867 · registered_to 2,112 · owns_phone 1,872 ·
 transferred_to 617 · eg_used_account 220 · victim_in 215 · eg_used_phone 191 ·
 has_account 151 · eg_used_id 145 · located_at 126 · sourced_from 121 ·
 linked_to 57 · belongs_to 26 · suspect_in 6 · performed_by 6 · same_as 4 ·
-uses_id 3 · uses_email 2
+uses_id 5
 ```
+※ 실측 그래프는 V4.8 표기로 적재돼 있어 `uses_email` 2건·`vt_email` 노드가 남아 있습니다.
+  V4.9 통합 재빌드(`build_integrated_graph.py`)가 `uses_id`·`vt_id {platform:'email'}` 로 번역합니다.
 
 ---
 
@@ -106,8 +110,8 @@ print(json.dumps({'entities':O.ENTITIES,'relationships':O.RELATIONSHIPS}, ensure
 > ontology_v49.json
 ```
 
-### 노드 레이어 구성 (25종)
-`Object` 12 · `Event` 6 · `Case` 3 · `Person` 2 · `Location` 1 · `Source` 1
+### 노드 레이어 구성 (24종)
+`Object` 11 · `Event` 6 · `Case` 3 · `Person` 2 · `Location` 1 · `Source` 1
 
 ### domain/range 규칙
 - 대부분 엣지는 `domain`·`range`가 특정 개념으로 고정됩니다(예: `has_account`: Person→Account).
