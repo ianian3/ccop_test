@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""CCOP 온톨로지 V4.8 정합 감사 — 협력기관 자체 검증용 (독립 실행)
+"""CCOP 온톨로지 V4.9 정합 감사 — 협력기관 자체 검증용 (독립 실행)
 
 CCOP 내부용 `scripts/audit_ep_v48.py` 를 외부에서 쓸 수 있게 일반화한 것.
 내부판은 그래프명(ep1_graph~ep10_graph)이 하드코딩돼 있으나, 이 버전은 인자로 받는다.
 
 검사 항목
-  ① 정경 외 라벨 — V4.8 ENTITIES(노드 25종)에 없는 라벨이 적재됐는지
-  ② 정경 외 엣지 — V4.8 RELATIONSHIPS(엣지 72종)에 없는 관계가 적재됐는지
+  ① 정경 외 라벨 — V4.9 ENTITIES(노드 25종)에 없는 라벨이 적재됐는지
+  ② 정경 외 엣지 — V4.9 RELATIONSHIPS(엣지 72종)에 없는 관계가 적재됐는지
   ③ deprecated 사용 — 폐기 예정 엣지(clusters_with·owns_device) 사용 여부
   ④ domain/range 위반 — 엣지가 정의된 출발/도착 라벨을 벗어났는지('Any' 는 와일드카드)
   ⑤ 키 속성 충전율 — 각 라벨의 canonical key(account_no·telno 등) 누락률
@@ -14,11 +14,11 @@ CCOP 내부용 `scripts/audit_ep_v48.py` 를 외부에서 쓸 수 있게 일반�
 
 전제
   · AgensGraph(PostgreSQL 확장) + psycopg2
-  · 같은 폴더의 ccop_ontology_v48.py (정의 SoT, 외부 의존 없음)
+  · 같은 폴더의 ccop_ontology_v49.py (정의 SoT, 외부 의존 없음)
 
 실행
   DB_HOST=... DB_PORT=... DB_NAME=... DB_USER=... DB_PASSWORD=... \
-  python3 audit_ontology_v48.py --graph my_graph [another_graph ...]
+  python3 audit_ontology_v49.py --graph my_graph [another_graph ...]
 
 종료 코드: 위반 있으면 1, 없으면 0 (CI 게이트로 쓸 수 있음)
 """
@@ -33,7 +33,7 @@ except ImportError:
     sys.exit('psycopg2 가 필요합니다:  pip install psycopg2-binary')
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from ccop_ontology_v48 import KICSCrimeDomainOntology as O   # noqa: E402
+from ccop_ontology_v49 import KICSCrimeDomainOntology as O   # noqa: E402
 
 DEPRECATED = {k for k in O.RELATIONSHIPS if k not in O.active_relationships()}
 

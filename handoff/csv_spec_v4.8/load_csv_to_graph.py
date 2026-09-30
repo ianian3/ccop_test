@@ -31,8 +31,8 @@
 
 함께 쓰시면 좋은 도구
   · 적재 전: validate_csv_v48.py <CSV폴더>            — CSV 규격 점검(DB 불필요)
-  · 적재 후: audit_ontology_v48.py --graph <그래프명>  — 온톨로지 정경 점검
-    (온톨로지 패키지 handoff/ontology_v4.8/code/ 에 동봉)
+  · 적재 후: audit_ontology_v49.py --graph <그래프명>  — 온톨로지 정경 점검
+    (온톨로지 패키지 handoff/ontology_v4.9/code/ 에 동봉)
 """
 import argparse
 import csv

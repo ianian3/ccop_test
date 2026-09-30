@@ -9,7 +9,7 @@ SoT(app/middleware/services/ontology_service.py, 2,684행)에는 우리 앱 전�
 SoT 갱신 후 이 스크립트만 다시 돌리면 전달본이 따라온다.
 
 실행: python3 scripts/build_ontology_handoff.py
-산출: handoff/ontology_v4.8/code/ccop_ontology_v48.py
+산출: handoff/ontology_v4.9/code/ccop_ontology_v49.py
 """
 import os
 import pprint
@@ -19,7 +19,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from app.middleware.services.ontology_service import KICSCrimeDomainOntology as O  # noqa: E402
 
 OUT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                   'handoff', 'ontology_v4.8', 'code', 'ccop_ontology_v48.py')
+                   'handoff', 'ontology_v4.9', 'code', 'ccop_ontology_v49.py')
 
 # ── 전달 대상: (속성명, 섹션 주석) ──
 KEEP = [
@@ -106,10 +106,10 @@ def main():
         if os.path.exists(O.__module__.replace('.', '/') + '.py') else 0
 
     L = []
-    L.append('"""CCOP 온톨로지 V4.8 — 정의 스펙 (전달본)')
+    L.append('"""CCOP 온톨로지 V4.9 — 정의 스펙 (전달본)')
     L.append('')
     L.append('노드 25종 · 엣지 72종(활성 70, deprecated 2). 사이버범죄 수사 그래프 표준.')
-    L.append('제공: 스카이월드와이드 · 기준 V4.8')
+    L.append('제공: 스카이월드와이드 · 기준 V4.9')
     L.append('')
     L.append('외부 의존 0 — 표준 라이브러리조차 import 하지 않는 순수 선언이므로')
     L.append('파일 하나만 반입해 참조하거나 JSON 으로 덤프해 타 언어에서 쓸 수 있다.')
@@ -127,7 +127,7 @@ def main():
     L.append('')
     L.append('')
     L.append('class KICSCrimeDomainOntology:')
-    L.append('    """온톨로지 V4.8 정의. 모든 속성은 순수 데이터이며 인스턴스화가 필요 없다."""')
+    L.append('    """온톨로지 V4.9 정의. 모든 속성은 순수 데이터이며 인스턴스화가 필요 없다."""')
     L.append('')
 
     kept_chars = 0

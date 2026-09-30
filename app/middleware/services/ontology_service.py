@@ -1,7 +1,7 @@
 """
 온톨로지 기반 그래프 분석 서비스
 
-CCOP V4.8 온톨로지 — POLE 정렬 6레이어 아키텍처 (현행 SSOT)
+CCOP V4.9 온톨로지 — POLE 정렬 6레이어 아키텍처 (현행 SSOT)
 현행 설계 기준: docs/CCOP_ONTOLOGY_V4.1.md (+ 상세: ONTOLOGY_FINAL_ARCHITECTURE_v3.7.md)
 버전 이력:
   - v3.7: pt_cluster/site_cluster 노드(군집 허브 패턴), is_anonymous, used_in_device,
@@ -34,11 +34,19 @@ CCOP V4.8 온톨로지 — POLE 정렬 6레이어 아키텍처 (현행 SSOT)
           ③ used_ip domain+BankAccount(계좌 인터넷뱅킹 접속 IP; 시각 레코드 있으면 R8 vt_access
           reification 우선). + sameAs→same_as 개명(AgensGraph 미인용 식별자 소문자화로 DB 실현명이
           'sameas'가 되던 문제 — snake_case 전면 통일, DB 4건 마이그레이션). 엣지 수 불변(72).
+  - V4.9 (2026-09-30): 식별자·집계 규칙 정정 — 의미가 바뀐 변경을 V4.8 이름으로 재배포하지 않기 위해
+          버전 분리(docs/ONTOLOGY_V48_VALIDATION_20260918.md §6-1 권고). 엣지·노드 수 불변(72·25).
+          ① vt_case 정경 식별자 flnm → incdnt_no(경찰청 공식 사건번호, 2026-09-18), flnm 은 보조 속성
+          ② used_ip·located_at 쌍 단위 집계 규칙 명시(RELATIONSHIPS[*]['aggregation']) — used_ip +usage_count·
+             access_type(valid_from=최초, valid_to=마지막 관측), located_at +first_dt·last_dt·evt_count
+             (협력기관 질의: 시각이 달라도 관계가 하나로 합쳐지며 시각이 사라지던 참조 적재기 결함, 2026-09-28)
+          ③ contacted 집계 속성(first_dt·last_dt·call_count·msg_count·total_dur_sec) SoT 명시
+          ④ same_as 표기를 적재·T2C·방향표 코드까지 정합(V4.8 개명의 코드 잔존 sameAs 제거)
 노드: 25 | 엣지: 72 (활성 70 + deprecated 2: clusters_with·owns_device) | 추론 규칙: 13종 통합 dict (탐지 9 + enrichment 4)
 """
 
 class KICSCrimeDomainOntology:
-    """KICS 기반 한국형 사이버 범죄 온톨로지 (V4.8 POLE 6레이어 · 72종 엣지[활성 70] · 추론규칙 13종)"""
+    """KICS 기반 한국형 사이버 범죄 온톨로지 (V4.9 POLE 6레이어 · 72종 엣지[활성 70] · 추론규칙 13종)"""
 
     # 엣지 공통 메타속성 스키마 (EDGE_META_SCHEMA)
     EDGE_META_SCHEMA = {
@@ -122,7 +130,7 @@ class KICSCrimeDomainOntology:
         },
         # V4.0 P2 — 나머지 16노드 id_format 표준 (감사 리포트 §6 보강)
         'vt_src':          {'canonical_field': 'src_id',        'id_formats': ['plain'],         'default_format': 'plain'},
-        'vt_case':         {'canonical_field': 'incdnt_no',      'id_formats': ['plain'],         'default_format': 'plain'},  # [V4.8→정공법 2026-09-18] 수사관 인지 식별자=경찰청 공식 사건번호(incdnt_no). flnm(사건파일명)은 보조 속성
+        'vt_case':         {'canonical_field': 'incdnt_no',      'id_formats': ['plain'],         'default_format': 'plain'},  # [V4.9, 2026-09-18 정공법] 수사관 인지 식별자=경찰청 공식 사건번호(incdnt_no). flnm(사건파일명)은 보조 속성
         'vt_petition':     {'canonical_field': 'petition_id',   'id_formats': ['plain'],         'default_format': 'plain'},
         'vt_org':          {'canonical_field': 'org_id',        'id_formats': ['plain'],         'default_format': 'plain'},
         'vt_email':        {'canonical_field': 'email_addr',    'id_formats': ['normalized'],    'default_format': 'normalized'},  # [정합화] 실 MERGE 키=email_addr
@@ -1410,7 +1418,7 @@ class KICSCrimeDomainOntology:
             'properties': ['valid_from', 'valid_to', 'confidence', 'source_id', 'rec_created',
                            'usage_count', 'access_type'],
             # V4.6 S1: ip_role bitemporal 전제(시간축). 타입은 EDGE_META_SCHEMA 공통정의
-            # V4.8 (2026-09-28) 요약 엣지 집계 규칙 — (주체, IP) 쌍당 1엣지. 건별 접속 행을 접을 때
+            # V4.9 (2026-09-28) 요약 엣지 집계 규칙 — (주체, IP) 쌍당 1엣지. 건별 접속 행을 접을 때
             #   valid_from = 최초 접속(최솟값), valid_to = 마지막 관측(각 행 valid_to, 없으면 valid_from 의 최댓값),
             #   usage_count = 접속 행 수, access_type = 관측된 값(여러 개면 '|' 결합), source_id = 출처 합집합.
             #   (이전 참조 적재기는 행마다 SET 으로 덮어써 마지막 행 시각만 남았다 — 협력기관 질의로 발견)
@@ -1869,7 +1877,7 @@ class KICSCrimeDomainOntology:
             'legal_significance': '통신사실확인자료|압수수색(메신저 대화내역)',
             'properties': ['source_id', 'rec_created', 'channel',  # V4.8: channel='call'|'kakao'|'sms' — 연락 수단 구분
                            'first_dt', 'last_dt', 'call_count', 'msg_count', 'total_dur_sec'],
-            # V4.8 집계(CSV 규격 §4): (상대방 쌍, channel)당 1엣지 — 적재기가 쓰던 집계 속성을 SoT 에 명시
+            # V4.9 집계(CSV 규격 §4): (상대방 쌍, channel)당 1엣지 — 적재기가 쓰던 집계 속성을 SoT 에 명시
         },
         'impersonates': {
             'domain': 'Person',
@@ -1941,7 +1949,7 @@ class KICSCrimeDomainOntology:
             'meaning': '고정 객체(ATM·기관 등)의 정적 위치 (이벤트 경유 occurred_at과 구별)',
             'legal_significance': '위치정보',
             'properties': ['source_id', 'rec_created', 'first_dt', 'last_dt', 'evt_count'],
-            # V4.8 (2026-09-28) (주체, 위치) 쌍당 1엣지 — 고정 객체의 정적 위치라 합치는 것은 설계 의도.
+            # V4.9 (2026-09-28) (주체, 위치) 쌍당 1엣지 — 고정 객체의 정적 위치라 합치는 것은 설계 의도.
             #   시각 있는 원천 행(tbl_eg_loc_use.evt_ymdhm · 통화 발신기지국 bgng_ymdhm · 이체 거래점 rmt_ymdhm)을
             #   접을 때 first_dt/last_dt = 관측 시각 최솟값/최댓값, evt_count = 시각 있는 행 수. 시각 없는 정적
             #   위치(ATM 설치 위치 등)는 세 속성 없이 둔다. 건별 시각이 필요한 이동 분석은 occurred_at(vt_movement).

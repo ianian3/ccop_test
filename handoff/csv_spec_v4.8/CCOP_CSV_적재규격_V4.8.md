@@ -11,7 +11,7 @@
 ```
 CSV 작성  →  validate_csv_v48.py   (규격 점검, DB 불필요)
           →  load_csv_to_graph.py  (그래프 적재)
-          →  audit_ontology_v48.py (온톨로지 정경 점검 · 온톨로지 패키지에 동봉)
+          →  audit_ontology_v49.py (온톨로지 정경 점검 · 온톨로지 패키지에 동봉)
 ```
 
 `load_csv_to_graph.py`는 **이 규격서가 약속한 동작을 그대로 구현한 참조 구현**입니다. CSV가 정확히
@@ -339,4 +339,4 @@ vt_telno 01002478573   ep_origin='ep3,partner_demo'   ← 두 출처에서 동�
 ## 10. 문의
 
 - 규격에 없는 데이터(차량·가상자산·이메일·파일 등)는 헤더 1행을 보내주시면 매핑해 회신합니다.
-- 온톨로지 정의 원본·감사 도구는 별도 패키지 `handoff/ontology_v4.8/` 로 전달드렸습니다.
+- 온톨로지 정의 원본·감사 도구는 별도 패키지 `handoff/ontology_v4.9/`(V4.9) 로 전달드렸습니다.

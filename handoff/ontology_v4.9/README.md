@@ -1,7 +1,24 @@
-# CCOP 온톨로지 V4.8 — 전달 패키지
+# CCOP 온톨로지 V4.9 — 전달 패키지
 
 > 사이버범죄 수사 그래프 온톨로지 표준. **노드 25종 · 엣지 72종**(활성 70, deprecated 2).
-> 제공: 스카이월드와이드 · 기준일 2026-09-10 · 대상: 통합 플랫폼 구축 기관
+> 제공: 스카이월드와이드 · 기준일 2026-09-30 · 대상: 통합 플랫폼 구축 기관
+
+---
+
+## V4.9 변경점 (V4.8 대비 — 노드·엣지 수 불변)
+
+V4.8 이후 **의미가 바뀐 변경**이 있어 같은 V4.8 이름으로 재배포하지 않고 버전을 올렸습니다.
+V4.8 로 적재기·검증기를 만드셨다면 아래 세 가지만 확인하시면 됩니다.
+
+| # | 대상 | V4.8 | V4.9 |
+|---|---|---|---|
+| 1 | `vt_case` 정경 식별자 | `flnm`(사건번호) | **`incdnt_no`**(경찰청 공식 사건번호). `flnm` 은 보조 속성 |
+| 2 | `used_ip` 속성 | valid_from·valid_to (행마다 덮어쓰기) | (주체, IP)당 1엣지로 집계 — `valid_from`=최초 접속, `valid_to`=마지막 관측, **`usage_count`**, `access_type`(여러 값 `\|` 결합) |
+| 3 | `located_at`·`contacted` 속성 | 시각 속성 미정의 | `located_at` **`first_dt`·`last_dt`·`evt_count`**, `contacted` `first_dt`·`last_dt`·`call_count`·`msg_count`·`total_dur_sec` 명시 |
+
+- 집계 규칙은 정의 스펙의 `RELATIONSHIPS['used_ip'|'located_at']['aggregation']` 에 기계 판독 형태로 들어 있습니다.
+- CSV 적재 규격(`csv_spec_v4.8`)은 **형식 변경이 없어 V4.8 그대로**입니다 — 참조 적재기가 위 규칙대로 만듭니다.
+- 설계 이력은 `spec/CCOP_ONTOLOGY_DESIGN_HISTORY.md`, 엑셀 `변경이력` 시트 R18·R19.
 
 ---
 
@@ -10,16 +27,16 @@
 | 순서 | 파일 | 무엇을 얻나 |
 |---|---|---|
 | 1 | **`spec/SCHEMA_CATALOG_ACTUAL.html`** | 브라우저로 열면 **실제 적재된 스키마**를 노드 클릭으로 탐색. 정의보다 이걸 먼저 보십시오 |
-| 2 | `spec/CCOP_Ontology_V4.8_node_edge_attrs.xlsx` | 노드·엣지·속성 정본(검토·회신용 시트) |
-| 3 | `code/ccop_ontology_v48.py` | 기계가 읽는 정의 SoT — 이식·검증의 기준 |
+| 2 | `spec/CCOP_Ontology_V4.9_node_edge_attrs.xlsx` | 노드·엣지·속성 정본(검토·회신용 시트) |
+| 3 | `code/ccop_ontology_v49.py` | 기계가 읽는 정의 SoT — 이식·검증의 기준 |
 | 4 | `spec/CYBERCOP_STANDARD_TABLE_DDL.sql` | RDB 표준 52테이블 (온톨로지↔RDB 대응, 20260911판) |
-| 5 | `code/audit_ontology_v48.py` | 귀사 적재 결과를 스스로 검증하는 도구 |
+| 5 | `code/audit_ontology_v49.py` | 귀사 적재 결과를 스스로 검증하는 도구 |
 
 ---
 
 ## 1. 가장 먼저 알아야 할 것 — **정의 72종 ≠ 사용 19종**
 
-V4.8은 3차년도까지의 도메인 확장을 내다본 정의이고, **2차년도 실적재는 그 일부**입니다.
+V4.9는 3차년도까지의 도메인 확장을 내다본 정의이고, **2차년도 실적재는 그 일부**입니다.
 정의 전체를 구현 목표로 잡으면 낭비이니, 아래 구분을 먼저 잡으십시오.
 
 | 구분 | 규모 | 성격 |
@@ -44,7 +61,7 @@ uses_id 3 · uses_email 2
 
 ---
 
-## 2. 정의 스펙 — `code/ccop_ontology_v48.py`
+## 2. 정의 스펙 — `code/ccop_ontology_v49.py`
 
 **외부 의존이 0입니다.** 표준 라이브러리조차 import 하지 않는 순수 선언(dict)이라,
 Python 환경에 그대로 두고 참조하거나 JSON으로 덤프해 타 언어에서 쓸 수 있습니다.
@@ -53,7 +70,7 @@ Python 환경에 그대로 두고 참조하거나 JSON으로 덤프해 타 언�
 매핑, 미구현 추론 로드맵 등은 제외 — 제외 항목과 이유는 파일 첫 주석에 그대로 적혀 있습니다).
 
 ```python
-from ccop_ontology_v48 import KICSCrimeDomainOntology as O
+from ccop_ontology_v49 import KICSCrimeDomainOntology as O
 
 # ── 정의 본체 ──
 O.LAYERS / O.LAYERS_GDB   # 4계층 골격
@@ -79,9 +96,9 @@ O.key_field('vt_bacnt')   # 'account_no'  · 라벨의 식별 속성명
 
 JSON 덤프가 필요하면:
 ```bash
-python3 -c "import json,ccop_ontology_v48 as m; O=m.KICSCrimeDomainOntology; \
+python3 -c "import json,ccop_ontology_v49 as m; O=m.KICSCrimeDomainOntology; \
 print(json.dumps({'entities':O.ENTITIES,'relationships':O.RELATIONSHIPS}, ensure_ascii=False, indent=2))" \
-> ontology_v48.json
+> ontology_v49.json
 ```
 
 ### 노드 레이어 구성 (25종)
@@ -96,15 +113,15 @@ print(json.dumps({'entities':O.ENTITIES,'relationships':O.RELATIONSHIPS}, ensure
 
 ---
 
-## 3. 검증 도구 — `code/audit_ontology_v48.py`
+## 3. 검증 도구 — `code/audit_ontology_v49.py`
 
-귀사 적재 결과가 V4.8과 맞는지 **스스로 확인**할 수 있습니다. CI 게이트로 쓸 수 있게
+귀사 적재 결과가 V4.9와 맞는지 **스스로 확인**할 수 있습니다. CI 게이트로 쓸 수 있게
 위반 시 exit 1 을 반환합니다.
 
 ```bash
 pip install psycopg2-binary
 DB_HOST=... DB_PORT=... DB_NAME=... DB_USER=... DB_PASSWORD=... \
-  python3 audit_ontology_v48.py --graph <그래프명> [<그래프명2> ...]
+  python3 audit_ontology_v49.py --graph <그래프명> [<그래프명2> ...]
 ```
 
 검사: ①정경 외 라벨 ②정경 외 엣지 ③deprecated 사용 ④domain/range 위반
@@ -210,17 +227,17 @@ O.STANDARD_TABLE_MAP['vt_loc']
 ## 7. 파일 목록
 
 ```
-handoff/ontology_v4.8/
+handoff/ontology_v4.9/
 ├── README.md                                  ← 이 문서
 ├── spec/
 │   ├── SCHEMA_CATALOG_ACTUAL.html             실측 스키마 (인터랙티브 — 먼저 보십시오)
-│   ├── CCOP_Ontology_V4.8_node_edge_attrs.xlsx    정본 (노드·엣지·속성)
-│   ├── CCOP_ONTOLOGY_DESIGN_HISTORY.md        V4.0→V4.8 설계 이력·변경 사유
+│   ├── CCOP_Ontology_V4.9_node_edge_attrs.xlsx    정본 (노드·엣지·속성)
+│   ├── CCOP_ONTOLOGY_DESIGN_HISTORY.md        V4.0→V4.9 설계 이력·변경 사유
 │   ├── CYBERCOP_STANDARD_TABLE_DDL.sql        RDB 표준 52테이블
 │   └── PARTNER_DATA_STANDARD.md               협력기관 데이터 표준 가이드
 └── code/
-    ├── ccop_ontology_v48.py                   정의 스펙 (외부 의존 0 · 1,215행)
-    └── audit_ontology_v48.py                  정합 감사 도구 (CI 게이트 가능)
+    ├── ccop_ontology_v49.py                   정의 스펙 (외부 의존 0 · 1,221행)
+    └── audit_ontology_v49.py                  정합 감사 도구 (CI 게이트 가능)
 ```
 
 검증: 이 패키지의 `code/` 두 파일만 빈 디렉터리에 복사한 상태에서 import·JSON 덤프·

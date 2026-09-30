@@ -16,7 +16,7 @@
   · 식별 충돌(같은 키·다른 bank_cd/psn_id/platform) 경고
   · used_ip·located_at 도 쌍당 집계하되 시각 보존(valid_from/valid_to·first_dt/last_dt·건수)
 
-적재 후 `handoff/ontology_v4.8/code/audit_ontology_v48.py` 로 정경을 검증할 수 있다.
+적재 후 `handoff/ontology_v4.9/code/audit_ontology_v49.py` 로 정경을 검증할 수 있다.
 
 실행
   python3 scripts/load_partner_csv.py <CSV폴더> --graph partner_graph
