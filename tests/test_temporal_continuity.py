@@ -10,7 +10,7 @@ from app.services.temporal_continuity import classify_edge, parse_path, inject
 
 def test_classify_e_form():
     assert classify_edge('used_ip') == ('E', 'valid_from')
-    assert classify_edge('transferred_to') == ('E', 'transfer_date')
+    assert classify_edge('transferred_to') == ('E', 'first_dlng_dt')   # V4.9 쌍 집계 기간 시작
     assert classify_edge('exchanged_to') == ('E', 'exchanged_at')
     assert classify_edge('has_account') == ('E', 'valid_from')      # 보완 반영 확인
 
@@ -42,7 +42,7 @@ def test_parse_path_basic():
 def test_inject_e_form_moneylaundering():
     cy = "MATCH (a:vt_bacnt)-[e1:transferred_to]->(b:vt_bacnt)-[e2:transferred_to]->(c:vt_bacnt) RETURN a,b,c"
     out, w = inject(cy)
-    assert "date(e1.transfer_date) <= date(e2.transfer_date)" in out
+    assert "date(e1.first_dlng_dt) <= date(e2.last_dlng_dt)" in out   # V4.9 기간형: start_i <= end_{i+1}
     assert "WHERE" in out
     assert w == []
 
@@ -81,7 +81,7 @@ def test_inject_existing_where():
     cy = ("MATCH (a:vt_bacnt)-[e1:transferred_to]->(b:vt_bacnt)-[e2:transferred_to]->(c) "
           "WHERE a.is_frozen = 'true' RETURN a")
     out, w = inject(cy)
-    assert "WHERE (date(e1.transfer_date) <= date(e2.transfer_date)) AND" in out
+    assert "WHERE (date(e1.first_dlng_dt) <= date(e2.last_dlng_dt)) AND" in out
     assert "a.is_frozen" in out
 
 
@@ -111,3 +111,11 @@ def test_inject_multi_transfer_chain():
           "-[:from_account]->(t2:vt_transfer)-[:to_account]->(b3) RETURN b1")
     out, w = inject(cy)
     assert "date(t1.dlng_dt) <= date(t2.dlng_dt)" in out
+
+
+def test_inject_interval_mixed_with_point():
+    """V4.9: 점 시각(has_account.valid_from) → 기간(transferred_to [first, last]) 은 start_i <= end_{i+1}."""
+    q = "MATCH (p:vt_psn)-[e1:has_account]->(a:vt_bacnt)-[e2:transferred_to]->(b:vt_bacnt) RETURN p,b"
+    out, warns = inject(q)
+    assert "date(e1.valid_from) <= date(e2.last_dlng_dt)" in out
+    assert warns == []

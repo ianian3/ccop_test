@@ -25,8 +25,8 @@ OUT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
 KEEP = [
     ('LAYERS',             '4계층 구조 — 온톨로지 골격'),
     ('LAYERS_GDB',         '계층별 그래프 라벨 소속'),
-    ('ENTITIES',           '노드 25종 — layer·properties(키)·attributes(전속성)·legal_category'),
-    ('RELATIONSHIPS',      '엣지 72종 — domain/range·properties·meaning·legal_significance'),
+    ('ENTITIES',           f'노드 {len(O.ENTITIES)}종 — layer·properties(키)·attributes(전속성)·legal_category'),
+    ('RELATIONSHIPS',      f'엣지 {len(O.RELATIONSHIPS)}종 — domain/range·properties·meaning·legal_significance'),
     ('GDB_LABEL_MAP',      '개념명 → 그래프 라벨 (Person → vt_psn)'),
     ('CONCEPT_LOOKUP',     '그래프 라벨 → 개념명 (역방향)'),
     ('LABEL_KO_MAP',       '라벨 → 한글명 (UI·보고서 표기용)'),
@@ -108,7 +108,9 @@ def main():
     L = []
     L.append('"""CCOP 온톨로지 V4.9 — 정의 스펙 (전달본)')
     L.append('')
-    L.append('노드 25종 · 엣지 72종(활성 70, deprecated 2). 사이버범죄 수사 그래프 표준.')
+    _dep = [k for k, v in O.RELATIONSHIPS.items() if v.get('deprecated')]   # 개수는 SoT 에서 계산(하드코딩 금지)
+    L.append(f'노드 {len(O.ENTITIES)}종 · 엣지 {len(O.RELATIONSHIPS)}종(활성 {len(O.RELATIONSHIPS) - len(_dep)}, '
+             f'deprecated {len(_dep)}). 사이버범죄 수사 그래프 표준.')
     L.append('제공: 스카이월드와이드 · 기준 V4.9')
     L.append('')
     L.append('외부 의존 0 — 표준 라이브러리조차 import 하지 않는 순수 선언이므로')

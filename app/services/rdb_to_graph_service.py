@@ -214,7 +214,7 @@ class RdbToGraphService:
                 # 역할 엣지 (v3.0 Role-as-Edge)
                 'suspect_in', 'victim_in', 'witness_in',
                 # 엔티티 해소
-                'same_as', 'contradicts',
+                'same_as',
                 # 증거 연결
                 'eg_used_account', 'eg_used_phone', 'eg_used_ip',
                 'has_account', 'owns_phone', 'used_ip', 'linked_to',
@@ -223,14 +223,14 @@ class RdbToGraphService:
                 'sent_msg', 'received_msg', 'recorded_in',
                 # 소유/관계
                 'owns_vehicle', 'contains_file',
-                'related_case', 'belongs_to', 'works_at',
+                'belongs_to', 'works_at',
                 # 출처
                 'sourced_from',
                 # v3.0 신규: 인물 → 디지털 증거
                 'uses_id', 'uses_email', 'owns_wallet', 'uses_device',
                 # v3.0 신규: 기타
                 'filed_as', 'occurred_at', 'accessed_from', 'performed_by',
-                'clusters_with', 'resolves_to',
+                'resolves_to',
                 # v3.3 사칭 패턴 (impersonates는 하위호환 읽기용)
                 'used_for', 'targets', 'impersonates',
                 # v3.7 신규 엣지
@@ -954,43 +954,11 @@ class RdbToGraphService:
                     logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
             conn.commit()
 
-            # ─── Enhancement: Phase 5 — 자동 추론 엣지 ───────────────
-            logger.info(f"\n🧠 Phase 5: 자동 추론 엣지 (교차 도메인)")
+            # ─── Enhancement: Phase 5 — 교차 도메인 연결 ───────────────
+            logger.info(f"\n🧠 Phase 5: 교차 도메인 연결")
 
-            # 7-1. related_case: TB_FRD_VCTM_RPT 미존재시 skip
-            try:
-                cur.execute("""
-                    SELECT DISTINCT c1.flnm, c2.flnm
-                    FROM (
-                        SELECT substring(R1.DAM_CN from '사건참조:(.*)') as flnm, R1.SUSPCT_BACNT_NO as evidence
-                        FROM TB_FRD_VCTM_RPT R1 WHERE R1.SUSPCT_BACNT_NO IS NOT NULL AND R1.SUSPCT_BACNT_NO != ''
-                        UNION
-                        SELECT substring(R2.DAM_CN from '사건참조:(.*)'), R2.SUSPCT_TELNO
-                        FROM TB_FRD_VCTM_RPT R2 WHERE R2.SUSPCT_TELNO IS NOT NULL AND R2.SUSPCT_TELNO != ''
-                    ) c1
-                    JOIN (
-                        SELECT substring(R3.DAM_CN from '사건참조:(.*)') as flnm, R3.SUSPCT_BACNT_NO as evidence
-                        FROM TB_FRD_VCTM_RPT R3 WHERE R3.SUSPCT_BACNT_NO IS NOT NULL AND R3.SUSPCT_BACNT_NO != ''
-                        UNION
-                        SELECT substring(R4.DAM_CN from '사건참조:(.*)'), R4.SUSPCT_TELNO
-                        FROM TB_FRD_VCTM_RPT R4 WHERE R4.SUSPCT_TELNO IS NOT NULL AND R4.SUSPCT_TELNO != ''
-                    ) c2 ON c1.evidence = c2.evidence AND c1.flnm != c2.flnm
-                    LIMIT 500
-                """)
-                rows = cur.fetchall()
-            except Exception:
-                conn.rollback(); rows = []
-                try: cur.execute(f'SET search_path = "{source_schema}", public;'); conn.commit()
-                except Exception: conn.rollback()
-            for r in rows:
-                try:
-                    case1, case2 = safe_str(r[0]), safe_str(r[1])
-                    if case1 and case2:
-                        cur.execute(f"MATCH (c1:vt_case {{incdnt_no: '{case1}'}}), (c2:vt_case {{incdnt_no: '{case2}'}}) MERGE (c1)-[:related_case {{confidence: '0.75', reason: 'shared_evidence'}}]->(c2)")
-                        stats["edges"] += 1
-                except Exception as _e:
-                    logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
-            conn.commit()
+            # 7-1. (V4.9 삭제) related_case — 공유 증거 기반 사건 연결은 추론 결과라 그래프 엣지로 적재하지 않는다.
+            #      같은 증거를 쓴 사건은 (c1)-[:eg_used_*]->(x)<-[:eg_used_*]-(c2) 경로로 조회한다.
 
             # 7-2. belongs_to: 계좌 → 기관 (test_v40 미존재시 skip)
             try:
@@ -1494,9 +1462,17 @@ class RdbToGraphService:
                         label_map = KICSCrimeDomainOntology.GDB_LABEL_MAP
                         src_label = label_map.get(src_type, src_type)
                         tgt_label = label_map.get(tgt_type, tgt_type)
+                        if src_label != tgt_label:
+                            continue   # V4.9: same_as 는 같은 라벨끼리(인물↔식별자는 registered_to·uses_id·owns_phone)
+                        try:
+                            conf_num = float(conf)
+                        except (TypeError, ValueError):
+                            conf_num = 'null'
+                        # V4.9 속성명 통일: confidence(숫자)·match_basis(구 method)·review_status
                         cur.execute(f"""
                             MATCH (s:{src_label} {{id: '{src_id}'}}), (t:{tgt_label} {{id: '{tgt_id}'}})
-                            MERGE (s)-[e:same_as {{confidence: '{conf}', method: '{method}'}}]->(t)
+                            MERGE (s)-[e:same_as]->(t)
+                            SET e.confidence = {conf_num}, e.match_basis = '{method}', e.review_status = 'confirmed'
                         """)
                         stats["edges"] += 1
                     except Exception as _e:
@@ -1504,55 +1480,8 @@ class RdbToGraphService:
                 conn.commit()
             except: conn.rollback()
 
-            # 6H. 모순 정보 (TB_ENTITY_CONFLICT, RESOLVED_YN='N') → contradicts 엣지
-            try:
-                cur.execute("""
-                    SELECT PRSN_ID_A, PRSN_ID_B, CNFL_FIELD_NM, CNFL_TYP_CD
-                    FROM TB_ENTITY_CONFLICT
-                    WHERE RESOLVED_YN = 'N'
-                """)
-                rows = cur.fetchall()
-                for row in rows:
-                    pid_a, pid_b, field, typ = row
-                    try:
-                        safe_set_graph_path(cur, graph_name)
-                        cur.execute(f"""
-                            MATCH (a:vt_psn {{id: '{pid_a}'}}), (b:vt_psn {{id: '{pid_b}'}})
-                            MERGE (a)-[e:contradicts {{cnfl_field: '{field}', cnfl_type: '{typ}',
-                                   rec_created: toString(now())}}]->(b)
-                        """)
-                        stats["edges"] += 1
-                    except Exception as _e:
-                        logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
-                conn.commit()
-                logger.info(f"  contradicts 엣지: {len(rows)}건")
-            except: conn.rollback()
-
-            # 6I. 유사 진정서 군집 (TB_PETTN_CLSTR, SIM_SCORE >= 0.7) → clusters_with 엣지
-            # ⚠️ v3.7부터 deprecated. pt_cluster 허브 노드(6V-1)로 대체. 하위호환 위해 유지.
-            try:
-                cur.execute("""
-                    SELECT PETTN_SN_A, PETTN_SN_B, SIM_SCORE, SIM_BASIS_CD
-                    FROM TB_PETTN_CLSTR
-                    WHERE SIM_SCORE >= 0.7
-                """)
-                rows = cur.fetchall()
-                for row in rows:
-                    sn_a, sn_b, score, basis = row
-                    try:
-                        safe_set_graph_path(cur, graph_name)
-                        cur.execute(f"""
-                            MATCH (a:vt_petition), (b:vt_petition)
-                            WHERE a.raw_id = '{sn_a}' AND b.raw_id = '{sn_b}'
-                            MERGE (a)-[e:clusters_with {{sim_score: {score}, basis: '{basis}',
-                                   rec_created: toString(now())}}]->(b)
-                        """)
-                        stats["edges"] += 1
-                    except Exception as _e:
-                        logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
-                conn.commit()
-                logger.info(f"  clusters_with 엣지: {len(rows)}건")
-            except: conn.rollback()
+            # 6H·6I. (V4.9 삭제) contradicts(모순 정보)·clusters_with(유사 진정서, v3.7 deprecated) — 추론 결과 엣지 제거.
+            #      진정서 군집은 pt_cluster 허브(belongs_to_cluster, 6V-1)로 표현.
 
             # 6J. 사칭 관계 (TB_IMPRSN_REL) → V3.3 패턴
             #   1) vt_impersonation 노드 MERGE

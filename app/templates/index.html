@@ -2137,7 +2137,6 @@ function showTruncateBanner(metas){
                                 <option value="caller">caller (발신→통화)</option>
                                 <option value="callee">callee (통화→수신)</option>
                                 <option value="sent_msg">sent_msg (발신→메시지)</option>
-                                <option value="accomplice_of">accomplice_of (공범)</option>
                                 <option value="linked_to">linked_to (일반연결)</option>
                             </select>
                         </div>
@@ -2422,10 +2421,8 @@ function showTruncateBanner(metas){
                 { selector: 'edge[label="witness_in"]', style: { 'line-color': '#27ae60', 'target-arrow-color': '#27ae60', 'label': '참고인', 'width': 2 } },
                 // [사건 관계]
                 { selector: 'edge[label="filed_as"]', style: { 'line-color': '#e17055', 'target-arrow-color': '#e17055', 'label': '사건전환' } },
-                { selector: 'edge[label="clusters_with"]', style: { 'line-color': '#95a5a6', 'target-arrow-color': '#95a5a6', 'label': '유사진정', 'line-style': 'dashed' } },
                 // [Person 관계]
                 { selector: 'edge[label="same_as"]', style: { 'line-color': '#9b59b6', 'target-arrow-color': '#9b59b6', 'label': '동일인물', 'width': 2 } },
-                { selector: 'edge[label="contradicts"]', style: { 'line-color': '#d63031', 'target-arrow-color': '#d63031', 'label': '모순정보', 'line-style': 'dashed' } },
                 { selector: 'edge[label="operates"]', style: { 'line-color': '#00b894', 'target-arrow-color': '#00b894', 'label': '운영', 'width': 3 } },
                 { selector: 'edge[label="recruits"]', style: { 'line-color': '#ff6b6b', 'target-arrow-color': '#ff6b6b', 'label': '모집', 'width': 3 } },
                 { selector: 'edge[label="blackmails"]', style: { 'line-color': '#d63031', 'target-arrow-color': '#d63031', 'label': '협박', 'width': 3, 'line-style': 'dashed' } },
@@ -2443,8 +2440,6 @@ function showTruncateBanner(metas){
                 { selector: 'edge[label="caller"]', style: { 'line-color': '#e84393', 'target-arrow-color': '#e84393', 'label': 'caller' } },
                 { selector: 'edge[label="callee"]', style: { 'line-color': '#6c5ce7', 'target-arrow-color': '#6c5ce7', 'label': 'callee' } },
                 { selector: 'edge[label="linked_to"]', style: { 'line-color': '#81ecec', 'target-arrow-color': '#81ecec', 'label': 'linked_to', 'line-style': 'dashed', 'opacity': 0.7 } },
-                { selector: 'edge[label="accomplice_of"]', style: { 'line-color': '#e17055', 'target-arrow-color': '#e17055', 'label': '공범' } },
-                { selector: 'edge[label="related_case"]', style: { 'line-color': '#4a5568', 'target-arrow-color': '#4a5568', 'label': '관련사건', 'line-style': 'dashed' } },
 
                 // ── 기본 엣지 ──
                 { selector: 'edge', style: { 'width': 2, 'curve-style': 'bezier', 'target-arrow-shape': 'triangle', 'label': 'data(label)', 'color': '#16202e', 'font-size': '10px', 'font-weight': 600, 'text-rotation': 'autorotate', 'text-background-opacity': 0.85, 'text-background-color': '#ffffff', 'text-background-padding': '2px' } },
@@ -6809,7 +6804,6 @@ ${snap?sect('7. 그래프 스냅샷 (현재 탐색 화면)')+`<img class="snap" 
                     <option value="from_account">💸 from_account (출금→이체)</option>
                     <option value="to_account">💰 to_account (이체→입금)</option>
                     <option value="caller">📞 caller (발신→통화)</option>
-                    <option value="accomplice_of">🤝 accomplice_of (공범)</option>
                     <option value="linked_to">🔗 linked_to (일반연결)</option>
                 </select>
             </div>

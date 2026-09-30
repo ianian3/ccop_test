@@ -35,18 +35,23 @@ CCOP V4.9 온톨로지 — POLE 정렬 6레이어 아키텍처 (현행 SSOT)
           reification 우선). + sameAs→same_as 개명(AgensGraph 미인용 식별자 소문자화로 DB 실현명이
           'sameas'가 되던 문제 — snake_case 전면 통일, DB 4건 마이그레이션). 엣지 수 불변(72).
   - V4.9 (2026-09-30): 식별자·집계 규칙 정정 — 의미가 바뀐 변경을 V4.8 이름으로 재배포하지 않기 위해
-          버전 분리(docs/ONTOLOGY_V48_VALIDATION_20260918.md §6-1 권고). 엣지·노드 수 불변(72·25).
+          버전 분리(docs/ONTOLOGY_V48_VALIDATION_20260918.md §6-1 권고). 노드 25 · 엣지 72→68.
           ① vt_case 정경 식별자 flnm → incdnt_no(경찰청 공식 사건번호, 2026-09-18), flnm 은 보조 속성
           ② used_ip·located_at 쌍 단위 집계 규칙 명시(RELATIONSHIPS[*]['aggregation']) — used_ip +usage_count·
              access_type(valid_from=최초, valid_to=마지막 관측), located_at +first_dt·last_dt·evt_count
              (협력기관 질의: 시각이 달라도 관계가 하나로 합쳐지며 시각이 사라지던 참조 적재기 결함, 2026-09-28)
           ③ contacted 집계 속성(first_dt·last_dt·call_count·msg_count·total_dur_sec) SoT 명시
           ④ same_as 표기를 적재·T2C·방향표 코드까지 정합(V4.8 개명의 코드 잔존 sameAs 제거)
-노드: 25 | 엣지: 72 (활성 70 + deprecated 2: clusters_with·owns_device) | 추론 규칙: 13종 통합 dict (탐지 9 + enrichment 4)
+          ⑤ 추론 결과 엣지 4종 삭제(전 그래프 적재 0건): contradicts·clusters_with(deprecated)·accomplice_of·
+             related_case — 추론 결과는 원천 온톨로지가 아니라 분석 산출물. 탐지 규칙 OrganizedCrime·Accomplice·
+             RecruitChainAccomplice·MoneyLaundering 은 엣지 대신 탐지 후보 목록 출력. 엣지 72→68
+          ⑥ transferred_to 를 '다단계 추론 엣지'에서 직접(원천 사실) 쌍 집계 엣지로 재정의 — inferred·transitive 제거
+          ⑦ same_as 를 엔티티 해소 엣지로 명시(같은 라벨끼리) + 속성명 통일(confidence·match_basis·review_status)
+노드: 25 | 엣지: 68 (활성 67 + deprecated 1: owns_device) | 추론 규칙: 13종 통합 dict (탐지 9 + enrichment 4)
 """
 
 class KICSCrimeDomainOntology:
-    """KICS 기반 한국형 사이버 범죄 온톨로지 (V4.9 POLE 6레이어 · 72종 엣지[활성 70] · 추론규칙 13종)"""
+    """KICS 기반 한국형 사이버 범죄 온톨로지 (V4.9 POLE 6레이어 · 68종 엣지[활성 67] · 추론규칙 13종)"""
 
     # 엣지 공통 메타속성 스키마 (EDGE_META_SCHEMA)
     EDGE_META_SCHEMA = {
@@ -298,18 +303,18 @@ class KICSCrimeDomainOntology:
     #   구 INFERENCE_RULES(list 10종, 탐지) + 구 INFERENCE_RULES_V37(dict 4종, enrichment)
     #   → 양쪽에 중복이던 RelayStationDetection을 무손실 1건으로 병합 → 총 13종
     # 키 = 규칙명(고유 → 중복 구조적 차단). rule_type 으로 목적 구분:
-    #   detection  : 패턴 탐지 → 플래그/추론엣지 (pattern·trigger·threshold·confidence·legal_basis)
+    #   detection  : 패턴 탐지 → 탐지 후보 목록(분석 산출물, V4.9부터 추론 엣지 저장 안 함) (pattern·trigger·threshold·confidence·legal_basis)
     #   enrichment : ETL 군집/엔티티 생성       (algorithm·input_nodes·output_nodes·frequency)
     # 하위호환: INFERENCE_RULES_V37 = enrichment 뷰(아래 자동 파생) → 기존 /ontology/meta API 무변경
     INFERENCE_RULES = {
-        # ─── Detection 규칙 (9종): 패턴 탐지 → 플래그/추론엣지 ─────────────────
+        # ─── Detection 규칙 (9종): 패턴 탐지 → 탐지 후보 목록 ─────────────────
         'OrganizedCrime': {
             'rule_type':         'detection',
             'pattern':           'shared_resource_usage',
             'trigger':           '동일 계좌/전화가 3건+ 사건에서 사용',
             'threshold':         3,
             'confidence':        0.80,
-            'output_edge':       'accomplice_of',
+            'output':            'candidates',   # V4.9: 탐지 후보 목록(분석 산출물) — 그래프 엣지로 저장하지 않음
             'legal_basis':       '범죄수익은닉규제법',
         },
         'MoneyLaundering': {
@@ -318,7 +323,7 @@ class KICSCrimeDomainOntology:
             'trigger':           '3단계+ 계좌이체 (hop_level >= 3)',
             'threshold':         3,
             'confidence':        0.75,
-            'output_edge':       'suspicious_transfer',
+            'output':            'candidates',   # V4.9: 탐지 후보 목록(분석 산출물) — 그래프 엣지로 저장하지 않음
             'legal_basis':       '특정금융거래정보법',
         },
         'Accomplice': {
@@ -327,7 +332,7 @@ class KICSCrimeDomainOntology:
             'trigger':           '2인 이상이 5건+ 공통 통화 대상 공유',
             'threshold':         5,
             'confidence':        0.70,
-            'output_edge':       'accomplice_of',
+            'output':            'candidates',   # V4.9: 탐지 후보 목록(분석 산출물) — 그래프 엣지로 저장하지 않음
             'legal_basis':       '형법 제30조 공동정범',
         },
         'BurnerAccount': {
@@ -382,7 +387,7 @@ class KICSCrimeDomainOntology:
             'trigger':           '총책 → 조직원 → 말단 recruits 체인 2단계+',
             'threshold':         2,
             'confidence':        0.75,
-            'output_edge':       'accomplice_of',
+            'output':            'candidates',   # V4.9: 탐지 후보 목록(분석 산출물) — 그래프 엣지로 저장하지 않음
             'legal_basis':       '형법 제30조 공동정범',
         },
         # ─── Enrichment 규칙 (4종): ETL 군집/엔티티 생성 ──────────────────────
@@ -523,7 +528,6 @@ class KICSCrimeDomainOntology:
         'witness_in':         {'color': '#F39C12', 'width': 2, 'arrow': 'triangle', 'style': 'solid'},
         'involves':           {'color': '#7F8C8D', 'width': 2, 'arrow': 'triangle', 'style': 'solid'},
         'filed_as':           {'color': '#16A085', 'width': 2, 'arrow': 'triangle', 'style': 'solid'},
-        'related_case':       {'color': '#E67E22', 'width': 2, 'arrow': 'triangle-tee', 'style': 'solid'},
         # Evidence 엣지
         'eg_used_account':    {'color': '#3498DB', 'width': 2, 'arrow': 'triangle', 'style': 'solid'},
         'eg_used_phone':      {'color': '#16A085', 'width': 2, 'arrow': 'triangle', 'style': 'solid'},
@@ -535,11 +539,9 @@ class KICSCrimeDomainOntology:
         'drives':             {'color': '#34495E', 'width': 2, 'arrow': 'triangle', 'style': 'solid'},
         'member_of':          {'color': '#5DADE2', 'width': 2, 'arrow': 'triangle', 'style': 'solid'},
         'works_at':           {'color': '#5499C7', 'width': 2, 'arrow': 'triangle', 'style': 'solid'},
-        'accomplice_of':      {'color': '#C0392B', 'width': 3, 'arrow': 'triangle-tee', 'style': 'solid'},
         'recruits':           {'color': '#922B21', 'width': 3, 'arrow': 'triangle', 'style': 'solid'},
         'blackmails':         {'color': '#641E16', 'width': 3, 'arrow': 'triangle', 'style': 'solid'},
         'same_as':             {'color': '#999999', 'width': 2, 'arrow': 'none',     'style': 'dashed'},
-        'contradicts':        {'color': '#C0392B', 'width': 2, 'arrow': 'tee',      'style': 'dotted'},
         # V4.3 시나리오 직접 엣지 (속성적 연결)
         'knows':              {'color': '#7F8C8D', 'width': 2, 'arrow': 'none',     'style': 'solid'},
         'linked_id':          {'color': '#5499C7', 'width': 2, 'arrow': 'triangle', 'style': 'solid'},
@@ -596,7 +598,6 @@ class KICSCrimeDomainOntology:
         'contacted':          {'color': '#E67E22', 'width': 1, 'arrow': 'triangle-tee', 'style': 'solid'},
         'impersonates':       {'color': '#CB4335', 'width': 2, 'arrow': 'triangle', 'style': 'dashed'},  # V3.3 read-only
         # Deprecated (시각화는 표시하되 색을 흐리게)
-        'clusters_with':      {'color': '#CCCCCC', 'width': 1, 'arrow': 'triangle-tee', 'style': 'dotted', 'deprecated': True},
     }
 
     LAYOUT_PRESETS_V40 = {
@@ -743,7 +744,7 @@ class KICSCrimeDomainOntology:
                            'status',           # 'active' | 'merged' | 'closed'
                            'source_id', 'rec_created'],
             'legal_category': '수사사건',
-            'description': '진정서 군집 허브 노드 — clusters_with O(n²) 엣지 대체 (v3.7)'
+            'description': '진정서 군집 허브 노드 — 진정서 간 O(n²) 쌍 엣지 대신 허브 소속(belongs_to_cluster) (v3.7)'
         },
 
         # ═══════════════════════════════════════════════════════════════════
@@ -1238,19 +1239,11 @@ class KICSCrimeDomainOntology:
             'label_ko': '동일실체',
             'meaning': '두 vt_psn 또는 vt_id가 동일 실체로 해소됨 (엔티티 해소; 유사 계정 pokpok1270↔pokpokpok1270 포함)',
             'legal_significance': '신원확인',
-            'properties': ['match_score', 'match_basis', 'review_status', 'rec_created'],
-            'inferred': True
-        },
-        'contradicts': {
-            'domain': 'Person',
-            'range': 'Person',
-            'source_types': [],
-            'semantic_relation': 'contradicts',
-            'label_ko': '모순정보',
-            'meaning': '두 vt_psn 정보가 모순됨 (명의도용 등)',
-            'legal_significance': '신원확인',
-            'properties': ['conflict_field', 'conflict_detail', 'rec_created'],
-            'inferred': True
+            'properties': ['confidence', 'match_basis', 'review_status', 'traversal_policy', 'source_id', 'rec_created'],
+            'resolution': True,          # V4.9: 추론 엣지가 아니라 엔티티 해소 결과(검토 상태로 관리)
+            'same_label_only': True,     # 양끝은 같은 라벨(인물↔인물·계정↔계정·전화↔전화) — 인물↔식별자는 registered_to·uses_id·owns_phone
+            # V4.9 속성명 통일: 신뢰도 confidence(구 match_score·conf) · 근거 match_basis(구 method·match_basis_type)
+            #   · 검토 review_status(confirmed|candidate) · 탐색 정책 traversal_policy
         },
         # ═══════════════════════════════════════════════════════════
         # [V4.3] 시나리오 기반 직접 엣지 (속성적 연결) — 2026-08-03
@@ -1261,7 +1254,7 @@ class KICSCrimeDomainOntology:
             'source_types': [('person', 'person')],
             'semantic_relation': 'knows',
             'label_ko': '지인',
-            'meaning': '두 인물의 사회적 지인 관계 (고향친구/동창 등, 공범 미확정 — accomplice_of와 구분)',
+            'meaning': '두 인물의 사회적 지인 관계 (고향친구/동창 등 — 공범 여부는 그래프 엣지가 아니라 탐지 결과로 판단)',
             'legal_significance': '관계정보',
             'properties': ['relation_type', 'confidence', 'valid_from', 'source_id', 'rec_created']
         },
@@ -1297,19 +1290,6 @@ class KICSCrimeDomainOntology:
             'meaning': '진정서가 수사 사건으로 전환됨',
             'legal_significance': '수사개시',
             'properties': ['converted_dt', 'converted_by', 'source_id', 'rec_created']
-        },
-        'clusters_with': {
-            'domain': 'Petition',
-            'range': 'Petition',
-            'source_types': [],
-            'semantic_relation': 'clustersWith',
-            'label_ko': '유사진정서(deprecated)',
-            'meaning': '[DEPRECATED v3.7] 유사 진정서 군집 연결 — belongs_to_cluster 패턴으로 교체',
-            'legal_significance': None,
-            'properties': ['sim_score', 'cluster_id', 'rec_created'],
-            'inferred': True,
-            'deprecated': True,            # v3.7: 신규 생성 금지, 레거시 조회용만 유지
-            'replaced_by': 'belongs_to_cluster',
         },
         'belongs_to_cluster': {
             'domain': 'Petition',
@@ -1447,17 +1427,17 @@ class KICSCrimeDomainOntology:
             'range': 'BankAccount|CryptoWallet',      # V4.4 다형화: 가상자산 세탁 경로 포함
             'source_types': [('from_account', 'to_account'), ('sender_account', 'receiver_account')],
             'semantic_relation': 'transferredFundsTo',
-            'label_ko': '이체(다단계추론)',
-            'meaning': '다단계 자금 세탁 추론 엣지 — 직접 생성 금지, from/to_account Fan-out 이후 추론으로만 생성',
+            'label_ko': '이체',
+            'meaning': '계좌(지갑) 간 이체 — 건별 거래 원본을 (보낸 쪽, 받는 쪽) 쌍당 1엣지로 집계한 원천 사실 엣지',
             'legal_significance': '금융거래정보',
-            'properties': ['hop_level', 'first_dlng_dt', 'last_dlng_dt', 'txn_count', 'total_amount', 'time_basis',
-                           'amount', 'transfer_date'],
-            # V4.6: 추론경로(다단계)라 개별 amount/transfer_date보다 출발계좌 거래활동 기간집계가 적합 →
-            #   first_dlng_dt·last_dlng_dt(거래기간)·txn_count·total_amount·time_basis 추가.
-            #   개별 이체시각은 vt_transfer 이벤트 노드 소관(amount/transfer_date 하위호환 유지).
-            'inferred': True,            # 추론 전용 (ETL 직접 생성 금지)
-            'transitive': True,          # A→B→C 이면 A→C 추론 가능
-            'inference_confidence': 0.85
+            'properties': ['first_dlng_dt', 'last_dlng_dt', 'txn_count', 'total_amount', 'channel',
+                           'source_id', 'rec_created'],
+            # V4.9 (2026-09-30): '다단계 추론 엣지(직접 생성 금지)' 정의를 실제에 맞춰 정정 — 규격 §4·참조 적재기·
+            #   통합그래프(617건)는 이체 원본을 쌍 집계로 직접 적재한다. 추론/추이성(inferred·transitive·
+            #   inference_confidence)과 추론용 hop_level·time_basis·건별 amount/transfer_date 제거.
+            #   다단계 자금 흐름은 엣지를 만들지 않고 경로 조회(-[:transferred_to*1..n]->)로 본다.
+            'aggregation': {'key': ('from', 'to'), 'min': ('first_dlng_dt',), 'max': ('last_dlng_dt',),
+                            'sum': ('txn_count', 'total_amount'), 'union': ('channel', 'source_id')},
         },
         'registered_to': {
             'domain': 'Phone|DigitalID', # V4.8: 포털 계정 실명확인 가입자(네이버 역조회 1,914건) — uses_id '사용자'와
@@ -1475,16 +1455,6 @@ class KICSCrimeDomainOntology:
         # [주의] Person→Organization 소속은 member_of / works_at 으로 분리됨
         # belongs_to (Person→Org) 중복 키 제거 — 아래 belongs_to (Account→Org) 단일 유지
         # controls 정의는 하단 [V4.0 정합화 C단계] 블록으로 단일화 (중복 제거)
-        'accomplice_of': {
-            'domain': 'Person',
-            'range': 'Person',
-            'source_types': [],
-            'semantic_relation': 'accompliceOf',
-            'label_ko': '공범',
-            'meaning': '공범 관계',
-            'legal_significance': '피의자정보',
-            'inferred': True
-        },
         # owns_device 정의는 하단 [V4.0 정합화 C단계] 블록으로 단일화 (deprecated·alias_of=uses_device)
         'member_of': {
             'domain': 'Person',
@@ -1624,16 +1594,6 @@ class KICSCrimeDomainOntology:
         # ═══════════════════════════════════════════════════════════
         # [Enhancement] 보강 엣지 — 교차 도메인 관계
         # ═══════════════════════════════════════════════════════════
-        'related_case': {
-            'domain': 'Case',
-            'range': 'Case',
-            'semantic_relation': 'relatedCase',
-            'label_ko': '관련사건',
-            'meaning': '공유 증거(계좌/전화) 기반 사건 연결',
-            'inference': True,
-            'confidence': 0.75,
-            'legal_significance': '연쇄사건 추적'
-        },
         'belongs_to': {
             'domain': 'BankAccount',
             'range': 'Organization',
@@ -2486,16 +2446,13 @@ class OntologyEnricher:
             'witness_in':     {'semantic_relation': 'witnessIn',         'domain_meaning': '참고인으로 관련된 사건',   'legal_significance': '참고인진술'},
             # ── Petition 관계 ──
             'filed_as':       {'semantic_relation': 'filedAs',           'domain_meaning': '진정서 → 사건 전환',       'legal_significance': '수사개시'},
-            'clusters_with':  {'semantic_relation': 'clustersWith',      'domain_meaning': '유사 진정서 군집',         'legal_significance': None},
             # ── Person 관계 ──
             'same_as':         {'semantic_relation': 'same_as',            'domain_meaning': '동일인물 해소',            'legal_significance': '신원확인'},
-            'contradicts':    {'semantic_relation': 'contradicts',       'domain_meaning': '모순 정보',                'legal_significance': '신원확인'},
             'impersonates':   {'semantic_relation': 'impersonates',      'domain_meaning': '사칭 대상(구)',            'legal_significance': '사기범죄'},
             'represents':     {'semantic_relation': 'represents',        'domain_meaning': '법인 대표',                'legal_significance': '법인등기'},
             # V3.3 사칭 노드 패턴
             'used_for':       {'semantic_relation': 'usedForImpersonation','domain_meaning': '사칭 수단',              'legal_significance': '전기통신금융사기법 제3조'},
             'targets':        {'semantic_relation': 'targetsOrganization', 'domain_meaning': '사칭 대상 기관',         'legal_significance': '전기통신금융사기법 제3조'},
-            'accomplice_of':  {'semantic_relation': 'accompliceOf',      'domain_meaning': '공범 관계',                'legal_significance': '공모사실'},
             # ── 소유/사용 ──
             'owns':           {'semantic_relation': 'owns',              'domain_meaning': '소유',                    'legal_significance': '소유관계'},
             'has_account':    {'semantic_relation': 'hasFinancialAccount','domain_meaning': '계좌 보유',               'legal_significance': '금융거래정보'},

@@ -8,6 +8,9 @@ sLLM 성능이 아닌 온톨로지 분류표(SoT)에 의존시킨다.
 설계: docs/TEMPORAL_CONTINUITY_QUERY_DESIGN.md
 분류: docs/TEMPORAL_CONTINUITY_EDGE_CLASSIFICATION_20260812.md (V/E/N)
   V형 = 경유 Event 노드 시각 · E형 = 엣지 시각속성 · N형 = 없음(warnings)
+  V4.9: 쌍 집계 엣지(RELATIONSHIPS[*]['aggregation'] 에 min/max 기간 필드)는 시각이 점이 아니라 기간
+  [최초, 마지막]이다. 인접 구간 조건은 일반형 start_i <= end_{i+1} (점 시각이면 start=end 라 T_i <= T_{i+1} 과 동일)
+  — 예: 이체 A→B→C 는 'B 로 처음 들어온 시점 <= B 에서 마지막으로 나간 시점'(흐름이 가능하기 위한 필요조건).
 """
 from __future__ import annotations
 import re
@@ -35,6 +38,9 @@ def classify_edge(edge_label):
         concepts.add(x.capitalize() if x.lower() in _EVENT_LC else x)
     if concepts & EVENT_CONCEPTS:
         return ('V', None)              # 시각은 경유 Event 노드에서
+    agg = spec.get('aggregation') or {}
+    if agg.get('min'):
+        return ('E', agg['min'][0])     # 쌍 집계 엣지 — 기간 시작 필드 (끝은 time_bounds)
     props = spec.get('properties', [])
     if isinstance(props, dict):
         props = list(props.keys())
@@ -42,6 +48,16 @@ def classify_edge(edge_label):
         if p in props:
             return ('E', p)
     return ('N', None)
+
+
+def time_bounds(edge_label):
+    """E형 엣지의 (시작 필드, 끝 필드). 쌍 집계 엣지는 (min, max) 기간, 그 외는 같은 필드 두 번."""
+    cls, attr = classify_edge(edge_label)
+    if cls != 'E':
+        return None
+    agg = O.RELATIONSHIPS.get(edge_label, {}).get('aggregation') or {}
+    end = (agg.get('max') or [attr])[0]
+    return attr, end
 
 
 def _split_var_label(s):
@@ -77,15 +93,19 @@ def parse_path(cypher):
 
 
 def _time_expr(edge, prev_node, next_node):
-    """엣지의 기준시각 표현식(str) 또는 None(N형/참조불가)."""
+    """엣지의 기준시각 (시작 표현식, 끝 표현식) 또는 None(N형/참조불가). 점 시각이면 시작=끝."""
     _, evar, elabel, _ = edge
     cls, attr = classify_edge(elabel)
     if cls == 'E':
-        return f"date({evar}.{attr})" if evar else None
+        if not evar:
+            return None
+        start, end = time_bounds(elabel)
+        return (f"date({evar}.{start})", f"date({evar}.{end})")
     if cls == 'V':
         for nd in (prev_node, next_node):                 # 경유 Event 노드
             if nd and nd[0] == 'node' and nd[2] in EVENT_VT and nd[1]:
-                return f"date({nd[1]}.{EVENT_VT[nd[2]]})"
+                t = f"date({nd[1]}.{EVENT_VT[nd[2]]})"
+                return (t, t)
         return None                                        # Event 미명시 → 강등
     return None                                            # N형
 
@@ -120,7 +140,7 @@ def inject(cypher):
         if T[i] and T[i + 1]:
             if T[i] == T[i + 1]:
                 continue  # 동일 이벤트/시각 경유(예: 한 이체의 from/to) → 자명(T<=T), 생략
-            conds.append(f"{T[i]} <= {T[i + 1]}")
+            conds.append(f"{T[i][0]} <= {T[i + 1][1]}")   # start_i <= end_{i+1}
         else:
             missing = labels[i] if not T[i] else labels[i + 1]
             warnings.append(f"구간 [{labels[i]} → {labels[i + 1]}]는 시간기준 없음(N형: {missing})")

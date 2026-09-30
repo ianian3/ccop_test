@@ -66,7 +66,7 @@ Physical:
 ═══════════════════════════════════════════════════════════
 관계 타입
 ═══════════════════════════════════════════════════════════
-Actor 관계: owns, belongs_to, controls, has_account, uses_device, accomplice_of
+Actor 관계: owns, belongs_to, controls, has_account, uses_device
 Action 관계: performed, from_account, to_account, caller, callee, sent_by, received_by
 Evidence 관계: transferred_to, contacted, linked_to, accessed, registered_to
 Case 관계: involves, involves_org, involves_device (Case는 Actor에만 연결)

@@ -46,8 +46,6 @@ class GraphService:
         "witness_in":    ("vt_psn",      "vt_case"),
         "filed_as":      ("vt_petition", "vt_case"),
         "linked_to":     ("vt_petition", "vt_case"),
-        "clusters_with": ("vt_petition", "vt_petition"),
-        "related_case":  ("vt_case",     "vt_case"),   # v3.5: similar_to 대체
         # ── CASE → OBJECT 증거 연결 (v3.5 공식 등재) ─────────────────
         "eg_used_account": ("vt_case",   "vt_bacnt"),
         "eg_used_phone":   ("vt_case",   "vt_telno"),
@@ -68,9 +66,7 @@ class GraphService:
         "member_of":     ("vt_psn",      "vt_org"),
         "works_at":      ("vt_psn",      "vt_org"),
         # ── PERSON 간 관계 ────────────────────────────────────────────
-        "accomplice_of": ("vt_psn",      "vt_psn"),
         "same_as":        ("vt_psn",      "vt_psn"),
-        "contradicts":   ("vt_psn",      "vt_psn"),
         # ── PERSON v3.4 신규 ──────────────────────────────────────────
         "operates":      ("vt_psn",      "vt_site"),
         "recruits":      ("vt_psn",      "vt_psn"),
@@ -908,7 +904,7 @@ class GraphService:
 
     @staticmethod
     def find_accomplice_network(node_id, graph_path):
-        """공범 네트워크 탐색 — 선택 노드에서 accomplice_of 관계 + 공유 자원 추적"""
+        """공범 네트워크 탐색 — 선택 노드가 계좌·전화·IP 를 공유하는 인물 추적 (V4.9: 추론 엣지 accomplice_of 제거)"""
         conn, cur = GraphService.get_db_connection()
         if not conn: return {'nodes': [], 'edges': [], 'shared': []}
         
@@ -935,34 +931,8 @@ class GraphService:
                          "props": GraphService.safe_props(start[2]), "role": "center"}
             })
             
-            # 2. accomplice_of 관계로 연결된 인물들 (2-hop)
-            try:
-                cur.execute(f"""
-                    MATCH (p1)-[r:accomplice_of]-(p2)
-                    WHERE id(p1) = '{node_id}'
-                    RETURN id(p2), labels(p2), properties(p2), id(r), properties(r)
-                """)
-                for r in cur.fetchall():
-                    pid = str(r[0])
-                    if pid not in node_set:
-                        node_set.add(pid)
-                        elements_nodes.append({
-                            "group": "nodes",
-                            "data": {"id": pid, "label": r[1][0] if isinstance(r[1], list) else str(r[1]),
-                                     "props": GraphService.safe_props(r[2]), "role": "accomplice"}
-                        })
-                    eid = str(r[3])
-                    if eid not in edge_set:
-                        edge_set.add(eid)
-                        eprops = GraphService.safe_props(r[4])
-                        elements_edges.append({
-                            "group": "edges",
-                            "data": {"id": eid, "source": sid, "target": pid,
-                                     "label": "accomplice_of", "props": eprops}
-                        })
-            except Exception as e:
-                logger.error(f"Accomplice query error: {e}")
-            
+            # 2. (V4.9) accomplice_of 엣지 삭제 — 공범은 추론 결과라 엣지로 저장하지 않는다. 아래 공유 자원 추적으로 판단.
+
             # 3. 공유 자원 (계좌/전화) 추적
             for rel, res_label, prop_name in [
                 ('has_account', 'vt_bacnt', 'actno'),
@@ -1060,8 +1030,8 @@ class GraphService:
                            size((p)<-[:involves]-()) AS cases,
                            size((p)-[:has_account]->()) AS accounts,
                            size((p)-[:owns_phone]->()) AS phones,
-                           size((p)-[:accomplice_of]-()) AS accomplices
-                    ORDER BY cases + accounts + phones + accomplices DESC
+                           0 AS accomplices
+                    ORDER BY cases + accounts + phones DESC
                     LIMIT {top_n}
                 """)
                 for r in cur.fetchall():

@@ -327,8 +327,6 @@ class AIService:
         "involves":       ("vt_case",     "vt_psn"),
         # 사건·진정서
         "filed_as":       ("vt_petition", "vt_case"),
-        "clusters_with":  ("vt_petition", "vt_petition"),
-        "related_case":   ("vt_case",     "vt_case"),
         # 소유 (Person → Object)
         "has_account":    ("vt_psn",      "vt_bacnt"),
         "controls":       ("vt_psn",      "vt_bacnt"),
@@ -367,7 +365,6 @@ class AIService:
         "impersonates":   ("vt_telno",    "vt_org"),
         # 엔티티 해소
         "same_as":        ("vt_psn",      "vt_psn"),
-        "contradicts":    ("vt_psn",      "vt_psn"),
     }
 
     @staticmethod

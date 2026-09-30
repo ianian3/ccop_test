@@ -6,8 +6,8 @@ CCOP 내부용 `scripts/audit_ep_v48.py` 를 외부에서 쓸 수 있게 일반�
 
 검사 항목
   ① 정경 외 라벨 — V4.9 ENTITIES(노드 25종)에 없는 라벨이 적재됐는지
-  ② 정경 외 엣지 — V4.9 RELATIONSHIPS(엣지 72종)에 없는 관계가 적재됐는지
-  ③ deprecated 사용 — 폐기 예정 엣지(clusters_with·owns_device) 사용 여부
+  ② 정경 외 엣지 — V4.9 RELATIONSHIPS(엣지 68종)에 없는 관계가 적재됐는지
+  ③ deprecated 사용 — 폐기 예정 엣지(owns_device) 사용 여부 — V4.9 에서 삭제된 추론 엣지 4종(contradicts·clusters_with·accomplice_of·related_case)은 ②에서 '정경 외'로 잡힘
   ④ domain/range 위반 — 엣지가 정의된 출발/도착 라벨을 벗어났는지('Any' 는 와일드카드)
   ⑤ 키 속성 충전율 — 각 라벨의 canonical key(account_no·telno 등) 누락률
   ⑥ provenance — source_id 보유율(원본 대조 가능성)

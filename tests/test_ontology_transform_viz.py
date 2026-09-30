@@ -231,7 +231,6 @@ class TestOntologyEnrichment:
             ('from_account',   '출금 계좌',               '금융거래정보'),
             ('contacted',      '연락',                   '통신사실확인자료'),
             ('impersonates',   '사칭 대상(구)',            '사기범죄'),        # deprecated 처리 확인
-            ('accomplice_of',  '공범 관계',               '공모사실'),
             ('used_for',       '사칭 수단',               '전기통신금융사기법 제3조'),   # V3.3
             ('targets',        '사칭 대상 기관',           '전기통신금융사기법 제3조'),   # V3.3
         ]

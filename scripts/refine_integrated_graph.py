@@ -62,7 +62,7 @@ def main():
         cur.execute("CREATE ELABEL IF NOT EXISTS same_as")
         cur.execute("MATCH (:vt_psn)-[e:same_as]->(:vt_psn) DELETE e")   # 기존(상호 포함) 정리 후 재생성
         made = defaultdict(int)
-        for rel, conf in [('has_account', '0.7'), ('owns_phone', '0.65')]:
+        for rel, conf in [('has_account', 0.7), ('owns_phone', 0.65)]:   # V4.9: confidence 는 숫자
             method = 'shared_account' if rel == 'has_account' else 'shared_phone'
             pairs = q(f"MATCH (p1:vt_psn)-[:{rel}]->(x)<-[:{rel}]-(p2:vt_psn) "
                       f"WHERE id(p1) < id(p2) RETURN DISTINCT p1.name, p2.name")
@@ -71,11 +71,13 @@ def main():
                     continue
                 cur.execute(f"MATCH (p1:vt_psn {{name:'{esc(n1)}'}}), (p2:vt_psn {{name:'{esc(n2)}'}}) "
                             f"MERGE (p1)-[e:same_as]->(p2) "
-                            f"SET e.source_id='REFINE-shared-key', e.method='{method}', e.conf='{conf}', e.verified='false', e.traversal_policy='candidate_only'")
+                            # V4.9 속성명 통일: match_basis(구 method)·confidence(구 conf)·review_status
+                            f"SET e.source_id='REFINE-shared-key', e.match_basis='{method}', e.confidence={conf}, "
+                            f"e.review_status='candidate', e.verified=false, e.traversal_policy='candidate_only'")
                 made[method] += 1
         sa = q("MATCH ()-[e:same_as]->() RETURN count(*)")[0][0]
         print(f"② same_as 후보: {sa} (candidate_only·verified=false) · 방법별 {dict(made)}")
-        samp = q("MATCH (p1:vt_psn)-[e:same_as]->(p2:vt_psn) RETURN p1.name, p2.name, e.method")
+        samp = q("MATCH (p1:vt_psn)-[e:same_as]->(p2:vt_psn) RETURN p1.name, p2.name, e.match_basis")
         print("   샘플:", [(a, b, m) for a, b, m in samp[:8]])
         conn.close()
 
