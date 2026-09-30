@@ -37,15 +37,37 @@ NODE_SPECS = {
 ANY = None
 EDGE_SPECS = {
     "belongs_to_campaign": ({"vt_site"},                {"site_cluster"}),
-    "resolves_to":         ({"vt_site"},                {"vt_ip"}),
-    "hosts":               ({"vt_ip"},                  {"vt_site"}),
+    "resolves_to":         ({"vt_site"},                {"vt_ip"}),     # V4.9: basis='dns'|'origin' (hosts 통합)
     "communicated_with":   ({"vt_ip"},                  {"vt_ip"}),
     "contains_file":       ({"vt_site", "vt_msg", "vt_id"}, {"vt_file"}),
-    "mentions_account":    ({"vt_msg"},                 {"vt_bacnt"}),
+    "mentions":            ({"vt_msg"},                 {"vt_bacnt", "vt_id", "vt_loc"}),
     "operates":            ({"vt_id", "vt_org", "vt_psn"}, {"vt_site", "vt_id"}),
     "registered_to":       ({"vt_telno"},               {"vt_psn"}),
-    "sameAs":              (ANY,                        ANY),
+    "same_as":             (ANY,                        ANY),
 }
+# V4.9 이전 표기 — 제출은 받되 경고 후 V4.9 표기로 변환 (적재기 osint_ingest 도 같은 함수 사용)
+#   이름 → (V4.9 이름, 방향 뒤집기, 추가 속성)
+LEGACY_EDGES = {
+    "hosts":            ("resolves_to", True,  {"basis": "origin"}),   # IP→사이트 = 원본 서버 확인
+    "mentions_account": ("mentions",    False, {}),
+    "sameAs":           ("same_as",     False, {}),
+}
+
+
+def normalize_edge(edge):
+    """V4.9 이전 엣지 표기를 V4.9 로 변환한 사본 (변환 없으면 그대로). resolves_to 의 basis 기본값 'dns'."""
+    if not isinstance(edge, dict):
+        return edge
+    e = dict(edge)
+    if e.get("type") in LEGACY_EDGES:
+        new, swap, extra = LEGACY_EDGES[e["type"]]
+        e["type"] = new
+        if swap:
+            e["from"], e["to"] = e.get("to"), e.get("from")
+        e["attrs"] = {**(e.get("attrs") or {}), **extra}
+    if e.get("type") == "resolves_to":
+        e["attrs"] = {"basis": "dns", **(e.get("attrs") or {})}
+    return e
 ISO8601 = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$")
 HEXLEN = {"md5": 32, "sha1": 40, "sha256": 64}
 
@@ -171,6 +193,9 @@ def validate_edge(rep, i, edge, node_index, delivery_type):
     loc = f"edges[{i}]"
     if not isinstance(edge, dict):
         rep.err(loc, "객체가 아님"); return
+    if edge.get("type") in LEGACY_EDGES:
+        rep.warn(loc + ".type", f"V4.9 이전 표기 {edge['type']!r} → {LEGACY_EDGES[edge['type']][0]!r} 로 변환 적재")
+        edge = normalize_edge(edge)
     etype = edge.get("type")
     if etype not in EDGE_SPECS:
         rep.err(loc + ".type", f"미지원 엣지 — {etype!r} (허용: {', '.join(sorted(EDGE_SPECS))})"); return

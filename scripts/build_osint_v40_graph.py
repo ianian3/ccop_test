@@ -62,10 +62,10 @@ def reset_graph(conn, cur, drop=False):
         try: cur.execute(f"CREATE VLABEL IF NOT EXISTS {v};")
         except: pass
     for e in ['belongs_to_campaign', 'contains_file', 'sent_msg', 'reports',
-              'mentions', 'sourced_from', 'hosts']:
+              'mentions', 'sourced_from']:   # V4.9: hosts 삭제(→ resolves_to basis=origin)
         try: cur.execute(f"CREATE ELABEL IF NOT EXISTS {e};")
         except: pass
-    log.info(f"graph_path='{GRAPH}' (vlabel 7 / elabel 7 선언)")
+    log.info(f"graph_path='{GRAPH}' (vlabel 7 / elabel 6 선언)")
 
 
 def main():

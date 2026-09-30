@@ -35,7 +35,7 @@ CCOP V4.9 온톨로지 — POLE 정렬 6레이어 아키텍처 (현행 SSOT)
           reification 우선). + sameAs→same_as 개명(AgensGraph 미인용 식별자 소문자화로 DB 실현명이
           'sameas'가 되던 문제 — snake_case 전면 통일, DB 4건 마이그레이션). 엣지 수 불변(72).
   - V4.9 (2026-09-30): 식별자·집계 규칙 정정 — 의미가 바뀐 변경을 V4.8 이름으로 재배포하지 않기 위해
-          버전 분리(docs/ONTOLOGY_V48_VALIDATION_20260918.md §6-1 권고). 노드 25→24 · 엣지 72→53.
+          버전 분리(docs/ONTOLOGY_V48_VALIDATION_20260918.md §6-1 권고). 노드 25→24 · 엣지 72→52.
           ① vt_case 정경 식별자 flnm → incdnt_no(경찰청 공식 사건번호, 2026-09-18), flnm 은 보조 속성
           ② used_ip·located_at 쌍 단위 집계 규칙 명시(RELATIONSHIPS[*]['aggregation']) — used_ip +usage_count·
              access_type(valid_from=최초, valid_to=마지막 관측), located_at +first_dt·last_dt·evt_count
@@ -57,11 +57,13 @@ CCOP V4.9 온톨로지 — POLE 정렬 6레이어 아키텍처 (현행 SSOT)
           ⑪ mentions_id·mentions_account·mentions_location → mentions(도착 라벨로 종류 구분). 엣지 61→57
           ⑫ 같은 의미 엣지 4종 통합(57→53, 전 그래프 적재 occurred_at 2건 외 0건): via_ip·sent_from_ip →
              accessed_from(이벤트→IP, T2C 학습 표기 유지) · occurred_at → located_at · linked_id → linked_to(link_basis)
-노드: 24 | 엣지: 53 (deprecated 0) | 추론 규칙: 13종 통합 dict (탐지 9 + enrichment 4)
+          ⑬ hosts(IP→사이트) → resolves_to(사이트→IP) + basis('dns' 관측 · 'origin' 원본 서버 확인) 통합(53→52).
+             OSINT 적재분 13,769건은 DNS 결과의 역방향 복사본(짝 없는 hosts 0건) — 삭제 대상. resolves_to 추론 표시 제거
+노드: 24 | 엣지: 52 (deprecated 0) | 추론 규칙: 13종 통합 dict (탐지 9 + enrichment 4)
 """
 
 class KICSCrimeDomainOntology:
-    """KICS 기반 한국형 사이버 범죄 온톨로지 (V4.9 POLE 6레이어 · 노드 24 · 엣지 53 · 추론규칙 13종)"""
+    """KICS 기반 한국형 사이버 범죄 온톨로지 (V4.9 POLE 6레이어 · 노드 24 · 엣지 52 · 추론규칙 13종)"""
 
     # 엣지 공통 메타속성 스키마 (EDGE_META_SCHEMA)
     EDGE_META_SCHEMA = {
@@ -562,7 +564,6 @@ class KICSCrimeDomainOntology:
         # Object 관계
         'belongs_to':         {'color': '#9B59B6', 'width': 2, 'arrow': 'triangle', 'style': 'solid'},
         'resolves_to':        {'color': '#1ABC9C', 'width': 1, 'arrow': 'triangle', 'style': 'solid'},
-        'hosts':              {'color': '#1ABC9C', 'width': 2, 'arrow': 'triangle', 'style': 'solid'},
         'contains_file':      {'color': '#8E44AD', 'width': 2, 'arrow': 'triangle', 'style': 'solid'},
         'communicated_with':  {'color': '#16A085', 'width': 2, 'arrow': 'triangle-tee', 'style': 'solid'},
         # 사칭 (V3.3)
@@ -1554,11 +1555,14 @@ class KICSCrimeDomainOntology:
             'domain': 'WebTrace',        # 수정: DNS 표준 방향 — 도메인 → IP
             'range': 'NetworkTrace',
             'semantic_relation': 'resolvesToIP',
-            'label_ko': 'DNS조회',
-            'meaning': '도메인이 IP 주소로 조회됨 (DNS A/AAAA 레코드)',
-            'source_types': [('site', 'ip'), ('domain', 'ip')],
-            'inference': True,
-            'legal_significance': '네트워크 추적'
+            'label_ko': 'DNS조회·호스팅',
+            'meaning': "사이트가 IP 로 연결됨 — basis 로 근거 구분: 'dns'(DNS A/AAAA 조회 관측) · "
+                       "'origin'(원본 서버 확인 — 호스팅사 회신·압수 등). CDN·가상호스팅은 dns 만으로 서버 단정 금지",
+            'source_types': [('site', 'ip'), ('domain', 'ip'), ('ip', 'site'), ('server_ip', 'domain')],
+            'legal_significance': '네트워크 추적',
+            'properties': ['basis', 'resolved_dt', 'port', 'source_id', 'rec_created'],   # resolved_dt=관측·확인 시각
+            # V4.9: hosts(IP→사이트) 통합 — OSINT 적재분은 DNS 결과를 양방향으로 복사한 동일 사실(13,769쌍 전부 짝)이었다.
+            #   inference 표시 제거: DNS 조회 결과는 추론이 아니라 관측 사실. basis 미기재 = 'dns' 로 해석
         },
 
         # ═══════════════════════════════════════════════════════════
@@ -1625,16 +1629,6 @@ class KICSCrimeDomainOntology:
             'meaning': '인물이 다른 인물을 협박함 (몸캠피싱·랜섬웨어)',
             'legal_significance': '협박죄 구성요건',
             'properties': ['method', 'date', 'source_id', 'rec_created']
-        },
-        'hosts': {
-            'domain': 'NetworkTrace',
-            'range': 'WebTrace',
-            'source_types': [('ip', 'site'), ('server_ip', 'domain')],
-            'semantic_relation': 'hostsWebsite',
-            'label_ko': '호스팅',
-            'meaning': '서버 IP가 사이트를 호스팅함 (인프라 추적)',
-            'legal_significance': '네트워크 추적',
-            'properties': ['port', 'detected_at', 'source_id', 'rec_created']
         },
         'contains_file': {
             'domain': 'Any',              # WebTrace·Message·DigitalID

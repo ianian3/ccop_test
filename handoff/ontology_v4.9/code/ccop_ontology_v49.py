@@ -1,6 +1,6 @@
 """CCOP 온톨로지 V4.9 — 정의 스펙 (전달본)
 
-노드 24종 · 엣지 53종(활성 53, deprecated 0). 사이버범죄 수사 그래프 표준.
+노드 24종 · 엣지 52종(활성 52, deprecated 0). 사이버범죄 수사 그래프 표준.
 제공: 스카이월드와이드 · 기준 V4.9
 
 외부 의존 0 — 표준 라이브러리조차 import 하지 않는 순수 선언이므로
@@ -472,7 +472,7 @@ class KICSCrimeDomainOntology:
                           'description': '사칭 이벤트 노드 — V3.3에서 impersonates 엣지에서 승격 (전기통신금융사기법 제3조)'},
     }
 
-    # ── 엣지 53종 — domain/range·properties·meaning·legal_significance  (53종) ──
+    # ── 엣지 52종 — domain/range·properties·meaning·legal_significance  (52종) ──
     RELATIONSHIPS = {
         'suspect_in': {'domain': 'Person',
                        'range': 'Case',
@@ -637,10 +637,10 @@ class KICSCrimeDomainOntology:
                        'std_columns': {'rprs_se_cd': 'RPRS_SE_CD', 'valid_from': 'VLD_BGNG_DT', 'valid_to': 'VLD_END_DT', 'source_id': 'SRC_ID'}},
         'resolves_to': {'domain': 'WebTrace',
                         'range': 'NetworkTrace',
-                        'label_ko': 'DNS조회',
-                        'meaning': '도메인이 IP 주소로 조회됨 (DNS A/AAAA 레코드)',
-                        'inference': True,
-                        'legal_significance': '네트워크 추적'},
+                        'label_ko': 'DNS조회·호스팅',
+                        'meaning': "사이트가 IP 로 연결됨 — basis 로 근거 구분: 'dns'(DNS A/AAAA 조회 관측) · 'origin'(원본 서버 확인 — 호스팅사 회신·압수 등). CDN·가상호스팅은 dns 만으로 서버 단정 금지",
+                        'legal_significance': '네트워크 추적',
+                        'properties': ['basis', 'resolved_dt', 'port', 'source_id', 'rec_created']},
         'used_for': {'domain': 'Any',
                      'range': 'Impersonation',
                      'label_ko': '사칭수단',
@@ -669,12 +669,6 @@ class KICSCrimeDomainOntology:
                        'meaning': '인물이 다른 인물을 협박함 (몸캠피싱·랜섬웨어)',
                        'legal_significance': '협박죄 구성요건',
                        'properties': ['method', 'date', 'source_id', 'rec_created']},
-        'hosts': {'domain': 'NetworkTrace',
-                  'range': 'WebTrace',
-                  'label_ko': '호스팅',
-                  'meaning': '서버 IP가 사이트를 호스팅함 (인프라 추적)',
-                  'legal_significance': '네트워크 추적',
-                  'properties': ['port', 'detected_at', 'source_id', 'rec_created']},
         'contains_file': {'domain': 'Any',
                           'range': 'FileTrace',
                           'label_ko': '파일내장',

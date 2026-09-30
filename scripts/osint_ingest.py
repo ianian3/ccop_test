@@ -54,8 +54,8 @@ def cy_set(var, d):
 # 통합 그래프에 필요한 라벨 (없으면 생성)
 LABELS_V = ["vt_src", "vt_site", "site_cluster", "vt_ip", "vt_file", "vt_id", "vt_msg",
             "vt_bacnt", "vt_telno", "vt_transfer", "vt_org", "vt_psn"]
-LABELS_E = ["belongs_to_campaign", "resolves_to", "hosts", "communicated_with", "contains_file",
-            "mentions_account", "operates", "registered_to", "sameAs"]
+LABELS_E = ["belongs_to_campaign", "resolves_to", "communicated_with", "contains_file",
+            "mentions", "operates", "registered_to", "same_as"]   # V4.9: hosts→resolves_to · mentions_account→mentions · sameAs→same_as
 
 
 # ── DB ─────────────────────────────────────────────────────────
@@ -150,7 +150,7 @@ def main():
     ap.add_argument("--skip-validate", action="store_true")
     args = ap.parse_args()
 
-    from validate_osint_submission import load, validate
+    from validate_osint_submission import load, validate, normalize_edge
     data = load(args.file)
     if not args.skip_validate:
         rep, nn, ne = validate(data)
@@ -162,7 +162,8 @@ def main():
         print(f"✅ 검증 통과 (노드 {nn}·엣지 {ne})")
 
     m = data.get("manifest", {})
-    nodes, edges = data.get("nodes", []), data.get("edges", [])
+    nodes = data.get("nodes", [])
+    edges = [normalize_edge(e) for e in data.get("edges", [])]   # V4.9 이전 표기 → V4.9 (hosts 는 방향 반전 + basis=origin)
     if args.dry_run:
         print(f"[dry-run] batch agency={m.get('agency_id')} type={m.get('delivery_type')} "
               f"nodes={len(nodes)} edges={len(edges)} — DB 미접촉")
@@ -186,7 +187,7 @@ def main():
         cur.execute("UPDATE staging.osint_batch SET status='loaded' WHERE batch_id=%s", (batch_id,))
         conn.commit()
         print(f"✅ 적재 완료: batch_id={batch_id} · 노드 {len(nodes)} · 엣지 {len(edges)} → graph '{args.graph}'")
-        print("   다음: 배치 EntityResolution 잡으로 sameAs 브릿지 (graph_meta.sameas_candidates 참조)")
+        print("   다음: 배치 EntityResolution 잡으로 same_as 브릿지 (graph_meta.sameas_candidates 참조)")
     except Exception as e:
         conn.rollback()
         print(f"❌ 적재 실패(롤백): {e}")

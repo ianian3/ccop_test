@@ -1481,7 +1481,7 @@ function showTruncateBanner(metas){
                         <div class="example-query" onclick="setExampleQuery('피의자1과 관련된 모든 정보를 검색해줘')">🌐 피의자1 관련 모든 정보 (다중 홉)</div>
                         <div class="example-query" onclick="setExampleQuery('이 사건 피의자가 운영하는 피싱 사이트나 텔레그램 채널을 모두 찾아줘')">🖥️ 피의자가 운영하는 사이트/채널 (operates)</div>
                         <div class="example-query" onclick="setExampleQuery('총책이 모집한 조직원들과 각자의 역할을 알려줘')">👥 조직 모집 계층 (recruits)</div>
-                        <div class="example-query" onclick="setExampleQuery('피싱 사이트를 호스팅한 서버 IP와 그 국가를 추적해줘')">🌐 피싱 서버 IP 역추적 (hosts)</div>
+                        <div class="example-query" onclick="setExampleQuery('피싱 사이트를 호스팅한 서버 IP와 그 국가를 추적해줘')">🌐 피싱 서버 IP 역추적 (resolves_to)</div>
                         <div class="example-query" onclick="setExampleQuery('피해자가 돈을 출금한 ATM 위치와 CCTV 설치 여부 알려줘')">🏧 ATM 위치 및 CCTV 정보</div>
                     </div>
                 </div>
@@ -2129,7 +2129,7 @@ function showTruncateBanner(metas){
                                 <option value="operates">operates (플랫폼운영) ★</option>
                                 <option value="recruits">recruits (모집) ★</option>
                                 <option value="blackmails">blackmails (협박) ★</option>
-                                <option value="hosts">hosts (서버호스팅) ★</option>
+                                <option value="resolves_to">resolves_to (사이트→IP · DNS/호스팅) ★</option>
                                 <option value="contains_file">contains_file (파일내장) ★</option>
                                 <option value="located_at">located_at (위치) ★</option>
                                 <option value="from_account">from_account (출금→이체)</option>
@@ -6797,7 +6797,7 @@ ${snap?sect('7. 그래프 스냅샷 (현재 탐색 화면)')+`<img class="snap" 
                     <option value="operates">🖥️ operates (플랫폼운영) ★</option>
                     <option value="recruits">👥 recruits (모집) ★</option>
                     <option value="blackmails">⚠️ blackmails (협박) ★</option>
-                    <option value="hosts">🔌 hosts (서버호스팅) ★</option>
+                    <option value="resolves_to">🔌 resolves_to (사이트→IP · DNS/호스팅) ★</option>
                     <option value="contains_file">📁 contains_file (파일내장) ★</option>
                     <option value="located_at">📍 located_at (위치) ★</option>
                     <option value="from_account">💸 from_account (출금→이체)</option>

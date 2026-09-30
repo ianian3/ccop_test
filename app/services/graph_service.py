@@ -72,7 +72,7 @@ class GraphService:
         "registered_to": ("vt_telno",    "vt_psn"),    # v3.5: 전화 명의자 (Phone→Person)
         # ── OBJECT 간 관계 ────────────────────────────────────────────
         "transferred_to": ("vt_bacnt",   "vt_bacnt"),
-        "hosts":         ("vt_ip",       "vt_site"),   # 서버 IP → 사이트 호스팅
+        "hosts":         ("vt_ip",       "vt_site"),   # V4.9 삭제(→ resolves_to basis=origin) — 이전 적재분 조회 호환
         "resolves_to":   ("vt_site",     "vt_ip"),     # DNS 해석
         "communicated_with": ("vt_ip",   "vt_ip"),     # IP 간 통신
         "belongs_to":    ("vt_bacnt",    "vt_org"),    # 계좌 소속 금융기관

@@ -380,7 +380,7 @@ def stage_3_to_graph(conn, cur, args):
     for v in ['vt_site','vt_petition','vt_msg','vt_telno','vt_file','vt_psn','site_cluster']:
         try: cur.execute(f"CREATE VLABEL IF NOT EXISTS {v};")
         except: pass
-    for e in ['hosts','contains_file','sent_msg','belongs_to_campaign','reports']:
+    for e in ['contains_file','sent_msg','belongs_to_campaign','reports']:   # V4.9: hosts 삭제
         try: cur.execute(f"CREATE ELABEL IF NOT EXISTS {e};")
         except: pass
 
