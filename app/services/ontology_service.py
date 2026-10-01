@@ -84,6 +84,18 @@ class KICSCrimeDomainOntology:
 
     ATTRIBUTE_DICTIONARY = _load_attribute_dictionary()
 
+    # 2026-10-01 원천 정합: 모든 노드에 붙을 수 있는 공통 키 — 노드 고유 속성(ENTITIES)과 구분해 다룬다.
+    #   analysis    : 그래프 분석 지표(scripts/graph_analytics.py 산출, 재계산 대상 — 원천 사실 아님)
+    #   integration : 통합 그래프 메타(scripts/build_integrated_graph.py — 어느 EP 에서 왔나)
+    #   load        : 적재 메타(수동 시드·정제 스크립트가 남기는 생성 경위)
+    #   설명은 ATTRIBUTE_DICTIONARY['common_groups']
+    NODE_COMMON_GROUPS = {
+        'analysis':    ['pagerank', 'betweenness', 'degree_cent', 'eigenvector', 'clustering', 'kcore',
+                        'component', 'community_id', 'community_lp', 'community_person'],
+        'integration': ['ep_origin', 'ep_count'],
+        'load':        ['creation_method', 'evid_grade', 'note'],
+    }
+
     # 엣지 공통 메타속성 스키마 (EDGE_META_SCHEMA)
     EDGE_META_SCHEMA = {
         # ══ 필수 (모든 엣지) ══════════════════════════════════════
@@ -193,16 +205,18 @@ class KICSCrimeDomainOntology:
     STANDARD_TABLE_MAP = {
         'vt_src':          {'standard': 'TB_DATA_SOU_A',         'public_v2': 'TB_DATA_SRC',          'test_v40': None},
         'vt_case':         {'standard': 'TB_INCDNT_M',           'public_v2': 'TB_INCDNT_MST',        'test_v40': 'tb_incdnt_mst',
-                            'std_columns': {'end_dt': 'END_DT', 'crime_method_cd': 'CRIM_TCNQ_CD', 'crime_step_cd': 'CRIM_STP_CD',
+                            'std_columns': {'damage_amt': 'DAM_AMT', 'end_dt': 'END_DT', 'crime_method_cd': 'CRIM_TCNQ_CD', 'crime_step_cd': 'CRIM_STP_CD',
                                             'risk_level': 'RISK_GRD_CD', 'risk_score': 'RISK_SCR'}},   # 2026-10-01 DDL 9/11판 대조
         'vt_petition':     {'standard': 'TB_PETTN_M',            'public_v2': 'TB_PETTN_MST',         'test_v40': None,
                             'std_columns': {'crime_method_cd': 'CRIM_TCNQ_CD', 'crime_step_cn': 'CRIM_STP_CN'}},   # 2026-10-01 DDL 대조
         'vt_psn':          {'standard': 'TB_PSN_M',              'public_v2': 'TB_PRSN',              'test_v40': 'tb_prsn',
                             'std_columns': {'occp_nm': 'CR_NM'}},  # 직업: 온톨로지 occp_nm ↔ 표준 CR_NM(직업명, DA 확정 DDL 8/12)
         'vt_org':          {'standard': 'TB_INST_M',             'public_v2': 'TB_INST',              'test_v40': None},
-        'vt_bacnt':        {'standard': 'TB_FNNC_BACNT_M',       'public_v2': 'TB_FIN_BACNT',         'test_v40': 'tb_fin_bacnt'},
+        'vt_bacnt':        {'standard': 'TB_FNNC_BACNT_M',       'public_v2': 'TB_FIN_BACNT',         'test_v40': 'tb_fin_bacnt',
+                            'std_columns': {'dpstr': 'DPSTR_NM', 'account_type': 'BACNT_TYP_CD', 'bacnt_opn_dt': 'BACNT_ESTBL_YMD'}},
         'vt_telno':        {'standard': 'TB_TELNO_M',            'public_v2': 'TB_TELNO_MST',         'test_v40': 'tb_telno_mst'},
-        'vt_ip':           {'standard': 'TB_IP_ADDR_M',          'public_v2': None,                   'test_v40': None},  # 적재는 IP 마스터 없이 접속/도메인에서 파생
+        'vt_ip':           {'standard': 'TB_IP_ADDR_M',          'public_v2': None,                   'test_v40': None,  # 적재는 IP 마스터 없이 접속/도메인에서 파생
+                            'std_columns': {'ip_ver': 'IP_VER_CD', 'asn_nm': 'SLFCT_SYS_NO', 'ctry_cd': 'NTN_CD', 'isp': 'ITNT_SRVC_OFFR_NM'}},
         'vt_site':         {'standard': 'TB_WEB_DMN_M',          'public_v2': 'TB_WEB_DMN',           'test_v40': None},
         'vt_file':         {'standard': 'TB_DGTL_FILE_LIST_M',   'public_v2': 'TB_DGTL_FILE_INVNT',   'test_v40': None},
         'vt_vhcl':         {'standard': 'TB_VHCL_M',             'public_v2': 'TB_VHCL_MST',          'test_v40': None},
@@ -732,7 +746,7 @@ class KICSCrimeDomainOntology:
             'label_ko': '사건',
             'properties': ['incdnt_no', 'flnm'],
             'attributes': ['incdnt_nm', 'incdnt_typ_cd', 'crime_type', 'occrn_dt',
-                           'damage_amount', 'case_summary', 'status',
+                           'damage_amt', 'crime_site', 'case_summary', 'status',   # 2026-10-01 원천 정합: damage_amount→damage_amt(CSV 규격·DDL DAM_AMT), crime_site 등재
                            'chrgdp_nm', 'chrg_plcmn_nm', 'police_station',
                            # 2026-10-01 엑셀 정합: 표준 DDL TB_INCDNT_M 원천 컬럼이 있는 속성 등재 (std_columns 참조)
                            'end_dt', 'crime_method_cd', 'crime_step_cd', 'risk_level', 'risk_score',
@@ -812,7 +826,7 @@ class KICSCrimeDomainOntology:
             'label': 'vt_bacnt',
             'label_ko': '계좌',
             'properties': ['account_no', 'bank_cd'],  # 복합 PK (경찰청 표준)
-            'attributes': ['bank_nm', 'dpstr_nm', 'account_type', 'bacnt_opn_dt', 'inst_id',
+            'attributes': ['bank_nm', 'dpstr', 'account_type', 'bacnt_opn_dt', 'inst_id',   # 2026-10-01 원천 정합: dpstr_nm→dpstr (CSV 규격·실적재 75,088건)
                            'is_burner', 'is_frozen', 'total_received', 'total_sent', 'transaction_cnt',
                            'source_id', 'rec_created', 'verified', 'confidence'],
             'legal_category': '금융거래정보'
@@ -834,7 +848,7 @@ class KICSCrimeDomainOntology:
             'label': 'vt_ip',
             'label_ko': 'IP주소',
             'properties': ['ip_addr'],
-            'attributes': ['version', 'isp', 'asn', 'org', 'country', 'geo_region', 'city',
+            'attributes': ['ip_ver', 'isp', 'asn_nm', 'org', 'ctry_cd', 'geo_region', 'city',   # 2026-10-01 원천 정합: version·asn·country→CSV 규격명
                            'is_vpn', 'is_tor', 'is_proxy', 'is_hosting', 'abuse_score',
                            'source_id', 'rec_created', 'verified', 'confidence'],
             'legal_category': '통신자료'
@@ -885,7 +899,7 @@ class KICSCrimeDomainOntology:
             'label': 'vt_id',
             'label_ko': '디지털ID',
             'properties': ['id_val', 'platform'],
-            'attributes': ['id_type', 'profile_url', 'is_active', 'real_name', 'is_anonymous',   # is_anonymous: 익명 계정(실적재 5건·시각화 사용)
+            'attributes': ['id_type', 'nickname', 'country', 'profile_url', 'is_active', 'real_name', 'is_anonymous',   # 2026-10-01 원천 정합: nickname(CSV 규격)·country(실적재 8,034)   # is_anonymous: 익명 계정(실적재 5건·시각화 사용)
                            'domain', 'provider', 'is_disposable',   # V4.9 이메일 흡수(platform='email')
                            'source_id', 'rec_created', 'verified', 'confidence'],
             'legal_category': '신원정보',
@@ -936,6 +950,8 @@ class KICSCrimeDomainOntology:
             'label_ko': 'ATM',
             'properties': ['atm_id'],
             'attributes': ['bank_nm', 'bank_cd', 'loc_id', 'address', 'is_outdoor',
+                           # 2026-10-01 원천 정합: EP 실적재(ATM ID 없는 비식별본 — 명칭이 키 역할) · 입금 집계
+                           'atm_nm', 'place_name', 'first_dt', 'last_dt', 'deposit_total', 'deposit_count',
                            'source_id', 'rec_created'],
             'legal_category': '물리증거'
         },
@@ -1021,7 +1037,7 @@ class KICSCrimeDomainOntology:
             'label_ko': '이동이벤트',
             'properties': ['mov_id'],
             'attributes': ['mov_type',  # lpr | cell_tower | transit_card | immigration
-                           'timestamp', 'loc_id',
+                           'mov_dt', 'loc_id', 'dest', 'subtype',   # 2026-10-01 원천 정합: timestamp→mov_dt(실적재), dest·subtype 등재(EP9/10)
                            # lpr
                            'vhclno', 'cctv_id', 'rcgn_sn',
                            # cell_tower
@@ -1401,7 +1417,7 @@ class KICSCrimeDomainOntology:
             'label_ko': '연결됨',
             'meaning': '두 증거가 연결됨 — 계좌·전화·IP → 계정 역조회 연결 포함(V4.9 linked_id 통합, 근거는 link_basis)',
             'legal_significance': None,
-            'properties': ['link_basis', 'confidence', 'source_id', 'rec_created'],
+            'properties': ['link_basis', 'confidence', 'via', 'victims', 'damage', 'source_id', 'rec_created'],   # 2026-10-01 원천 정합: via·victims·damage(EP2 전화↔계좌 57건)
             # V4.9: valid_from 은 두지 않음 — 시간 연속성 분류(N형) 유지, 기존 적재 128건에 시각 없음
         },
         # ═══════════════════════════════════════════════════════════
@@ -1821,7 +1837,8 @@ class KICSCrimeDomainOntology:
             'label_ko': '위치',
             'meaning': '객체의 위치 또는 이벤트의 발생 위치 — 출발 라벨로 구분 (V4.9: occurred_at 통합)',
             'legal_significance': '위치정보',
-            'properties': ['source_id', 'rec_created', 'first_dt', 'last_dt', 'evt_count'],
+            'properties': ['source_id', 'rec_created', 'first_dt', 'last_dt', 'evt_count',
+                           'call_count', 'tx_count', 'wd_count', 'dep_count'],   # 2026-10-01 원천 정합: evt_count 의 종류별 내역(통화·거래·출금·입금, EP 실적재)
             # V4.9 (2026-09-28) (주체, 위치) 쌍당 1엣지 — 고정 객체의 정적 위치라 합치는 것은 설계 의도.
             #   시각 있는 원천 행(tbl_eg_loc_use.evt_ymdhm · 통화 발신기지국 bgng_ymdhm · 이체 거래점 rmt_ymdhm)을
             #   접을 때 first_dt/last_dt = 관측 시각 최솟값/최댓값, evt_count = 시각 있는 행 수. 시각 없는 정적
@@ -2051,8 +2068,8 @@ class KICSCrimeDomainOntology:
             'description': '이체/피해 금액'
         },
         'damage_amt': {
-            'patterns': ['피해금액', 'damage_amount', '피해액', 'dam_amt'],
-            'kics_label': '', 'kics_property': 'damage_amount', 'is_attribute': True,
+            'patterns': ['피해금액', 'damage_amount', 'damage_amt', '피해액', 'dam_amt'],
+            'kics_label': '', 'kics_property': 'damage_amt', 'is_attribute': True,   # 2026-10-01 원천 정합
             'description': '피해 금액'
         },
         # V4.9: 이체 출발·도착 '계좌' — 노드는 vt_bacnt(account_no), 방향은 direction 으로 표시

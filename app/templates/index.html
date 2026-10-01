@@ -2380,7 +2380,7 @@ function showTruncateBanner(metas){
                     selector: 'node[label="vt_bacnt"]', style: {
                         'background-image': '/static/images/account.png', 'background-fit': 'cover', 'border-color': '#f1c40f', 'border-width': 4, 'label': function (ele) {
                             const p = ele.data('props') || {};
-                            const bank = p.bank_name || (p.bnk_cd ? getCodeName('BANK', p.bnk_cd) : (p.bank_nm || p.bank || ''));
+                            const bank = p.bank_name || p.bank_nm || ((p.bank_cd || p.bnk_cd) ? getCodeName('BANK', p.bank_cd || p.bnk_cd) : (p.bank || ''));
                             return (bank ? bank + '\n' : '') + (p.account_no || p.actno || '');
                         }, 'text-wrap': 'wrap'
                     }
@@ -2395,7 +2395,7 @@ function showTruncateBanner(metas){
                     selector: 'node[label="vt_telno"]', style: {
                         'background-image': '/static/images/phone.png', 'background-fit': 'cover', 'border-color': '#0984e3', 'border-width': 3, 'label': function (ele) {
                             const p = ele.data('props') || {};
-                            const carrier = p.carrier_cd ? getCodeName('CARRIER', p.carrier_cd) : (p.carr_cd ? getCodeName('CARRIER', p.carr_cd) : (p.carrier || ''));
+                            const carrier = p.telco_nm || (p.carrier_cd ? getCodeName('CARRIER', p.carrier_cd) : (p.carr_cd ? getCodeName('CARRIER', p.carr_cd) : (p.carrier || '')));
                             return (p.telno || '번호없음') + (carrier ? `\n[${carrier}]` : '');
                         }, 'text-wrap': 'wrap'
                     }
@@ -6914,22 +6914,22 @@ ${snap?sect('7. 그래프 스냅샷 (현재 탐색 화면)')+`<img class="snap" 
             ],
             vt_bacnt: [
                 { key: 'account_no', label: '계좌번호', type: 'text', ph: '예: 004-1000-2000', required: true },
-                { key: 'bnk_cd', label: '은행', type: 'select', opts: [['004', '국민'], ['088', '신한'], ['020', '우리'], ['081', '하나'], ['011', '농협'], ['090', '카카오뱅크'], ['', '기타/모름']] },
-                { key: 'holder_nm', label: '명의자', type: 'text', ph: '예금주명' },
+                { key: 'bank_cd', label: '은행', type: 'select', opts: [['004', '국민'], ['088', '신한'], ['020', '우리'], ['081', '하나'], ['011', '농협'], ['090', '카카오뱅크'], ['', '기타/모름']] },
+                { key: 'dpstr', label: '명의자', type: 'text', ph: '예금주명' },
                 { key: 'is_burner', label: '대포통장 의심', type: 'check' },
             ],
             vt_telno: [
                 { key: 'telno', label: '전화번호', type: 'text', ph: '예: 010-1234-5678 (하이픈 무관)', required: true },
-                { key: 'carr_cd', label: '통신사', type: 'select', opts: [['SKT', 'SKT'], ['KT', 'KT'], ['LGU+', 'LGU+'], ['MVNO', '알뜰폰'], ['', '모름']] },
+                { key: 'telco_nm', label: '통신사', type: 'select', opts: [['SKT', 'SKT'], ['KT', 'KT'], ['LGU+', 'LGU+'], ['MVNO', '알뜰폰'], ['', '모름']] },
                 { key: 'is_burner', label: '대포폰 의심', type: 'check' },
             ],
             vt_org: [
-                { key: 'org_nm', label: '조직/기관명', type: 'text', ph: '예: 강남 콜센터 / OO은행', required: true },
+                { key: 'org_name', label: '조직/기관명', type: 'text', ph: '예: 강남 콜센터 / OO은행', required: true },
                 { key: 'org_category', label: '분류', type: 'select', opts: [['criminal', '범죄조직'], ['institution', '기관'], ['company', '기업'], ['government', '정부']] },
             ],
             vt_ip: [
                 { key: 'ip_addr', label: 'IP 주소', type: 'text', ph: '예: 175.100.0.1', required: true },
-                { key: 'country', label: '국가', type: 'text', ph: '예: KR / US' },
+                { key: 'ctry_cd', label: '국가', type: 'text', ph: '예: KR / US' },
                 { key: 'is_vpn', label: 'VPN/우회 의심', type: 'check' },
             ],
             vt_site: [
@@ -6948,9 +6948,9 @@ ${snap?sect('7. 그래프 스냅샷 (현재 탐색 화면)')+`<img class="snap" 
                 { key: 'is_anonymous', label: '신원 미상', type: 'check' },
             ],
             vt_case: [
-                { key: 'case_no', label: '사건번호', type: 'text', ph: '예: CASE-2026-A-010', required: true },
-                { key: 'flnm', label: '사건명', type: 'text', ph: '예: 강남 보이스피싱' },
-                { key: 'occurred_at', label: '발생일', type: 'text', ph: '예: 2026-04-01' },
+                { key: 'incdnt_no', label: '사건번호', type: 'text', ph: '예: CASE-2026-A-010', required: true },
+                { key: 'incdnt_nm', label: '사건명', type: 'text', ph: '예: 강남 보이스피싱' },
+                { key: 'occrn_dt', label: '발생일', type: 'text', ph: '예: 2026-04-01' },
             ],
         };
         // 소유자 연결 시 사용할 엣지 라벨
@@ -6961,8 +6961,8 @@ ${snap?sect('7. 그래프 스냅샷 (현재 탐색 화면)')+`<img class="snap" 
             vt_transfer: {
                 fields: [
                     { key: 'transfer_id', label: '이체 ID', type: 'text', ph: '예: TXN-N001', required: true },
-                    { key: 'amount', label: '금액(원)', type: 'text', ph: '예: 500000' },
-                    { key: 'occurred_at', label: '이체일시', type: 'text', ph: '예: 2026-05-20T14:30:00' },
+                    { key: 'dlng_amt', label: '금액(원)', type: 'text', ph: '예: 500000' },
+                    { key: 'dlng_dt', label: '이체일시', type: 'text', ph: '예: 2026-05-20T14:30:00' },
                 ],
                 endpoint: 'vt_bacnt',                 // 양끝 = 계좌
                 fromLabel: '출금 계좌', fromEdge: 'from_account', fromDir: 'to_event',   // (계좌)-[from_account]->(이체)
@@ -6971,8 +6971,8 @@ ${snap?sect('7. 그래프 스냅샷 (현재 탐색 화면)')+`<img class="snap" 
             vt_call: {
                 fields: [
                     { key: 'call_id', label: '통화 ID', type: 'text', ph: '예: CALL-N001', required: true },
-                    { key: 'duration', label: '통화시간(초)', type: 'text', ph: '예: 45' },
-                    { key: 'occurred_at', label: '통화일시', type: 'text', ph: '예: 2026-05-20T14:30:00' },
+                    { key: 'call_dur_sec', label: '통화시간(초)', type: 'text', ph: '예: 45' },
+                    { key: 'call_strt_dt', label: '통화일시', type: 'text', ph: '예: 2026-05-20T14:30:00' },
                 ],
                 endpoint: 'vt_telno',                 // 양끝 = 전화
                 fromLabel: '발신 번호', fromEdge: 'caller', fromDir: 'to_event',         // (전화)-[caller]->(통화)
@@ -7078,8 +7078,8 @@ ${snap?sect('7. 그래프 스냅샷 (현재 탐색 화면)')+`<img class="snap" 
             }
             if (label === 'vt_ip' && props.ip_addr) props.ip_addr = String(props.ip_addr).trim();
             if (label === 'vt_id' && props.id_val) props.id_val = String(props.id_val).trim();
-            if (label === 'vt_transfer' && props.amount) props.amount = String(props.amount).replace(/[^0-9]/g, '');
-            if (label === 'vt_call' && props.duration) props.duration = String(props.duration).replace(/[^0-9]/g, '');
+            if (label === 'vt_transfer' && props.dlng_amt) props.dlng_amt = String(props.dlng_amt).replace(/[^0-9]/g, '');
+            if (label === 'vt_call' && props.call_dur_sec) props.call_dur_sec = String(props.call_dur_sec).replace(/[^0-9]/g, '');
             return props;
         }
 

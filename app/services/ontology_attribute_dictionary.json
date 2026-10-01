@@ -79,11 +79,6 @@
     "종료일시",
     "날짜시간"
    ],
-   "damage_amount": [
-    "int",
-    "피해금액(원)",
-    "수치형"
-   ],
    "chrgdp_nm": [
     "str",
     "담당부서명",
@@ -128,6 +123,16 @@
     "float",
     "위험점수 0~100",
     "수치형"
+   ],
+   "damage_amt": [
+    "int",
+    "피해금액(원)",
+    "수치형"
+   ],
+   "crime_site": [
+    "str",
+    "범행 장소(CSV 규격 tbl_eg_case.crime_site)",
+    "텍스트"
    ]
   },
   "vt_petition": {
@@ -384,11 +389,6 @@
     "은행명",
     "텍스트"
    ],
-   "dpstr_nm": [
-    "str",
-    "예금주명(명의자)",
-    "텍스트"
-   ],
    "account_type": [
     "str",
     "계좌 유형 — 값도메인 시트 참조 (personal/corporate/exchange_virtual 등)",
@@ -428,6 +428,11 @@
     "int",
     "거래 건수",
     "수치형"
+   ],
+   "dpstr": [
+    "str",
+    "예금주명(명의자)",
+    "텍스트"
    ]
   },
   "vt_telno": {
@@ -483,30 +488,15 @@
     "IP 주소(IPv4/IPv6)",
     "식별자"
    ],
-   "version": [
-    "str",
-    "IPv4|IPv6",
-    "범주형"
-   ],
    "isp": [
     "str",
     "ISP 명",
-    "텍스트"
-   ],
-   "asn": [
-    "str",
-    "AS Number",
     "텍스트"
    ],
    "org": [
     "str",
     "IP 등록 조직",
     "텍스트"
-   ],
-   "country": [
-    "str",
-    "국가 코드 — GeoIP 판정. 판정 소스와 판정일을 vt_src로 등록 권장",
-    "범주형"
    ],
    "geo_region": [
     "str",
@@ -572,6 +562,21 @@
     "list",
     "V4.6 파생. 구간별 역할 [{from,to,role,entity_cnt,subject_cnt}] (인접 동일구간 coalesce)",
     "구조"
+   ],
+   "ip_ver": [
+    "str",
+    "IPv4|IPv6",
+    "범주형"
+   ],
+   "asn_nm": [
+    "str",
+    "AS Number",
+    "텍스트"
+   ],
+   "ctry_cd": [
+    "str",
+    "국가 코드 — GeoIP 판정. 판정 소스와 판정일을 vt_src로 등록 권장",
+    "범주형"
    ]
   },
   "vt_site": {
@@ -780,6 +785,16 @@
     "bool",
     "일회용 이메일 여부 (platform=email)",
     "불리언"
+   ],
+   "nickname": [
+    "str",
+    "계정 닉네임(CSV 규격 tbl_vt_id.nickname)",
+    "텍스트"
+   ],
+   "country": [
+    "str",
+    "계정 국가 코드(EP 실적재)",
+    "범주형"
    ]
   },
   "vt_crypto": {
@@ -928,6 +943,36 @@
     "bool",
     "실외 설치 여부",
     "불리언"
+   ],
+   "atm_nm": [
+    "str",
+    "ATM 명칭 — 비식별본에 ATM ID 가 없어 통합 그래프에서 키 역할",
+    "텍스트"
+   ],
+   "place_name": [
+    "str",
+    "ATM 설치 장소명",
+    "텍스트"
+   ],
+   "first_dt": [
+    "str",
+    "이 ATM 최초 거래일시(집계)",
+    "날짜시간"
+   ],
+   "last_dt": [
+    "str",
+    "이 ATM 최종 거래일시(집계)",
+    "날짜시간"
+   ],
+   "deposit_total": [
+    "int",
+    "이 ATM 입금 합계(원, 집계)",
+    "수치형"
+   ],
+   "deposit_count": [
+    "int",
+    "이 ATM 입금 건수(집계)",
+    "수치형"
    ]
   },
   "vt_transfer": {
@@ -1199,11 +1244,6 @@
     "lpr, cell_tower, transit_card",
     "범주형"
    ],
-   "timestamp": [
-    "str",
-    "발생 일시(=valid_from)",
-    "날짜시간"
-   ],
    "loc_id": [
     "str",
     "발생 위치 vt_loc FK",
@@ -1283,6 +1323,21 @@
     "str",
     "출입국 원본 일련번호 (Bridge Key)",
     "식별자"
+   ],
+   "mov_dt": [
+    "str",
+    "발생 일시(=valid_from)",
+    "날짜시간"
+   ],
+   "dest": [
+    "str",
+    "이동 목적지(출입국 도착지 등)",
+    "텍스트"
+   ],
+   "subtype": [
+    "str",
+    "이동 세부 유형(출국·입국 등)",
+    "범주형"
    ]
   },
   "vt_impersonation": {
@@ -1593,7 +1648,7 @@
   ],
   "call_count": [
    "int",
-   "통화 건수 / 메시지 건수 / 통화 총 초 (V4.9 집계)",
+   "통화 건수 / 메시지 건수 / 통화 총 초 (V4.9 집계) · located_at: 발신기지국 통화 건수",
    "수치"
   ],
   "msg_count": [
@@ -1630,6 +1685,36 @@
    "str",
    "진정서→사건 연계 상태 — 'converted'(전환) · 'linked'(연계)",
    "범주형"
+  ],
+  "tx_count": [
+   "int",
+   "거래 건수 (located_at: 거래점 위치 내역 · used_ip 는 usage_count)",
+   "수치형"
+  ],
+  "wd_count": [
+   "int",
+   "출금 건수 (located_at 내역)",
+   "수치형"
+  ],
+  "dep_count": [
+   "int",
+   "입금 건수 (located_at 내역)",
+   "수치형"
+  ],
+  "via": [
+   "str",
+   "연결 경로(EP2 전화↔계좌 — 예: 대포통장 모집 경로)",
+   "텍스트"
+  ],
+  "victims": [
+   "int",
+   "이 연결로 확인된 피해자 수",
+   "수치형"
+  ],
+  "damage": [
+   "int",
+   "이 연결의 피해 금액(원)",
+   "수치형"
   ]
  },
  "edge_catalog": {
@@ -2138,6 +2223,166 @@
    "value_type": "범주형",
    "status": "후보",
    "basis": "표준 DDL 원천 컬럼 없음 · 적재 실적 0 — 설계 확정(DA) 전까지 SoT 미등재"
+  },
+  {
+   "kind": "node",
+   "target": "vt_bacnt",
+   "attr": "dpstr_variants",
+   "type": "",
+   "desc": "예금주명 표기 변형 목록",
+   "value_type": "",
+   "status": "후보",
+   "basis": "EP9/10 수동 시드 메모 — CSV 규격·표준 DDL 근거 없음, 적재 소수(≤14건)"
+  },
+  {
+   "kind": "node",
+   "target": "vt_bacnt",
+   "attr": "tier",
+   "type": "",
+   "desc": "계좌 단계(1차·2차 대포통장 등)",
+   "value_type": "",
+   "status": "후보",
+   "basis": "EP9/10 수동 시드 메모 — CSV 규격·표준 DDL 근거 없음, 적재 소수(≤14건)"
+  },
+  {
+   "kind": "node",
+   "target": "vt_bacnt",
+   "attr": "remit_via_ip",
+   "type": "",
+   "desc": "송금 접속 IP 메모",
+   "value_type": "",
+   "status": "후보",
+   "basis": "EP9/10 수동 시드 메모 — CSV 규격·표준 DDL 근거 없음, 적재 소수(≤14건)"
+  },
+  {
+   "kind": "node",
+   "target": "vt_bacnt",
+   "attr": "recipient_hint",
+   "type": "",
+   "desc": "수취인 추정 메모",
+   "value_type": "",
+   "status": "후보",
+   "basis": "EP9/10 수동 시드 메모 — CSV 규격·표준 DDL 근거 없음, 적재 소수(≤14건)"
+  },
+  {
+   "kind": "node",
+   "target": "vt_bacnt",
+   "attr": "remit_total_grp",
+   "type": "",
+   "desc": "송금 합계(그룹)",
+   "value_type": "",
+   "status": "후보",
+   "basis": "EP9/10 수동 시드 메모 — CSV 규격·표준 DDL 근거 없음, 적재 소수(≤14건)"
+  },
+  {
+   "kind": "node",
+   "target": "vt_bacnt",
+   "attr": "inflow_total",
+   "type": "",
+   "desc": "유입 합계",
+   "value_type": "",
+   "status": "후보",
+   "basis": "EP9/10 수동 시드 메모 — CSV 규격·표준 DDL 근거 없음, 적재 소수(≤14건)"
+  },
+  {
+   "kind": "node",
+   "target": "vt_bacnt",
+   "attr": "inflow_period",
+   "type": "",
+   "desc": "유입 기간",
+   "value_type": "",
+   "status": "후보",
+   "basis": "EP9/10 수동 시드 메모 — CSV 규격·표준 DDL 근거 없음, 적재 소수(≤14건)"
+  },
+  {
+   "kind": "node",
+   "target": "vt_psn",
+   "attr": "role",
+   "type": "",
+   "desc": "인물 역할 메모(총책·인출책 등)",
+   "value_type": "",
+   "status": "후보",
+   "basis": "EP9/10 수동 시드 메모 — CSV 규격·표준 DDL 근거 없음, 적재 소수(≤14건)"
+  },
+  {
+   "kind": "node",
+   "target": "vt_psn",
+   "attr": "birth_partial",
+   "type": "",
+   "desc": "생년 일부",
+   "value_type": "",
+   "status": "후보",
+   "basis": "EP9/10 수동 시드 메모 — CSV 규격·표준 DDL 근거 없음, 적재 소수(≤14건)"
+  },
+  {
+   "kind": "node",
+   "target": "vt_psn",
+   "attr": "addr_base",
+   "type": "",
+   "desc": "주소 기초 정보",
+   "value_type": "",
+   "status": "후보",
+   "basis": "EP9/10 수동 시드 메모 — CSV 규격·표준 DDL 근거 없음, 적재 소수(≤14건)"
+  },
+  {
+   "kind": "node",
+   "target": "vt_ip",
+   "attr": "role",
+   "type": "",
+   "desc": "IP 역할 메모",
+   "value_type": "",
+   "status": "후보",
+   "basis": "EP9/10 수동 시드 메모 — CSV 규격·표준 DDL 근거 없음, 적재 소수(≤14건)"
+  },
+  {
+   "kind": "edge",
+   "target": "belongs_to",
+   "attr": "channel",
+   "type": "",
+   "desc": "거래 채널",
+   "value_type": "",
+   "status": "후보",
+   "basis": "EP9/10 수동 시드 메모 — CSV 규격·표준 DDL 근거 없음, 적재 소수(≤14건)"
+  },
+  {
+   "kind": "edge",
+   "target": "belongs_to",
+   "attr": "deposit_total",
+   "type": "",
+   "desc": "입금 합계",
+   "value_type": "",
+   "status": "후보",
+   "basis": "EP9/10 수동 시드 메모 — CSV 규격·표준 DDL 근거 없음, 적재 소수(≤14건)"
+  },
+  {
+   "kind": "edge",
+   "target": "belongs_to",
+   "attr": "deposit_count",
+   "type": "",
+   "desc": "입금 건수",
+   "value_type": "",
+   "status": "후보",
+   "basis": "EP9/10 수동 시드 메모 — CSV 규격·표준 DDL 근거 없음, 적재 소수(≤14건)"
+  },
+  {
+   "kind": "edge",
+   "target": "eg_used_account",
+   "attr": "role",
+   "type": "",
+   "desc": "계좌 역할 메모",
+   "value_type": "",
+   "status": "후보",
+   "basis": "EP9/10 수동 시드 메모 — CSV 규격·표준 DDL 근거 없음, 적재 소수(≤14건)"
+  },
+  {
+   "kind": "node",
+   "target": "vt_psn",
+   "attr": "role_cd",
+   "type": "str",
+   "desc": "화면 수동 입력의 인물 역할(피의자·피해자·참고인)",
+   "value_type": "범주형",
+   "status": "후보",
+   "basis": "역할은 사건과의 관계라 suspect_in·victim_in·witness_in 엣지로 표현하는 것이 정본 — 노드 속성 등재 보류"
   }
  ],
  "dropped_20261001": [
@@ -2218,6 +2463,42 @@
    "vt_dev",
    "device_id",
    "→ dev_id (NODE_ID_STANDARD·참조 적재기 기준, 실적재 device_id 0건)"
+  ],
+  [
+   "node",
+   "vt_bacnt",
+   "dpstr_nm",
+   "→ dpstr (CSV 규격·실적재 75,088건 — DDL DPSTR_NM)"
+  ],
+  [
+   "node",
+   "vt_case",
+   "damage_amount",
+   "→ damage_amt (CSV 규격·DDL DAM_AMT·vt_petition 과 통일)"
+  ],
+  [
+   "node",
+   "vt_ip",
+   "version",
+   "→ ip_ver (CSV 규격 — DDL IP_VER_CD)"
+  ],
+  [
+   "node",
+   "vt_ip",
+   "asn",
+   "→ asn_nm (CSV 규격)"
+  ],
+  [
+   "node",
+   "vt_ip",
+   "country",
+   "→ ctry_cd (CSV 규격 — DDL NTN_CD)"
+  ],
+  [
+   "node",
+   "vt_movement",
+   "timestamp",
+   "→ mov_dt (실적재)"
   ]
  ],
  "common_attrs": {
@@ -2241,5 +2522,132 @@
    "신뢰도 0.0~1.0",
    "수치형"
   ]
+ },
+ "common_groups": {
+  "analysis": [
+   "그래프 분석 지표 — scripts/graph_analytics.py 가 계산해 노드에 기록. 원천 사실이 아니며 재계산하면 바뀜",
+   {
+    "pagerank": "PageRank 중심성",
+    "betweenness": "매개 중심성",
+    "degree_cent": "연결 중심성",
+    "eigenvector": "고유벡터 중심성",
+    "clustering": "군집 계수",
+    "kcore": "k-core 차수",
+    "component": "연결 요소 번호",
+    "community_id": "커뮤니티 번호(Louvain)",
+    "community_lp": "커뮤니티 번호(레이블 전파)",
+    "community_person": "인물 투영 커뮤니티 번호"
+   }
+  ],
+  "integration": [
+   "통합 그래프 메타 — scripts/build_integrated_graph.py 가 기록",
+   {
+    "ep_origin": "이 노드가 나온 EP 목록(쉼표 구분)",
+    "ep_count": "등장 EP 수(숫자) — 여러 EP 에 걸친 식별자 찾기"
+   }
+  ],
+  "load": [
+   "적재 메타 — 수동 시드·정제 스크립트가 남기는 생성 경위",
+   {
+    "creation_method": "생성 방법(수동 시드·정제 등)",
+    "evid_grade": "증거 등급(A·B·C)",
+    "note": "적재 메모"
+   }
+  ]
+ },
+ "aliases": {
+  "node": {
+   "vt_bacnt": {
+    "dpstr": [
+     "dpstr_nm"
+    ]
+   },
+   "vt_case": {
+    "damage_amt": [
+     "damage_amount"
+    ],
+    "incdnt_typ_cd": [
+     "case_type"
+    ]
+   },
+   "vt_ip": {
+    "ip_ver": [
+     "version"
+    ],
+    "asn_nm": [
+     "asn"
+    ],
+    "ctry_cd": [
+     "country"
+    ]
+   },
+   "vt_movement": {
+    "mov_dt": [
+     "timestamp"
+    ]
+   },
+   "vt_telno": {
+    "join_typ_cd": [
+     "join_typ"
+    ]
+   },
+   "vt_atm": {
+    "address": [
+     "addr"
+    ]
+   },
+   "vt_transfer": {
+    "transfer_id": [
+     "event_id"
+    ]
+   },
+   "vt_call": {
+    "call_id": [
+     "event_id"
+    ]
+   },
+   "vt_msg": {
+    "msg_id": [
+     "event_id"
+    ]
+   },
+   "vt_impersonation": {
+    "impersonation_id": [
+     "event_id"
+    ]
+   },
+   "vt_dev": {
+    "dev_id": [
+     "device_id"
+    ]
+   },
+   "vt_id": {
+    "id_val": [
+     "email_addr"
+    ]
+   }
+  },
+  "edge": {
+   "used_ip": {
+    "valid_from": [
+     "first_dt"
+    ],
+    "valid_to": [
+     "last_dt"
+    ],
+    "usage_count": [
+     "tx_count"
+    ]
+   },
+   "same_as": {
+    "confidence": [
+     "conf",
+     "match_score"
+    ],
+    "match_basis": [
+     "method"
+    ]
+   }
+  }
  }
 }

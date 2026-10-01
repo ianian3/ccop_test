@@ -96,9 +96,9 @@ class StandardCodeMapper:
         # bank_cd, bank, bank_nm 등의 컬럼에서 은행 정보 추출
         bank_value = props.get('bank_cd') or props.get('bank') or props.get('bank_nm') or props.get('은행')
         if bank_value:
-            bnk_cd = cls.map_bank_code(bank_value)
-            if bnk_cd:
-                props['bnk_cd'] = bnk_cd
+            bank_cd = cls.map_bank_code(bank_value)
+            if bank_cd:
+                props['bank_cd'] = bank_cd     # 2026-10-01 원천 정합: 사전 속성명(구 bnk_cd)
         return props
     
     @classmethod
@@ -106,9 +106,8 @@ class StandardCodeMapper:
         """전화 노드에 표준 통신사코드 추가"""
         carrier_value = props.get('carrier') or props.get('carr') or props.get('통신사')
         if carrier_value:
-            carr_cd = cls.map_carrier_code(carrier_value)
-            if carr_cd:
-                props['carr_cd'] = carr_cd
+            # 2026-10-01 원천 정합: 사전 속성은 통신사명 telco_nm (구 carr_cd 코드 — 사전에 없는 이름)
+            props.setdefault('telco_nm', str(carrier_value).strip())
         return props
     
     @classmethod

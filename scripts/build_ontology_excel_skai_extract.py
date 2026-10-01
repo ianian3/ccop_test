@@ -38,6 +38,17 @@ nodes.cell(rows[('vt_id','platform')],4).value='KakaoTalk|Telegram|Instagram|Nav
 r=rows[('vt_email','provider')]; nodes.cell(r,1).value='vt_id'; nodes.cell(r,4).value='이메일 제공사 Gmail|Naver|Daum|Unknown (platform=email 일 때)'
 nodes.delete_rows(rows[('vt_email','email_addr')])
 
+# 2026-10-01 원천 정합: 사전 별칭표(구 이름 → 원천·규격 이름)를 추출 시트에도 적용 — 협력기관 API 2 가 null 을 내던 원인
+import sys as _sys; _sys.path.insert(0, '.')
+from app.services.ontology_service import KICSCrimeDomainOntology as _O
+_old2new = {(l, old): new for l, m in _O.ATTRIBUTE_DICTIONARY.get('aliases', {}).get('node', {}).items()
+            for new, olds in m.items() for old in olds if old != 'event_id'}
+for r in range(2, nodes.max_row + 1):
+    key = (nodes.cell(r, 1).value, nodes.cell(r, 2).value)
+    if key in _old2new:
+        nodes.cell(r, 2).value = _old2new[key]
+        nodes.cell(r, 4).value = f"{nodes.cell(r, 4).value} (2026-10-01: 원천명 — 구 {key[1]})"
+
 er={edges.cell(r,1).value: r for r in range(2, edges.max_row+1)}
 r=er['match_score']; edges.cell(r,1).value='confidence'; edges.cell(r,3).value='엔티티 매칭 신뢰도 0.0~1.0 (V4.9: 구 match_score)'
 edges.cell(er['first_seen / last_seen'],4).value='used_in_device'
@@ -57,10 +68,10 @@ for vals in (['evt_count','int','V4.9. 위치 관측 건수 (시각 있는 원�
         c=edges.cell(last,j+1,x); cp_style(c, edges.cell(last-1,j+1))
 
 h=wb['변경이력(V4.3→V4.9)']; hl=h.max_row
-vals=['R31','V4.9','추출조건','추출가능_노드속성 · 추출가능_엣지속성 (SKAI 9/17판 이식)',
+vals=['R32','V4.9','추출조건','추출가능_노드속성 · 추출가능_엣지속성 (SKAI 9/17판 이식)',
       'V4.8 표기: vt_email.email_addr·provider, same_as.match_score, linked_id.link_basis, used_ip.first_seen/last_seen, transferred_to "추론경로" 설명',
       'vt_id(platform=email) 로 흡수, confidence, linked_to, used_in_device 만, 원천 쌍 집계 설명. 추가 4행: located_at.evt_count · used_ip.access_type · resolves_to.basis · same_as.review_status',
-      '쿼리연산자·SKAI_추가근거 시트는 내용 그대로 이식 (contacted 실데이터 근거는 V4.9 에서도 유효)']
+      '쿼리연산자·SKAI_추가근거 시트는 내용 그대로 이식. 추출가능_노드속성은 원천 별칭표 적용(dpstr_nm→dpstr, damage_amount→damage_amt 등)']
 for j,x in enumerate(vals):
     c=h.cell(hl+1,j+1,x); cp_style(c, h.cell(hl,j+1))
 

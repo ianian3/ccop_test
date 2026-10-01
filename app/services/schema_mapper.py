@@ -28,7 +28,7 @@ class KICSSchemaMapper:
 ═══════════════════════════════════════════════════════════
 CASE LAYER (사건 중심)
 ═══════════════════════════════════════════════════════════
-- Case (vt_case): 사건 - flnm, receipt_no, crime_type, damage_amount
+- Case (vt_case): 사건 - incdnt_no, flnm, crime_type, damage_amt
 - Investigation (vt_inv): 수사 - inv_id, investigator, department
 
 ═══════════════════════════════════════════════════════════

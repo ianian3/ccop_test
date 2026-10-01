@@ -5,7 +5,7 @@ SoT = app/services/ontology_service.py (무엇이 노드·엣지·속성인가)
     + app/services/ontology_attribute_dictionary.json (사람이 읽는 설명·분류·후보 속성)
 
 생성 시트 (매번 통째로 다시 씀):
-  엣지카탈로그(N종) · 노드카탈로그(N종) · 노드 속성 사전 · 엣지 속성 사전 · 후보 속성(미확정)
+  엣지카탈로그(N종) · 노드카탈로그(N종) · 노드 속성 사전 · 엣지 속성 사전 · 후보 속성(미확정) · 공통 속성 그룹
 수기 시트 (건드리지 않음):
   변경이력 · 값 도메인 사전 · 탐색·적재 규칙 · 파생속성 등록부 · 공통 메타·안내
 
@@ -83,7 +83,8 @@ def node_attr_rows():
             t, d, vt = (desc.get(l, {}).get(a) or [None, NEED, None])
             if a in derived.get(l, []) and not str(d).startswith('[파생]'):
                 d = f'[파생] {d}'
-            rows.append([l, a, t or '', d or NEED, vt or ''])
+            alias = ', '.join(D.get('aliases', {}).get('node', {}).get(l, {}).get(a, []))
+            rows.append([l, a, t or '', d or NEED, vt or '', alias])
     return rows
 
 
@@ -102,7 +103,17 @@ def edge_attr_rows():
             where = '(엣지 공통 메타)'                      # EDGE_META_SCHEMA — 전 엣지에 붙을 수 있음
         else:
             where = ', '.join(es[:8]) + (f' 외 {len(es) - 8}' if len(es) > 8 else '')
-        rows.append([a, t or '', d or NEED, where, vt or ''])
+        alias = '; '.join(f'{e}: {", ".join(x[a])}' for e, x in D.get('aliases', {}).get('edge', {}).items() if a in x)
+        rows.append([a, t or '', d or NEED, where, vt or '', alias])
+    return rows
+
+
+def common_group_rows():
+    rows = []
+    for g, attrs in O.NODE_COMMON_GROUPS.items():
+        gdesc, adesc = (D.get('common_groups', {}).get(g) or ['', {}])
+        for a in attrs:
+            rows.append([g, a, adesc.get(a, NEED), gdesc])
     return rows
 
 
@@ -115,8 +126,9 @@ def candidate_rows():
 HEADERS = {
     'edge_catalog': ['분류', '엣지', '노드1(출발)', '노드2(도착)', '주요 속성', '의미', '비고'],
     'node_catalog': ['#', '레이어', '라벨', '표준 식별자', 'id_format', '핵심 속성'],
-    'node_attrs': ['노드', '속성', '타입', '설명', '값유형'],
-    'edge_attrs': ['속성', '타입', '설명', '주 사용 엣지', '값유형'],
+    'node_attrs': ['노드', '속성', '타입', '설명', '값유형', '원천 별칭(구 이름)'],
+    'edge_attrs': ['속성', '타입', '설명', '주 사용 엣지', '값유형', '원천 별칭(구 이름)'],
+    'common_groups': ['그룹', '속성', '설명', '그룹 설명'],
     'candidates': ['구분', '대상', '속성', '타입', '설명', '값유형', '판정 근거'],
 }
 
@@ -129,6 +141,7 @@ def generated_sheets():
         ('노드 속성 사전', '노드 속성 사전', HEADERS['node_attrs'], node_attr_rows()),
         ('엣지 속성 사전', '엣지 속성 사전', HEADERS['edge_attrs'], edge_attr_rows()),
         ('후보 속성', '후보 속성(미확정)', HEADERS['candidates'], candidate_rows()),
+        ('공통 속성 그룹', '공통 속성 그룹', HEADERS['common_groups'], common_group_rows()),
     ]
 
 
@@ -151,9 +164,10 @@ def build(path=XLSX):
     wb = openpyxl.load_workbook(path)
     for prefix, title, header, rows in generated_sheets():
         ws = next((w for w in wb.worksheets if w.title.startswith(prefix)), None)
-        if ws is None:                       # 후보 속성 시트 신설 — 엣지 속성 사전 뒤, 스타일은 그 시트에서
+        if ws is None:                       # 신설 시트(후보 속성·공통 속성 그룹) — 엣지 속성 사전 뒤, 스타일은 그 시트에서
             ref = next(w for w in wb.worksheets if w.title.startswith('엣지 속성 사전'))
-            ws = wb.create_sheet(title, wb.worksheets.index(ref) + 1)
+            after = next((w for w in wb.worksheets if w.title.startswith('후보 속성')), ref)
+            ws = wb.create_sheet(title, wb.worksheets.index(after) + 1)
             src = ref
             for k, d in ref.column_dimensions.items():
                 ws.column_dimensions[k].width = d.width
@@ -162,6 +176,13 @@ def build(path=XLSX):
             src = ws
         style = {'head': {c.column: c._style for c in src[1] if c.has_style},
                  'body': {c.column: c._style for c in src[2] if c.has_style} if src.max_row >= 2 else {}}
+        last = max(style['head'] or [0])   # 새로 늘어난 열은 마지막 열 스타일을 따른다
+        for j in range(last + 1, len(header) + 1):
+            if last:
+                style['head'][j] = style['head'][last]
+                if last in style['body']:
+                    style['body'][j] = style['body'][last]
+                ws.column_dimensions[chr(64 + j)].width = 28
         _rewrite(ws, title, header, rows, style)
         ws.freeze_panes = 'A2'
     wb.save(path)

@@ -34,8 +34,25 @@ def esc(v):
     return str(v).replace("\\", "\\\\").replace("'", "''")
 
 
+# 2026-10-01 원천 정합 — EP 파서·수동 시드가 쓴 이름을 SoT 속성 사전 이름으로 (통합 그래프에서 번역)
+PROP_RENAME = {
+    'vt_telno': {'join_typ': 'join_typ_cd'},
+    'vt_atm':   {'addr': 'address'},
+    'vt_case':  {'case_type': 'incdnt_typ_cd'},
+}
+EDGE_PROP_RENAME = {
+    'used_ip': {'first_dt': 'valid_from', 'last_dt': 'valid_to', 'tx_count': 'usage_count'},   # V4.9 쌍 집계 규칙
+    'same_as': {'conf': 'confidence', 'method': 'match_basis'},                                 # V4.9 속성명 통일
+}
+
+
+def _rename(props, table):
+    return {table.get(k, k): v for k, v in props.items()} if table else props
+
+
 def _canon(label, props):
     """원본 (라벨, 속성) → 통합 그래프 (라벨, 속성). V4.9: vt_email 은 vt_id(platform='email', id_val=소문자)."""
+    props = _rename(props, PROP_RENAME.get(label))
     if label != 'vt_email':
         return label, props
     addr = props.get('email_addr')
@@ -116,6 +133,9 @@ def main():
                         continue
                     if src_el == 'uses_email':
                         pr = dict(pr or {}, platform='email')
+                    pr = _rename(pr or {}, EDGE_PROP_RENAME.get(el))
+                    if el == 'same_as':
+                        pr.setdefault('review_status', 'pending'); pr.setdefault('traversal_policy', 'candidate_only')
                     va, vb = _case_kv(la, pa), _case_kv(lb, pb)   # vt_case 는 incdnt_no→flnm 폴백
                     if va not in (None, '') and vb not in (None, ''):
                         edges.append((el, (la, str(va)), (lb, str(vb)), pr or {}))
@@ -146,10 +166,17 @@ def main():
 
         # ── 엣지 MERGE ──
         cnt, skip = 0, 0
-        NUM_EDGE_PROPS = {'total_amount', 'txn_count', 'tx_count', 'wd_count', 'dep_count',
+        NUM_EDGE_PROPS = {'total_amount', 'txn_count', 'tx_count', 'wd_count', 'dep_count', 'usage_count', 'evt_count',
                           'msg_count', 'call_count', 'total_dur_sec'}  # 문자열이면 >=/ORDER BY 깨짐
 
+        FLOAT_EDGE_PROPS = {'confidence'}   # same_as 신뢰도 0.0~1.0 — 정수 변환 금지
+
         def _eset(k2, v2):
+            if k2 in FLOAT_EDGE_PROPS:
+                try:
+                    return f"e.{k2} = {float(v2)}"
+                except (TypeError, ValueError):
+                    pass
             if k2 in NUM_EDGE_PROPS:
                 try:
                     return f"e.{k2} = {int(float(v2))}"
