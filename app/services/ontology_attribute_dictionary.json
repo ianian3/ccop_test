@@ -1715,6 +1715,21 @@
    "int",
    "이 연결의 피해 금액(원)",
    "수치형"
+  ],
+  "source_domain": [
+   "str",
+   "출처 도메인(KICS·osint·partner·investigation)",
+   "범주형"
+  ],
+  "collected_at": [
+   "str",
+   "원천 수집 일시",
+   "날짜시간"
+  ],
+  "evid_grade": [
+   "str",
+   "증거 등급 A·B·C",
+   "범주형"
   ]
  },
  "edge_catalog": {
@@ -2552,6 +2567,16 @@
     "creation_method": "생성 방법(수동 시드·정제 등)",
     "evid_grade": "증거 등급(A·B·C)",
     "note": "적재 메모"
+   }
+  ],
+  "provenance": [
+   "적재 출처 메타 — V4.0 적재기(make_node_props_v40)·화면 수동 입력이 기록",
+   {
+    "source_domain": "출처 도메인(KICS·osint·partner·investigation)",
+    "reliability_tier": "출처 신뢰 등급 1~5",
+    "id_format": "식별자 표기 형식(NODE_ID_STANDARD.id_formats)",
+    "collected_at": "원천 수집 일시",
+    "evidence_added_at": "화면에서 증거로 추가한 일시"
    }
   ]
  },

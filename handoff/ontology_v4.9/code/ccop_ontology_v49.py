@@ -882,7 +882,7 @@ class KICSCrimeDomainOntology:
         'vt_impersonation': '사칭이벤트',
     }
 
-    # ── 전 엣지 공통 메타 속성과 타입  (11종) ──
+    # ── 전 엣지 공통 메타 속성과 타입  (15종) ──
     EDGE_META_SCHEMA = {
         'edge_id': str,
         'source_id': str,
@@ -895,6 +895,10 @@ class KICSCrimeDomainOntology:
         'valid_to': str,
         'verified_by': str,
         'verified_at': str,
+        'source_domain': str,
+        'collected_at': str,
+        'evid_grade': str,
+        'src_tier': int,
     }
 
     # ── 노드 식별자 규약 — canonical_field·정규화·해시 형식 (적재 멱등성의 근거)  (24종) ──
@@ -908,7 +912,7 @@ class KICSCrimeDomainOntology:
         'vt_id': {'canonical_field': '(platform, id_val)', 'id_formats': ['plain'], 'default_format': 'plain'},
         'vt_ip': {'canonical_field': 'ip_addr', 'id_formats': ['ipv4_dotted', 'ipv6'], 'default_format': 'ipv4_dotted'},
         'vt_file': {'canonical_field': 'hash_val', 'id_formats': ['md5', 'sha1', 'sha256'], 'default_format': 'sha256'},
-        'vt_psn': {'canonical_field': 'psn_id', 'id_formats': ['plain'], 'default_format': 'plain'},
+        'vt_psn': {'canonical_field': 'psn_id', 'id_formats': ['plain'], 'default_format': 'plain', 'synthesize': {'from': 'name', 'prefix': 'psn'}},
         'pt_cluster': {'canonical_field': 'cluster_id',
                        'id_formats': ['plain'],
                        'default_format': 'plain',
@@ -917,14 +921,14 @@ class KICSCrimeDomainOntology:
                          'id_formats': ['plain'],
                          'default_format': 'plain',
                          'prefix_convention': {'investigation': 'sc-{year}-{seq:04d}', 'osint': 'osint-sc-{seq:04d}'}},
-        'vt_src': {'canonical_field': 'src_id', 'id_formats': ['plain'], 'default_format': 'plain'},
+        'vt_src': {'canonical_field': 'src_id', 'id_formats': ['plain'], 'default_format': 'plain', 'synthesize': {'from': 'src_name', 'prefix': 'src'}},
         'vt_case': {'canonical_field': 'incdnt_no', 'id_formats': ['plain'], 'default_format': 'plain'},
         'vt_petition': {'canonical_field': 'petition_id', 'id_formats': ['plain'], 'default_format': 'plain'},
-        'vt_org': {'canonical_field': 'org_id', 'id_formats': ['plain'], 'default_format': 'plain'},
+        'vt_org': {'canonical_field': 'org_id', 'id_formats': ['plain'], 'default_format': 'plain', 'synthesize': {'from': 'org_name', 'prefix': 'org'}},
         'vt_crypto': {'canonical_field': 'wallet_addr', 'id_formats': ['base58check'], 'default_format': 'base58check'},
         'vt_vhcl': {'canonical_field': 'vhclno', 'id_formats': ['plain'], 'default_format': 'plain'},
         'vt_dev': {'canonical_field': 'dev_id', 'id_formats': ['plain', 'imei'], 'default_format': 'plain'},
-        'vt_atm': {'canonical_field': 'atm_id', 'id_formats': ['plain'], 'default_format': 'plain'},
+        'vt_atm': {'canonical_field': 'atm_id', 'id_formats': ['plain'], 'default_format': 'plain', 'synthesize': {'from': 'atm_nm', 'prefix': 'atm'}},
         'vt_loc': {'canonical_field': 'loc_id', 'id_formats': ['plain', 'geohash'], 'default_format': 'plain'},
         'vt_transfer': {'canonical_field': 'transfer_id', 'id_formats': ['uuid'], 'default_format': 'uuid'},
         'vt_call': {'canonical_field': 'call_id', 'id_formats': ['uuid'], 'default_format': 'uuid'},

@@ -88,12 +88,14 @@ class KICSCrimeDomainOntology:
     #   analysis    : 그래프 분석 지표(scripts/graph_analytics.py 산출, 재계산 대상 — 원천 사실 아님)
     #   integration : 통합 그래프 메타(scripts/build_integrated_graph.py — 어느 EP 에서 왔나)
     #   load        : 적재 메타(수동 시드·정제 스크립트가 남기는 생성 경위)
+    #   provenance  : 적재 출처 메타(V4.0 make_node_props_v40·화면 수동 입력이 기록)
     #   설명은 ATTRIBUTE_DICTIONARY['common_groups']
     NODE_COMMON_GROUPS = {
         'analysis':    ['pagerank', 'betweenness', 'degree_cent', 'eigenvector', 'clustering', 'kcore',
                         'component', 'community_id', 'community_lp', 'community_person'],
         'integration': ['ep_origin', 'ep_count'],
         'load':        ['creation_method', 'evid_grade', 'note'],
+        'provenance':  ['source_domain', 'reliability_tier', 'id_format', 'collected_at', 'evidence_added_at'],
     }
 
     # 엣지 공통 메타속성 스키마 (EDGE_META_SCHEMA)
@@ -113,6 +115,11 @@ class KICSCrimeDomainOntology:
         # ══ 검증 정보 (verified=True 시 필수) ════════════════════
         'verified_by':     str,    # 수사관 ID
         'verified_at':     str,    # 검증 일시
+        # ══ 적재 출처 (2026-10-01 등재 — 적재기가 이미 기록해 오던 메타) ══════════
+        'source_domain':   str,    # KICS · osint · partner · investigation …
+        'collected_at':    str,    # 원천 수집 일시
+        'evid_grade':      str,    # 증거 등급 A·B·C
+        'src_tier':        int,    # 출처 신뢰 등급 1~5
     }
 
     # ══════════════════════════════════════════════════════════════════════════
@@ -157,6 +164,10 @@ class KICSCrimeDomainOntology:
             'canonical_field':  'psn_id',
             'id_formats':       ['plain'],
             'default_format':   'plain',
+            # 2026-10-01 정합 2단계(A안): 원천에 인물 ID 가 없으면(2차년도 비식별본) 출처 범위 안의 결정적 ID 를 만든다.
+            #   psn_id = 'psn:{scope}:{name}'. 종전엔 이름이 키라 서로 다른 EP 의 다른 사람(가림 이름 '김**' 포함)이
+            #   한 노드로 합쳐졌다(통합 그래프 75명). 출처 간 동일인은 same_as 후보(review_status=pending)로 잇는다.
+            'synthesize':       {'from': 'name', 'prefix': 'psn'},
         },
         'pt_cluster': {  # V3.7 신규
             'canonical_field':  'cluster_id',
@@ -177,14 +188,17 @@ class KICSCrimeDomainOntology:
             },
         },
         # V4.0 P2 — 나머지 16노드 id_format 표준 (감사 리포트 §6 보강)
-        'vt_src':          {'canonical_field': 'src_id',        'id_formats': ['plain'],         'default_format': 'plain'},
+        'vt_src':          {'canonical_field': 'src_id',        'id_formats': ['plain'],         'default_format': 'plain',
+                            'synthesize': {'from': 'src_name', 'prefix': 'src'}},  # 2026-10-01 A안: ID 없으면 출처 범위 결정적 ID
         'vt_case':         {'canonical_field': 'incdnt_no',      'id_formats': ['plain'],         'default_format': 'plain'},  # [V4.9, 2026-09-18 정공법] 수사관 인지 식별자=경찰청 공식 사건번호(incdnt_no). flnm(사건파일명)은 보조 속성
         'vt_petition':     {'canonical_field': 'petition_id',   'id_formats': ['plain'],         'default_format': 'plain'},
-        'vt_org':          {'canonical_field': 'org_id',        'id_formats': ['plain'],         'default_format': 'plain'},
+        'vt_org':          {'canonical_field': 'org_id',        'id_formats': ['plain'],         'default_format': 'plain',
+                            'synthesize': {'from': 'org_name', 'prefix': 'org'}},  # 2026-10-01 A안: ID 없으면 출처 범위 결정적 ID
         'vt_crypto':       {'canonical_field': 'wallet_addr',   'id_formats': ['base58check'],   'default_format': 'base58check'},  # [정합화] 실 MERGE 키=wallet_addr
         'vt_vhcl':         {'canonical_field': 'vhclno',        'id_formats': ['plain'],         'default_format': 'plain'},  # [정합화] 실 MERGE 키=vhclno
         'vt_dev':          {'canonical_field': 'dev_id',        'id_formats': ['plain', 'imei'], 'default_format': 'plain'},
-        'vt_atm':          {'canonical_field': 'atm_id',        'id_formats': ['plain'],         'default_format': 'plain'},
+        'vt_atm':          {'canonical_field': 'atm_id',        'id_formats': ['plain'],         'default_format': 'plain',
+                            'synthesize': {'from': 'atm_nm', 'prefix': 'atm'}},  # 2026-10-01 A안: ID 없으면 출처 범위 결정적 ID
         'vt_loc':          {'canonical_field': 'loc_id',        'id_formats': ['plain', 'geohash'], 'default_format': 'plain'},
         'vt_transfer':     {'canonical_field': 'transfer_id',   'id_formats': ['uuid'],          'default_format': 'uuid'},
         'vt_call':         {'canonical_field': 'call_id',       'id_formats': ['uuid'],          'default_format': 'uuid'},
@@ -1974,6 +1988,26 @@ class KICSCrimeDomainOntology:
     DEPRECATED_LABELS = {
         'vt_email': {'replace': 'vt_id', 'props': {'platform': 'email'}, 'rename': {'email_addr': 'id_val'}},
     }
+
+    @staticmethod
+    def normalize_key(label, field, value):
+        """MERGE·MATCH 매칭키 정규화 (2026-10-01) — 적재기마다 따로 하던 것을 한 곳에서.
+
+        vt_bacnt.account_no: 공백·하이픈 제거 + 소문자 (md5/sha256 해시는 소문자만)
+        vt_telno.telno     : 숫자만 (선행 0 보존)
+        vt_id.id_val       : platform='email' 이면 소문자 — 호출자가 platform 을 함께 넘긴 경우에만 (normalize_node_keys)
+        그 밖              : 앞뒤 공백 제거
+        """
+        import re as _re
+        if value is None:
+            return None
+        s = str(value).strip()
+        if label == 'vt_bacnt' and field == 'account_no':
+            s = s.lower()
+            return s if _re.fullmatch(r'[0-9a-f]{32}|[0-9a-f]{64}', s) else _re.sub(r'[\s\-]', '', s)
+        if label == 'vt_telno' and field == 'telno':
+            return _re.sub(r'[^0-9]', '', s)
+        return s
 
     @classmethod
     def _expand_concept(cls, token):
