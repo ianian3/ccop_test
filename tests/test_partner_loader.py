@@ -3,7 +3,8 @@
 F05·F06 (감사 2026-09-17): 전달용 CSV 적재기(load_csv_to_graph.py / load_partner_csv.py)
 
 F05 재실행 멱등성 — 기존 그래프를 읽어 중복 CREATE 방지, 2차 납품분 보강·집계 누적
-F06 식별 충돌 — 같은 식별 키에 다른 bank_cd·psn_id·platform 이 오면 조용히 합치지 않고 보고
+F06 식별 충돌 — 같은 식별 키에 다른 bank_cd·name 이 오면 조용히 합치지 않고 보고
+2026-10 보완본: 인물 키 psn_id · 계정 키 (platform, id_val) — 동명이인·플랫폼별 같은 아이디는 별개 노드
 DB 는 가짜 커서로 대체.
 """
 import importlib.util
@@ -63,8 +64,8 @@ class FakeCursor:
 
 def _run(M, cur, fn):
     L = M.Loader(cur)
-    L.preload([("vt_bacnt", "account_no"), ("vt_psn", "name"), ("vt_telno", "telno"),
-               ("vt_id", "id_val")],
+    L.preload([("vt_bacnt", "account_no"), ("vt_psn", "psn_id"), ("vt_telno", "telno"),
+               ("vt_id", ("platform", "id_val"))],
               [("contacted", "vt_telno", "telno", "vt_telno", "telno"),
                ("transferred_to", "vt_bacnt", "account_no", "vt_bacnt", "account_no"),
                ("used_ip", "vt_telno", "telno", "vt_ip", "ip_addr")])
@@ -78,14 +79,14 @@ class TestIdempotency:
     def test_rerun_same_data_creates_nothing(self, M):
         def load(L):
             L.node("vt_bacnt", "account_no", "110-1", {"bank_cd": "004", "source_id": "DOC-1"})
-            L.node("vt_psn", "name", "홍길동", {"source_id": "DOC-1"})
+            L.node("vt_psn", "psn_id", "P-1", {"name": "홍길동", "source_id": "DOC-1"})
         first = FakeCursor()
         _run(M, first, load)
         assert len(first.creates()) == 2
         # 2회차: 1회차 결과가 그래프에 있는 상태
         second = FakeCursor(nodes={
             "vt_bacnt": [{"account_no": "110-1", "bank_cd": "004", "source_id": "DOC-1"}],
-            "vt_psn": [{"name": "홍길동", "source_id": "DOC-1"}],
+            "vt_psn": [{"psn_id": "P-1", "name": "홍길동", "source_id": "DOC-1"}],
         })
         L = _run(M, second, load)
         assert second.creates() == [] and second.sets() == []
@@ -101,8 +102,8 @@ class TestIdempotency:
         assert L.n_enriched == 1
 
     def test_existing_props_not_overwritten(self, M):
-        cur = FakeCursor(nodes={"vt_psn": [{"name": "김철수", "dob": "1990", "source_id": "A"}]})
-        _run(M, cur, lambda L: L.node("vt_psn", "name", "김철수", {"dob": "1991", "source_id": "A"}))
+        cur = FakeCursor(nodes={"vt_psn": [{"psn_id": "P-2", "name": "김철수", "dob": "1990", "source_id": "A"}]})
+        _run(M, cur, lambda L: L.node("vt_psn", "psn_id", "P-2", {"dob": "1991", "source_id": "A"}))
         assert cur.sets() == []   # dob 는 기존 값 유지, 출처도 동일 → 쓰기 없음
 
     def test_same_node_many_rows_single_write(self, M):
@@ -157,16 +158,29 @@ class TestIdentityConflicts:
             L.node("vt_bacnt", "account_no", "110-1", {"bank_cd": "088"})))
         assert L.conflicts[("vt_bacnt", "bank_cd")] == {("110-1", "004", "088")}
 
-    def test_homonym_different_psn_id_reported(self, M):
+    def test_homonym_with_different_psn_id_stays_separate(self, M):
+        """2026-10 보완본: 인물 키가 psn_id 라 동명이인은 별개 노드 (종전엔 이름 키로 합쳐지고 경고만)."""
         cur = FakeCursor(nodes={"vt_psn": [{"name": "홍길동", "psn_id": "P-1"}]})
-        L = _run(M, cur, lambda L: L.node("vt_psn", "name", "홍길동", {"psn_id": "P-2"}))
-        assert L.conflicts[("vt_psn", "psn_id")] == {("홍길동", "P-1", "P-2")}
+        L = _run(M, cur, lambda L: L.node("vt_psn", "psn_id", "P-2", {"name": "홍길동"}))
+        assert not L.conflicts and len(cur.creates()) == 1
 
-    def test_same_id_different_platform_reported(self, M):
-        L = _run(M, FakeCursor(), lambda L: (
-            L.node("vt_id", "id_val", "abc", {"platform": "kakao"}),
-            L.node("vt_id", "id_val", "abc", {"platform": "telegram"})))
-        assert ("vt_id", "platform") in L.conflicts
+    def test_same_psn_id_different_name_reported(self, M):
+        cur = FakeCursor(nodes={"vt_psn": [{"name": "홍길동", "psn_id": "P-1"}]})
+        L = _run(M, cur, lambda L: L.node("vt_psn", "psn_id", "P-1", {"name": "홍길동2"}))
+        assert L.conflicts[("vt_psn", "name")] == {("P-1", "홍길동", "홍길동2")}
+
+    def test_same_id_on_different_platforms_are_two_accounts(self, M):
+        cur = FakeCursor()
+        L = _run(M, cur, lambda L: (
+            L.node("vt_id", ("platform", "id_val"), ("kakao", "abc"), {}),
+            L.node("vt_id", ("platform", "id_val"), ("telegram", "abc"), {})))
+        assert not L.conflicts and len(cur.creates()) == 2
+        assert "platform: 'kakao', id_val: 'abc'" in cur.creates()[0]
+
+    def test_composite_key_existing_node_enriched_not_recreated(self, M):
+        cur = FakeCursor(nodes={"vt_id": [{"platform": "kakao", "id_val": "abc"}]})
+        _run(M, cur, lambda L: L.node("vt_id", ("platform", "id_val"), ("kakao", "abc"), {"nickname": "n"}))
+        assert not cur.creates() and cur.sets() == ["MATCH (n:vt_id {platform: 'kakao', id_val: 'abc'}) SET n.nickname = 'n'"]
 
     def test_non_identity_prop_difference_not_reported(self, M):
         L = _run(M, FakeCursor(), lambda L: (

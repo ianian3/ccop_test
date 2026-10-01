@@ -31,18 +31,18 @@ class Cur:
         self.log.append(q); self.res = []
         m = re.match(r"CREATE \(n:(\w+) \{(.*)\}\)$", q, re.S)
         if m: self.S.nodes[m.group(1)].append(parse_map(m.group(2))); return
-        m = re.match(r"MATCH \(n:(\w+) \{(\w+): (.*?)\}\) SET (.*)$", q, re.S)
+        m = re.match(r"MATCH \(n:(\w+) \{(.*?)\}\) SET (.*)$", q, re.S)
         if m:
-            lab, key, val = m.group(1), m.group(2), parse_map(f"{m.group(2)}: {m.group(3)}")[m.group(2)]
+            lab, km = m.group(1), parse_map(m.group(2))          # 단일·복합 키 맵
             for n in self.S.nodes[lab]:
-                if n.get(key) == val:
-                    for k, v in re.findall(r"n\.(\w+) = ('(?:[^']|'')*'|-?[\d.]+)", m.group(4)):
+                if all(n.get(k) == v for k, v in km.items()):
+                    for k, v in re.findall(r"n\.(\w+) = ('(?:[^']|'')*'|-?[\d.]+)", m.group(3)):
                         n.update(parse_map(f"{k}: {v}"))
             return
-        m = re.match(r"MATCH \(x:(\w+) \{(\w+): '(.*?)'\}\), \(y:(\w+) \{(\w+): '(.*?)'\}\) MERGE \(x\)-\[r:(\w+)(?: \{(.*?)\})?\]->\(y\)(?: SET (.*))?$", q, re.S)
+        m = re.match(r"MATCH \(x:(\w+) \{(.*?)\}\), \(y:(\w+) \{(.*?)\}\) MERGE \(x\)-\[r:(\w+)(?: \{(.*?)\})?\]->\(y\)(?: SET (.*))?$", q, re.S)
         if m:
-            la, ka, va, lb, kb, vb, el, mp, sets = m.groups()
-            key = (el, la, va, lb, vb, mp)
+            la, xa, lb, yb, el, mp, sets = m.groups()
+            key = (el, la, tuple(sorted(parse_map(xa).items())), lb, tuple(sorted(parse_map(yb).items())), mp)
             props = self_props = self.S.edges.setdefault(key, {})
             if mp: props.update(parse_map(mp))
             if sets:
@@ -53,10 +53,9 @@ class Cur:
         m = re.match(r"MATCH \(x:(\w+)\)-\[r:(\w+)\]->\(y:(\w+)\) RETURN properties\(x\), properties\(y\), properties\(r\)", q)
         if m:
             la, el, lb = m.groups()
-            for (e, a, va, b, vb, mp), pr in self.S.edges.items():
+            for (e, a, xk, b, yk, mp), pr in self.S.edges.items():
                 if e == el and a == la and b == lb:
-                    ka = {'vt_telno': 'telno', 'vt_id': 'id_val', 'vt_bacnt': 'account_no', 'vt_psn': 'name', 'vt_atm': 'atm_nm', 'vt_dev': 'dev_id'}[la]; kb = {'vt_ip': 'ip_addr', 'vt_loc': 'loc_id'}.get(lb, ka)
-                    self.res.append(({ka: va}, {kb: vb}, dict(pr)))
+                    self.res.append((dict(xk), dict(yk), dict(pr)))
             return
         m = re.match(r"MATCH \(n:(\w+)\) RETURN count\(n\)", q)
         if m: self.res = [(len(self.S.nodes[m.group(1)]),)]; return
@@ -105,4 +104,15 @@ def test_split_delivery_equals_single_load(path, monkeypatch, capsys):
     _run(path, once, [EX], monkeypatch)
     _run(path, split, [EX / "core", EX / "optional", EX], monkeypatch)
     assert _snapshot(once) == _snapshot(split)
-    assert "psn_id 를 이름으로 해석하지 못했습니다" not in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "인물 파일(tbl_vt_psn)에 없는 psn_id" not in out and "건너뛴 참조" not in out
+
+
+@pytest.mark.parametrize("path", LOADERS, ids=lambda p: p.parent.name)
+def test_case_person_relations_loaded(path, monkeypatch, capsys):
+    """규격 컬럼 prsn_id 만 있는 tbl_eg_case_prsn 의 관계가 빠지지 않는다 (종전: 3행 전부 조용히 누락)."""
+    st = Store()
+    _run(path, st, [EX], monkeypatch)
+    roles = sorted((dict(k[2])["psn_id"], k[0]) for k in st.edges if k[0] in ("suspect_in", "victim_in"))
+    assert roles == [("P-2026-0001", "suspect_in"), ("P-2026-0002", "suspect_in"), ("P-2026-0003", "victim_in")]
+    assert {n["psn_id"] for n in st.nodes["vt_psn"]} == {"P-2026-0001", "P-2026-0002", "P-2026-0003"}

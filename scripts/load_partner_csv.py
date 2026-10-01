@@ -11,16 +11,17 @@
   · 이체 → `transferred_to` 쌍당 1엣지 + first_dlng_dt·last_dlng_dt·txn_count·total_amount
   · 금액·건수는 **숫자 타입**으로 저장 (문자열이면 비교·정렬이 조용히 틀린다)
   · 모든 노드·엣지에 source_id 부여 (없으면 파일명에서 생성)
-  · 인물 식별: psn_id 가 있으면 그것으로, 없으면 flnm(이름)으로 — 규격서 §3.4
+  · 인물 키 psn_id — 없으면 'psn:{기관}:{이름}'(--org), 다른 기관 같은 이름은 same_as 후보 — 규격서 §3.4
+  · 계정 키 (platform, id_val). 종전 방식(이름·id_val 단독 키) 그래프에는 덧붙이지 않음(--reset)
   · 멱등. 기존 노드·집계 엣지를 먼저 읽어 재적재 중복 없음, 2차 납품분은 보강·누적
-  · 식별 충돌(같은 키·다른 bank_cd/psn_id/platform) 경고
+  · 식별 충돌(같은 키·다른 bank_cd/name) 경고
   · used_ip·located_at 도 쌍당 집계하되 시각 보존(valid_from/valid_to·first_dt/last_dt·건수)
 
 적재 후 `handoff/ontology_v4.9/code/audit_ontology_v49.py` 로 정경을 검증할 수 있다.
 
 실행
-  python3 scripts/load_partner_csv.py <CSV폴더> --graph partner_graph
-  python3 scripts/load_partner_csv.py <CSV폴더> --graph partner_graph --reset
+  python3 scripts/load_partner_csv.py <CSV폴더> --graph partner_graph --org <기관코드>
+  python3 scripts/load_partner_csv.py <CSV폴더> --graph partner_graph --org <기관코드> --reset
 """
 import argparse
 import csv
@@ -40,8 +41,10 @@ except ImportError:                       # python-dotenv 없어도 환경변수
 RE_NUM = re.compile(r'[^\d.-]')
 ROLE_EDGE = {'SUSPECT': 'suspect_in', 'VICTIM': 'victim_in', 'WITNESS': 'witness_in',
              'REPORTER': 'victim_in', 'SUSPECT_ACCOMPLICE': 'suspect_in'}
-SUBJ_LABEL = {'psn': ('vt_psn', 'name'), 'telno': ('vt_telno', 'telno'),
-              'bacnt': ('vt_bacnt', 'account_no'), 'id': ('vt_id', 'id_val'),
+PSN_KEY = 'psn_id'
+ID_KEY = ('platform', 'id_val')      # 복합 키 — 플랫폼이 다른 같은 아이디는 다른 계정
+SUBJ_LABEL = {'psn': ('vt_psn', PSN_KEY), 'telno': ('vt_telno', 'telno'),
+              'bacnt': ('vt_bacnt', 'account_no'), 'id': ('vt_id', ID_KEY),
               'atm': ('vt_atm', 'atm_nm'), 'dev': ('vt_dev', 'dev_id')}
 LABELS = ['vt_psn', 'vt_telno', 'vt_bacnt', 'vt_case', 'vt_ip', 'vt_id', 'vt_loc', 'vt_atm',
           'vt_dev']
@@ -49,11 +52,42 @@ LABELS = ['vt_psn', 'vt_telno', 'vt_bacnt', 'vt_case', 'vt_ip', 'vt_id', 'vt_loc
 NODE_KEYS = sorted({('vt_ip', 'ip_addr'), ('vt_loc', 'loc_id'), ('vt_case', 'incdnt_no'),
                     *SUBJ_LABEL.values()})
 ELABELS = ['has_account', 'owns_phone', 'registered_to', 'suspect_in', 'victim_in',
-           'witness_in', 'contacted', 'transferred_to', 'used_ip', 'uses_id', 'located_at']
+           'witness_in', 'contacted', 'transferred_to', 'used_ip', 'uses_id', 'located_at', 'same_as']
 
 
 def esc(v):
     return str(v).replace('\\', '\\\\').replace("'", "''")
+
+
+# ── 식별 키 (단일 'telno' 또는 복합 ('platform', 'id_val')) ──
+def _keys(key):
+    return key if isinstance(key, tuple) else (key,)
+
+
+def _vals(val):
+    return val if isinstance(val, tuple) else (val,)
+
+
+def _norm_val(val):
+    return tuple(str(v) for v in val) if isinstance(val, tuple) else str(val)
+
+
+def _empty(val):
+    return any(v in (None, '') for v in _vals(val))
+
+
+def _kmap(key, val):
+    """MATCH 용 키 맵 본문 — "telno: '010…'" 또는 "platform: 'kakao', id_val: 'abc'"."""
+    return ', '.join(f"{k}: '{esc(v)}'" for k, v in zip(_keys(key), _vals(val)))
+
+
+def _kval(pr, key):
+    """속성 dict 에서 키 값 — 하나라도 비면 None."""
+    vs = tuple(pr.get(k) for k in _keys(key))
+    if any(v in (None, '') for v in vs):
+        return None
+    vs = tuple(str(v) for v in vs)
+    return vs if isinstance(key, tuple) else vs[0]
 
 
 def num(v):
@@ -108,10 +142,10 @@ def sid(row, default):
     return (row.get('source_id') or '').strip() or default
 
 
-# 식별 충돌 감시 대상 — 현행 식별 키(계좌=account_no, 인물=name, 계정=id_val)가 같은데 이 속성이
-# 다르면 서로 다른 실체가 한 노드로 합쳐졌을 수 있다(은행별 동일 계좌번호·동명이인·플랫폼별 동일 ID).
-# 조용히 합치지 않고 적재 결과에 보고한다.
-CONFLICT_PROPS = {'vt_bacnt': ('bank_cd',), 'vt_psn': ('psn_id',), 'vt_id': ('platform',)}
+# 식별 충돌 감시 대상 — 식별 키(계좌=account_no, 인물=psn_id)가 같은데 이 속성이 다르면 서로 다른
+# 실체가 한 노드로 합쳐졌을 수 있다(은행별 동일 계좌번호 · 같은 psn_id 에 다른 이름).
+# 조용히 합치지 않고 적재 결과에 보고한다. 계정은 키에 platform 이 들어가 충돌이 생기지 않는다.
+CONFLICT_PROPS = {'vt_bacnt': ('bank_cd',), 'vt_psn': ('name',)}
 # 쌍 단위로 접는 집계 엣지 규칙 (온톨로지 SoT RELATIONSHIPS[엣지]['aggregation'] 과 같은 뜻).
 # 건별 원본 행을 쌍당 1엣지로 접을 때 sum=합계, min/max=기간, union=관측값 합집합('|' 결합).
 # 재적재·추가 납품 시에도 같은 규칙으로 기존 엣지와 합친다(source_id 로 중복 판정).
@@ -191,14 +225,15 @@ class Loader:
             self.cur.execute(f"MATCH (n:{label}) RETURN properties(n)")
             for (pv,) in self.cur.fetchall():
                 pr = _props(pv)
-                if pr.get(key) not in (None, ''):
-                    self._existing[(label, key, str(pr[key]))] = pr
+                v = _kval(pr, key)
+                if v is not None:
+                    self._existing[(label, key, v)] = pr
         for el, la, ka, lb, kb in agg_pairs:
             self.cur.execute(f"MATCH (x:{la})-[r:{el}]->(y:{lb}) "
                              f"RETURN properties(x), properties(y), properties(r)")
             for xv, yv, rv in self.cur.fetchall():
                 xp, yp, rp = _props(xv), _props(yv), _props(rv)
-                k = (el, la, str(xp.get(ka)), lb, str(yp.get(kb)), rp.get('channel'))
+                k = (el, la, _kval(xp, ka), lb, _kval(yp, kb), rp.get('channel'))
                 self._agg_existing[k] = rp
 
     def existing(self, label):
@@ -210,10 +245,11 @@ class Loader:
             self.conflicts[(label, prop)].add((str(val), str(old), str(new)))
 
     def node(self, label, key, val, props):
-        if val in (None, ''):
+        """key 는 속성명 하나 또는 복합 키 튜플(val 도 같은 길이 튜플)."""
+        if _empty(val):
             return False
-        ck = (label, key, str(val))
-        cur = self._nodes.setdefault(ck, {key: val})
+        ck = (label, key, _norm_val(val))
+        cur = self._nodes.setdefault(ck, dict(zip(_keys(key), _vals(val))))
         ex = self._existing.get(ck, {})
         for k, v in props.items():
             if v in (None, ''):
@@ -235,7 +271,7 @@ class Loader:
         match_props 를 주면 그 속성까지 일치하는 엣지만 같은 것으로 본다.
         예: 같은 두 전화번호라도 channel 이 다르면 별개 엣지(통화/문자 구분).
         """
-        if a[2] in (None, '') or b[2] in (None, ''):
+        if _empty(a[2]) or _empty(b[2]):
             return False
         self._edges.append((el, a, b, dict(props), match_props))
         return True
@@ -245,7 +281,7 @@ class Loader:
 
         obs: AGG_RULES[el] 의 필드만 (예: used_ip → valid_from·valid_to·usage_count·access_type)
         """
-        if a[2] in (None, '') or b[2] in (None, ''):
+        if _empty(a[2]) or _empty(b[2]):
             return False
         rule = AGG_RULES[el]
         key = (el, a, b, tuple(sorted((match_props or {}).items())))
@@ -281,13 +317,13 @@ class Loader:
             src = p.pop('_src', set())
             if ck in self._existing:
                 ex = self._existing[ck]
-                add = {k: v for k, v in p.items() if k != key and k not in ex}
+                add = {k: v for k, v in p.items() if k not in _keys(key) and k not in ex}
                 merged = _srcs(ex.get('source_id')) | src
                 if merged != _srcs(ex.get('source_id')):
                     add['source_id'] = '|'.join(sorted(merged))
                 if add:
                     sets = ', '.join(f"n.{k} = {_lit(v)}" for k, v in add.items())
-                    self.cur.execute(f"MATCH (n:{label} {{{key}: {_lit(val)}}}) SET {sets}")
+                    self.cur.execute(f"MATCH (n:{label} {{{_kmap(key, val)}}}) SET {sets}")
                     self.n_enriched += 1
                     self._tick()
                 continue
@@ -300,7 +336,7 @@ class Loader:
 
     def _merge_agg(self, el, a, b, props, match_props):
         """집계 엣지: 기존 값과 source_id 로 중복·누적 판정. None 이면 건너뜀."""
-        k = (el, a[0], str(a[2]), b[0], str(b[2]), (match_props or {}).get('channel'))
+        k = (el, a[0], _norm_val(a[2]), b[0], _norm_val(b[2]), (match_props or {}).get('channel'))
         ex = self._agg_existing.get(k)
         if not ex:
             return props
@@ -343,7 +379,7 @@ class Loader:
             mp = ''
             if match_props:
                 mp = ' {' + ', '.join(f"{k}: '{esc(v)}'" for k, v in match_props.items()) + '}'
-            q = (f"MATCH (x:{la} {{{ka}: '{esc(va)}'}}), (y:{lb} {{{kb}: '{esc(vb)}'}}) "
+            q = (f"MATCH (x:{la} {{{_kmap(ka, va)}}}), (y:{lb} {{{_kmap(kb, vb)}}}) "
                  f"MERGE (x)-[r:{el}{mp}]->(y)")
             if sets:
                 q += ' SET ' + ', '.join(sets)
@@ -363,7 +399,10 @@ def main():
     ap.add_argument('folder')
     ap.add_argument('--graph', required=True)
     ap.add_argument('--reset', action='store_true', help='적재 전 그래프 삭제 후 재생성')
+    ap.add_argument('--org', help="기관 코드 — psn_id 없는 인물의 키 'psn:{기관}:{이름}' 에 쓴다 (예: etri)")
     args = ap.parse_args()
+    if args.org and not re.match(r'^[0-9A-Za-z가-힣_.-]+$', args.org):
+        sys.exit(f'invalid --org: {args.org} (영문·숫자·한글·_ . - 만)')
     if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', args.graph):
         sys.exit(f'invalid graph name: {args.graph}')
     if not os.path.isdir(args.folder):
@@ -384,35 +423,90 @@ def main():
     for e in ELABELS:
         cur.execute(f"CREATE ELABEL IF NOT EXISTS {e}")
     conn.commit()                 # DDL 확정
+    # 종전 방식 그래프(인물=이름 키, 계정=id_val 단독 키) 감지 — 덧붙이면 같은 사람·계정이 두 노드가 된다
+    cur.execute(f"MATCH (n:vt_psn) WHERE n.{PSN_KEY} IS NULL RETURN count(n)")
+    old_psn = cur.fetchone()[0]
+    cur.execute("MATCH (n:vt_id) WHERE n.platform IS NULL RETURN count(n)")
+    old_id = cur.fetchone()[0]
+    if old_psn or old_id:
+        sys.exit(f'[{args.graph}] 종전 방식으로 만든 그래프입니다 (psn_id 없는 인물 {old_psn} · platform 없는 계정 {old_id}).\n'
+                 f'  인물·계정 식별 키가 바뀌어 덧붙이면 같은 대상이 두 노드가 됩니다 → --reset 으로 새로 적재하십시오.')
     conn.autocommit = False       # 이후 데이터 적재는 배치 트랜잭션
     L = Loader(cur, conn=conn)
     F = args.folder
     # 기존 그래프 상태 — 재적재·추가 납품 시 중복 생성 방지 (--reset 이면 비어 있음)
     L.preload(NODE_KEYS,
               [('contacted', 'vt_telno', 'telno', 'vt_telno', 'telno'),
-               ('contacted', 'vt_id', 'id_val', 'vt_id', 'id_val'),
+               ('contacted', 'vt_id', ID_KEY, 'vt_id', ID_KEY),
                ('transferred_to', 'vt_bacnt', 'account_no', 'vt_bacnt', 'account_no')]
               + [(el, lab, key, tgt, tkey)
                  for el, tgt, tkey in (('used_ip', 'vt_ip', 'ip_addr'), ('located_at', 'vt_loc', 'loc_id'))
                  for lab, key in sorted(set(SUBJ_LABEL.values()))])
 
     # ── 노드 ──
-    psn_key = {}          # psn_id 또는 flnm → 그래프에 저장한 name 값
-    # 기존 그래프의 인물도 해석표에 — 2차 납품의 관계 파일이 1차에 온 인물의 psn_id 를 참조할 때
-    # 해석 실패로 psn_id 문자열 인물 노드가 따로 생기던 문제 방지
-    for nm, pr in L.existing('vt_psn'):
-        psn_key[nm] = nm
-        if pr.get('psn_id'):
-            psn_key[str(pr['psn_id'])] = nm
+    # 인물 키: psn_id (없으면 'psn:{기관}:{이름}'). 이름만 있는 참조는 이번 납품의 인물 파일에서 찾는다.
+    org = args.org
+    known_ids = {v for v, _pr in L.existing('vt_psn')}   # 그래프·이번 적재의 psn_id
+    run_names = defaultdict(set)                          # 이번 인물 파일의 이름 → psn_id
+    synth_names, need_org, ambiguous, unresolved = set(), [], [], []
+
+    def synth(nm):
+        if not org:
+            need_org.append(nm)
+            return f'psn:?:{nm}'
+        synth_names.add(nm)
+        return f'psn:{org}:{nm}'
+
+    def by_name(nm, where):
+        c = run_names.get(nm, set())
+        if len(c) == 1:
+            return next(iter(c))
+        if len(c) > 1:                                    # 동명이인 — 이름만으로는 누구인지 모른다
+            ambiguous.append(f'{where}: {nm}')
+            return None
+        return synth(nm)
+
+    def person(r, where):
+        """관계 행이 가리키는 인물 키. prsn_id(규격 컬럼명)·psn_id 우선, 없으면 이름."""
+        pid = (r.get('prsn_id') or r.get('psn_id') or '').strip()
+        nm = (r.get('flnm') or '').strip()
+        if pid:
+            if pid not in known_ids:
+                unresolved.append(f'{where}: {pid}')
+            return pid
+        return by_name(nm, where) if nm else None
+
+    def psn_node(key, r, s):
+        nm = (r.get('flnm') or '').strip()
+        return L.node('vt_psn', PSN_KEY, key, {'name': nm or None, 'source_id': s})
+
     for r in read(F, 'tbl_vt_psn'):
-        nm = r.get('flnm') or r.get('psn_id')
-        if L.node('vt_psn', 'name', nm,
-                  {'psn_id': r.get('psn_id'), 'dob': r.get('dob'), 'gender': r.get('gender'),
-                   'nationality': r.get('nationality'), 'occp_nm': r.get('occp_nm'),
-                   'source_id': sid(r, 'CSV-psn')}):
-            if r.get('psn_id'):
-                psn_key[r['psn_id']] = nm
-            psn_key[nm] = nm
+        pid = (r.get('psn_id') or r.get('prsn_id') or '').strip()
+        nm = (r.get('flnm') or '').strip()
+        if not pid and not nm:
+            continue
+        key = pid or synth(nm)
+        L.node('vt_psn', PSN_KEY, key,
+               {'name': nm or None, 'dob': r.get('dob'), 'gender': r.get('gender'),
+                'nationality': r.get('nationality'), 'occp_nm': r.get('occp_nm'),
+                'source_id': sid(r, 'CSV-psn')})
+        known_ids.add(key)
+        if nm:
+            run_names[nm].add(key)
+
+    # 계정 키 (platform, id_val). 플랫폼 없이 아이디만 오는 참조(IP·위치 사용)는 아는 플랫폼이 하나일 때만 잇는다
+    plat_of = defaultdict(set)
+    for (plat, idv), _pr in L.existing('vt_id'):
+        plat_of[idv].add(plat)
+
+    def idkey(idv, plat):
+        idv, plat = str(idv or '').strip(), (plat or '').strip() or 'unknown'
+        if plat.lower() == 'email':
+            idv = idv.lower()
+        if idv:
+            plat_of[idv].add(plat)
+        return (plat, idv)
+
     for r in read(F, 'tbl_vt_telno'):
         L.node('vt_telno', 'telno', r.get('telno'),
                {'telco_nm': r.get('telco_nm'), 'join_typ_cd': r.get('join_typ_cd'),
@@ -428,9 +522,8 @@ def main():
                {'ip_ver': num(r.get('ip_ver')), 'asn_nm': r.get('asn_nm'),
                 'ctry_cd': r.get('ctry_cd'), 'source_id': sid(r, 'CSV-ip')})
     for r in read(F, 'tbl_vt_id'):
-        L.node('vt_id', 'id_val', r.get('id_val'),
-               {'platform': r.get('platform'), 'id_type': r.get('id_type'),
-                'nickname': r.get('nickname'), 'source_id': sid(r, 'CSV-id')})
+        L.node('vt_id', ID_KEY, idkey(r.get('id_val'), r.get('platform')),
+               {'id_type': r.get('id_type'), 'nickname': r.get('nickname'), 'source_id': sid(r, 'CSV-id')})
     for r in read(F, 'tbl_vt_loc'):
         L.node('vt_loc', 'loc_id', r.get('loc_id'),
                {'loc_type': r.get('loc_type'), 'address': r.get('address'),
@@ -450,56 +543,65 @@ def main():
                 'crime_site': r.get('crime_site'), 'case_summary': r.get('incdnt_smry_cn'),
                 'source_id': sid(r, 'CSV-case')})
 
-    unresolved = []
-
-    def resolve_psn(v, where):
-        """psn_id → 이름. 인물 노드 파일이 없어 해석 못 하면 경고한다.
-
-        해석 실패를 방치하면 psn_id 문자열 자체가 인물 노드로 만들어져, 같은 사람이
-        '홍길동' 과 'P-2026-0001' 로 갈라진다(조용한 중복 — 그래프를 보고도 모른다).
-        """
-        if v in psn_key:
-            return psn_key[v]
-        if re.match(r'^[A-Za-z][\w.-]*$', str(v)):     # 이름 같지 않으면 미해석 ID 로 본다
+    def resolve_subj_psn(v, where):
+        """IP·위치 사용 파일의 인물 주체(subj_id) — psn_id 이거나 이름."""
+        v = str(v).strip()
+        if v in known_ids:
+            return v
+        if v in run_names:
+            return by_name(v, where)
+        if re.match(r'^[A-Za-z][\w.-]*$', v):              # 이름 같지 않으면 인물 파일에 없는 psn_id 로 본다
             unresolved.append(f'{where}: {v}')
-        return v
+            return v
+        return synth(v)
 
-    def person(r):
-        """행이 가리키는 인물의 그래프 키(name). psn_id 우선."""
-        pid, nm = (r.get('psn_id') or '').strip(), (r.get('flnm') or '').strip()
-        return psn_key.get(pid) or psn_key.get(nm) or nm or pid
+    def resolve_subj_id(v, where):
+        ps = plat_of.get(str(v).strip(), set())
+        if len(ps) > 1:                                   # 플랫폼별 같은 아이디 — 어느 계정인지 모른다
+            ambiguous.append(f'{where}: 계정 {v} ({"/".join(sorted(ps))})')
+            return None
+        return idkey(v, next(iter(ps)) if ps else None)
 
     # ── 관계: 명의 ──
     for r in read(F, 'tbl_eg_bactno_poss'):
-        p, acc = person(r), r.get('actno')
+        p, acc = person(r, 'tbl_eg_bactno_poss'), r.get('actno')
         s = sid(r, 'CSV-bactno-poss')
-        L.node('vt_psn', 'name', p, {'source_id': s})
+        if not p:
+            continue
+        psn_node(p, r, s)
         L.node('vt_bacnt', 'account_no', acc, {'bank_cd': r.get('bank_cd'), 'source_id': s})
-        L.edge('has_account', ('vt_psn', 'name', p), ('vt_bacnt', 'account_no', acc),
+        L.edge('has_account', ('vt_psn', PSN_KEY, p), ('vt_bacnt', 'account_no', acc),
                {'valid_from': r.get('valid_from'), 'valid_to': r.get('valid_to'), 'source_id': s})
     for r in read(F, 'tbl_eg_telno_poss'):
-        p, tel = person(r), r.get('telno')
+        p, tel = person(r, 'tbl_eg_telno_poss'), r.get('telno')
         s = sid(r, 'CSV-telno-poss')
-        L.node('vt_psn', 'name', p, {'source_id': s})
+        if not p:
+            continue
+        psn_node(p, r, s)
         L.node('vt_telno', 'telno', tel, {'source_id': s})
-        L.edge('owns_phone', ('vt_psn', 'name', p), ('vt_telno', 'telno', tel),
+        L.edge('owns_phone', ('vt_psn', PSN_KEY, p), ('vt_telno', 'telno', tel),
                {'valid_from': r.get('valid_from'), 'valid_to': r.get('valid_to'), 'source_id': s})
-        L.edge('registered_to', ('vt_telno', 'telno', tel), ('vt_psn', 'name', p),
+        L.edge('registered_to', ('vt_telno', 'telno', tel), ('vt_psn', PSN_KEY, p),
                {'valid_from': r.get('valid_from'), 'valid_to': r.get('valid_to'), 'source_id': s})
     for r in read(F, 'tbl_eg_case_prsn'):
-        p, cs = person(r), r.get('incdnt_no')
+        # 종전엔 규격 컬럼 prsn_id 를 읽지 않아(psn_id 만 봄) 이 파일의 관계가 전부 조용히 빠졌다 (2026-10 보완)
+        p, cs = person(r, 'tbl_eg_case_prsn'), r.get('incdnt_no')
         s = sid(r, 'CSV-case-prsn')
+        if not p:
+            continue
         el = ROLE_EDGE.get((r.get('role') or 'VICTIM').upper(), 'victim_in')
-        L.node('vt_psn', 'name', p, {'source_id': s})
+        psn_node(p, r, s)
         L.node('vt_case', 'incdnt_no', cs, {'source_id': s})
-        L.edge(el, ('vt_psn', 'name', p), ('vt_case', 'incdnt_no', cs), {'source_id': s})
+        L.edge(el, ('vt_psn', PSN_KEY, p), ('vt_case', 'incdnt_no', cs), {'source_id': s})
     for r in read(F, 'tbl_eg_id_use'):
-        p, idv = person(r), r.get('id_val')
+        p, ik = person(r, 'tbl_eg_id_use'), idkey(r.get('id_val'), r.get('platform'))
         s = sid(r, 'CSV-id-use')
-        L.node('vt_psn', 'name', p, {'source_id': s})
-        L.node('vt_id', 'id_val', idv, {'platform': r.get('platform'), 'source_id': s})
-        L.edge('uses_id', ('vt_psn', 'name', p), ('vt_id', 'id_val', idv),
-               {'platform': r.get('platform'), 'valid_from': r.get('valid_from'),
+        L.node('vt_id', ID_KEY, ik, {'source_id': s})
+        if not p:
+            continue
+        psn_node(p, r, s)
+        L.edge('uses_id', ('vt_psn', PSN_KEY, p), ('vt_id', ID_KEY, ik),
+               {'platform': ik[0], 'valid_from': r.get('valid_from'),
                 'valid_to': r.get('valid_to'), 'source_id': s})
 
     # ── 통화·메시지 → contacted 집계 (규격서 §4) ──
@@ -538,7 +640,8 @@ def main():
         if not a or not b:
             continue
         ch = (r.get('channel') or r.get('snd_platform') or 'msg').lower()
-        k = (('vt_id', 'id_val', a), ('vt_id', 'id_val', b), ch)
+        ka, kb = idkey(a, r.get('snd_platform')), idkey(b, r.get('rcv_platform'))
+        k = (('vt_id', ID_KEY, ka), ('vt_id', ID_KEY, kb), ch)
         d = agg[k]
         d['msg'] += 1
         t = day(r.get('msg_ymdhm'))
@@ -546,8 +649,8 @@ def main():
             d['first'] = min(d['first'] or t, t)
             d['last'] = max(d['last'] or t, t)
         d['src'].add(sid(r, 'CSV-id-msg'))
-        L.node('vt_id', 'id_val', a, {'platform': r.get('snd_platform'), 'source_id': sid(r, 'CSV-id-msg')})
-        L.node('vt_id', 'id_val', b, {'platform': r.get('rcv_platform'), 'source_id': sid(r, 'CSV-id-msg')})
+        L.node('vt_id', ID_KEY, ka, {'source_id': sid(r, 'CSV-id-msg')})
+        L.node('vt_id', ID_KEY, kb, {'source_id': sid(r, 'CSV-id-msg')})
     for (a, b, ch), d in agg.items():
         props = {'channel': ch, 'first_dt': d['first'], 'last_dt': d['last'],
                  'source_id': '|'.join(sorted(d['src']))}
@@ -608,7 +711,11 @@ def main():
         lab, keyp = SUBJ_LABEL[st]
         s = sid(r, 'CSV-ip-use')
         if lab == 'vt_psn':
-            sv = resolve_psn(sv, 'tbl_eg_ip_use')
+            sv = resolve_subj_psn(sv, 'tbl_eg_ip_use')
+        elif lab == 'vt_id':
+            sv = resolve_subj_id(sv, 'tbl_eg_ip_use')
+        if not sv:
+            continue
         L.node(lab, keyp, sv, {'source_id': s})
         L.node('vt_ip', 'ip_addr', ip, {'source_id': s})
         # 접속 행마다 SET 으로 덮어쓰면 마지막 행 시각만 남는다 → (주체, IP) 집계
@@ -625,12 +732,39 @@ def main():
         lab, keyp = SUBJ_LABEL[st]
         s = sid(r, 'CSV-loc-use')
         if lab == 'vt_psn':
-            sv = resolve_psn(sv, 'tbl_eg_loc_use')
+            sv = resolve_subj_psn(sv, 'tbl_eg_loc_use')
+        elif lab == 'vt_id':
+            sv = resolve_subj_id(sv, 'tbl_eg_loc_use')
+        if not sv:
+            continue
         L.node(lab, keyp, sv, {'source_id': s})
         L.node('vt_loc', 'loc_id', loc, {'source_id': s})
         t = (r.get('evt_ymdhm') or '').strip() or None      # 이전엔 저장되지 않고 버려졌다
         L.agg_edge('located_at', (lab, keyp, sv), ('vt_loc', 'loc_id', loc),
                    {'first_dt': t, 'last_dt': t, 'evt_count': 1 if t else 0}, source_id=s)
+
+    if need_org:
+        conn.rollback()
+        sys.exit(f'psn_id 없이 이름만 있는 인물이 {len(set(need_org))}명 있습니다 (예: {sorted(set(need_org))[:3]}).\n'
+                 f"  이 인물들의 키 'psn:{{기관}}:{{이름}}' 을 만들려면 --org <기관코드> 를 지정하십시오. 아무것도 쓰지 않았습니다.")
+
+    # ── 다른 기관의 같은 이름 인물 → same_as 후보 (이름만으로 식별된 인물끼리, 가린 이름 제외) ──
+    others = defaultdict(set)
+    for v, _pr in L.existing('vt_psn'):
+        m = re.match(r'^psn:([^:]+):(.+)$', v)
+        if m and m.group(1) != org:
+            others[m.group(2)].add(v)
+    n_same_as = 0
+    for nm in sorted(synth_names):
+        if '*' in nm:
+            continue
+        me = f'psn:{org}:{nm}'
+        for other in sorted(others.get(nm, ())):
+            a, b = sorted((me, other))
+            L.edge('same_as', ('vt_psn', PSN_KEY, a), ('vt_psn', PSN_KEY, b),
+                   {'confidence': 0.5, 'match_basis': 'name_exact', 'review_status': 'pending',
+                    'traversal_policy': 'candidate_only', 'source_id': 'LOAD-name-match'})
+            n_same_as += 1
 
     L.flush()
 
@@ -640,13 +774,19 @@ def main():
         for (lab, prop), items in sorted(L.conflicts.items()):
             print(f'      {lab}.{prop}: {len(items)}건  예) ' +
                   ', '.join(f'{k}: {o} ≠ {n}' for k, o, n in sorted(items)[:3]))
-        print('      → 은행별 동일 계좌번호·동명이인·플랫폼별 동일 ID 는 현재 분리되지 않습니다.')
+        print('      → 은행별 동일 계좌번호는 현재 분리되지 않습니다. 같은 psn_id 에 다른 이름이면 원천을 확인하십시오.')
     if unresolved:
-        print(f'  ⚠ psn_id 를 이름으로 해석하지 못했습니다 ({len(unresolved)}건) — '
-              f'tbl_vt_psn(인물 노드 파일)이 없거나 해당 psn_id 가 없습니다.')
-        for u in unresolved[:5]:
+        print(f'  ⚠ 인물 파일(tbl_vt_psn)에 없는 psn_id ({len(set(unresolved))}건) — '
+              f'이름 등 인물 속성 없이 psn_id 만으로 인물 노드가 생겼습니다.')
+        for u in sorted(set(unresolved))[:5]:
             print(f'      {u}')
-        print('      → 이대로면 같은 사람이 이름과 psn_id 로 갈라집니다.')
+    if ambiguous:
+        print(f'  ⚠ 누구인지 정할 수 없어 건너뛴 참조 ({len(ambiguous)}건) — 동명이인·플랫폼별 같은 아이디:')
+        for u in ambiguous[:5]:
+            print(f'      {u}')
+        print('      → 관계 파일에 prsn_id(인물)·platform(계정)을 채워 주십시오.')
+    if n_same_as:
+        print(f'  · 다른 기관의 같은 이름 인물 {n_same_as}쌍을 same_as 후보(review_status=pending)로 이었습니다.')
     conn.commit()                 # 잔여 배치 확정
     conn.autocommit = True        # 이후 집계 조회
     print(f'[{args.graph}] 새 노드 {L.n_node} · 보강 노드 {L.n_enriched} · 엣지 {L.n_edge}'
