@@ -31,6 +31,11 @@ class RelationshipInferencer:
         from app.services.ontology_service import KICSCrimeDomainOntology
         return KICSCrimeDomainOntology.COLUMN_PATTERNS
     
+    @staticmethod
+    def _onto():
+        from app.services.ontology_service import KICSCrimeDomainOntology
+        return KICSCrimeDomainOntology
+
     # 관계 추론 규칙 - ontology_service.py에서 통합 관리
     # 아래는 fallback용으로 유지 (import 실패 시 사용)
     _FALLBACK_RELATIONSHIP_RULES = {
@@ -82,7 +87,7 @@ class RelationshipInferencer:
         # ═══════════════════════════════════════════════════════════
         ("account", "account"): {"type": "transferred_to", "description": "자금 이체"},
         ("phone", "phone"): {"type": "contacted", "description": "통화/연락"},
-        ("ip", "ip"): {"type": "communicated_with", "description": "IP 통신"},
+        # V4.9: ("ip", "ip") → communicated_with 제거 — 같은 행의 두 IP 는 통신 근거가 아님(자동 추론 deny)
         ("phone", "account"): {"type": "linked_to", "description": "번호-계좌 연결"},
         ("ip", "site"): {"type": "accessed", "description": "사이트 접속"},
     }
@@ -193,7 +198,7 @@ class RelationshipInferencer:
                     if type_name in column_patterns:
                         config = column_patterns[type_name]
                         for pattern in config["patterns"]:
-                            if pattern.lower() in col_lower:
+                            if cls._onto().pattern_in_column(pattern, col_lower):
                                 result[col] = {
                                     "type": type_name,
                                     "kics_label": config["kics_label"],
@@ -212,7 +217,9 @@ class RelationshipInferencer:
                 column_patterns = cls._get_column_patterns()
                 for type_name, config in column_patterns.items():
                     for pattern in config["patterns"]:
-                        if pattern.lower() in col_lower or col_lower in pattern.lower():
+                        # V4.9: 짧은 영문 패턴은 단어 단위, 역포함은 4자 이상 컬럼명만 ('no'·'to' 같은 컬럼 오인 방지)
+                        if cls._onto().pattern_in_column(pattern, col_lower) or \
+                                (len(col_lower) > 3 and col_lower in pattern.lower()):
                             result[col] = {
                                 "type": type_name,
                                 "kics_label": config["kics_label"],
@@ -379,36 +386,65 @@ class RelationshipInferencer:
 
     @classmethod
     def _infer_relationships(cls, column_types):
-        """컬럼 타입 간 관계 추론"""
+        """컬럼 타입 간 관계 추론 — V4.9 자동 추론 정책(SoT AUTO_INFER_POLICY) 적용.
+
+        - deny 엣지(모집·협박·동일인·IP통신·파생)는 만들지 않는다 (규칙표에서 제외됨)
+        - 같은 컬럼끼리는 짝짓지 않는다 (자기 루프 금지)
+        - 같은 종류 두 컬럼(계좌·계좌 등)은 컬럼명 방향(출금→입금·발신→수신)이 있을 때만
+        - 인물 ↔ 사건은 컬럼명 역할(피의자·피해자·참고인)로 엣지를 고르고, 없으면 witness_in role=unknown 추천
+        - 각 관계에 policy('allow'|'suggest')·requires_review 를 붙인다
+        """
+        onto = cls._onto()
         relationships = []
-        
+
         type_to_columns = {}
         for col, info in column_types.items():
-            col_type = info.get("type", "other")
-            if col_type not in type_to_columns:
-                type_to_columns[col_type] = []
-            type_to_columns[col_type].append(col)
-        
-        # 통합된 관계 규칙 가져오기
+            type_to_columns.setdefault(info.get("type", "other"), []).append(col)
+
         relationship_rules = cls.get_relationship_rules()
-        
-        # 관계 규칙 적용
+
+        def add(c1, c2, t1, t2, rel_type, description, policy, props=None):
+            relationships.append({
+                "source_col": c1,
+                "target_col": c2,
+                "source_type": t1,
+                "target_type": t2,
+                "relation_type": rel_type,
+                "description": description,
+                "policy": policy,
+                "requires_review": policy != "allow",
+                "edge_props": props or {},
+                "confidence": 0.85 if policy == "allow" else 0.5,
+            })
+
+        # 인물 ↔ 사건: 역할 엣지를 컬럼명으로 판정 (규칙표의 (person, case) 는 쓰지 않음)
+        case_cols = type_to_columns.get("case", [])
+        for t in ("person", "suspect"):
+            for pc in type_to_columns.get(t, []):
+                edge, policy = onto.resolve_role_edge(pc)
+                if t == "suspect" and edge == "witness_in":
+                    edge, policy = "suspect_in", "allow"
+                for cc in case_cols:
+                    add(pc, cc, t, "case", edge, onto.RELATIONSHIPS[edge].get("meaning", ""), policy,
+                        None if policy == "allow" else {"role": "unknown"})
+
         for (type1, type2), rel_info in relationship_rules.items():
-            cols1 = type_to_columns.get(type1, [])
-            cols2 = type_to_columns.get(type2, [])
-            
-            for c1 in cols1:
-                for c2 in cols2:
-                    relationships.append({
-                        "source_col": c1,
-                        "target_col": c2,
-                        "source_type": type1,
-                        "target_type": type2,
-                        "relation_type": rel_info["type"],
-                        "description": rel_info["description"],
-                        "confidence": 0.85
-                    })
-        
+            if rel_info["type"] in ("suspect_in", "victim_in", "witness_in"):
+                continue                                    # 위에서 처리
+            policy = rel_info.get("policy") or onto.infer_policy(rel_info["type"])
+            if policy == "deny":
+                continue
+            for c1 in type_to_columns.get(type1, []):
+                for c2 in type_to_columns.get(type2, []):
+                    if c1 == c2:
+                        continue                            # 자기 루프 금지
+                    if type1 == type2 and not (onto.column_direction(c1) == "source"
+                                               and onto.column_direction(c2) == "target"):
+                        continue                            # 같은 종류는 출발→도착 방향 명시 필요
+                    add(c1, c2, type1, type2, rel_info["type"], rel_info["description"], policy)
+
+        # 자동(allow) 먼저 — 추천 목록·자동 선택에서 확실한 관계가 앞에 오도록
+        relationships.sort(key=lambda r: r["policy"] != "allow")
         return relationships
 
     @classmethod
@@ -432,7 +468,10 @@ class RelationshipInferencer:
                 "tgtKey": tgt_info.get("kics_property", tgt_col),
                 "edgeType": rel["relation_type"],
                 "confidence": rel["confidence"],
-                "description": rel["description"]
+                "description": rel["description"],
+                "policy": rel.get("policy", "suggest"),
+                "requires_review": rel.get("requires_review", True),
+                "edgeProps": rel.get("edge_props", {}),
             }
             mappings.append(mapping)
         

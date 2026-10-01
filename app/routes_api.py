@@ -606,7 +606,8 @@ def import_with_inference():
         multipart/form-data
         - file: CSV 파일
         - graph: 대상 그래프 이름
-        - mapping: 선택한 매핑 (JSON 문자열)
+        - mapping: 선택한 매핑 (JSON 문자열) — V4.9: 필수. 없으면 적재하지 않고
+          400 {"error": "mapping_required", "suggested_mappings": [...]} 를 돌려준다
     
     Response:
         {
@@ -642,17 +643,15 @@ def import_with_inference():
             df.columns = df.columns.str.strip()
             
             infer_result = RelationshipInferencer.analyze_csv(df)
-            
-            if not infer_result.get('suggested_mappings'):
-                return jsonify({
-                    "error": "No relationships could be inferred from CSV"
-                }), 400
-            
-            # 첫 번째 매핑 사용
-            mapping = infer_result['suggested_mappings'][0]
-            
-            # 파일 포인터 리셋
-            file.seek(0)
+
+            # V4.9 (2026-10-01): 검토 없는 자동 적재 중단 — 같은 행에 함께 있다는 사실만으로 관계를
+            #   단정해 그래프에 쓰지 않는다. 추천 매핑을 돌려주고, 적재는 mapping 을 명시해 다시 호출.
+            return jsonify({
+                "error": "mapping_required",
+                "message": "자동 추론 매핑은 검토 후 mapping 파라미터로 명시해 다시 요청하십시오 "
+                           "(policy=allow 는 원천 기록상 성립, suggest 는 사람 확인 필요)",
+                "suggested_mappings": infer_result.get('suggested_mappings', []),
+            }), 400
         
         # 매핑 검증
         validation = RelationshipInferencer.validate_mapping(mapping)

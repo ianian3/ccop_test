@@ -1189,7 +1189,7 @@ class KICSCrimeDomainOntology:
         'suspect_in': {
             'domain': 'Person',
             'range': 'Case',
-            'source_types': [('person', 'case'), ('suspect', 'case_id')],
+            'source_types': [('suspect', 'case'), ('suspect', 'case_id')],   # V4.9: (person, case) 는 컬럼명 역할로 판정(resolve_role_edge)
             'semantic_relation': 'suspectIn',
             'label_ko': '피의자',
             'meaning': '인물이 사건의 피의자로 관련',
@@ -1199,7 +1199,7 @@ class KICSCrimeDomainOntology:
         'victim_in': {
             'domain': 'Person',
             'range': 'Case',
-            'source_types': [('person', 'case'), ('victim', 'case_id')],
+            'source_types': [('victim', 'case_id')],   # V4.9: (person, case) 는 컬럼명 역할로 판정(resolve_role_edge)
             'semantic_relation': 'victimIn',
             'label_ko': '피해자',
             'meaning': '인물이 사건의 피해자로 관련',
@@ -1209,7 +1209,7 @@ class KICSCrimeDomainOntology:
         'witness_in': {
             'domain': 'Person',
             'range': 'Case',
-            'source_types': [('person', 'case'), ('witness', 'case_id')],
+            'source_types': [('person', 'case'), ('witness', 'case_id')],   # (person, case) = 역할 미상 기본값 → 추천(role=unknown)
             'semantic_relation': 'witnessIn',
             'label_ko': '참고인',
             'meaning': '인물이 사건의 참고인·관련자로 연결 — 역할 미상은 role=\'unknown\'. V4.9: involves(Case→Person, 역할 미상) 통합',
@@ -1379,7 +1379,8 @@ class KICSCrimeDomainOntology:
         'transferred_to': {
             'domain': 'BankAccount',
             'range': 'BankAccount|CryptoWallet',      # V4.4 다형화: 가상자산 세탁 경로 포함
-            'source_types': [('from_account', 'to_account'), ('sender_account', 'receiver_account')],
+            'source_types': [('from_account', 'to_account'), ('sender_account', 'receiver_account'),
+                             ('account', 'account')],   # V4.9: 같은 종류 쌍은 컬럼명 방향(출금→입금)이 있을 때만
             'semantic_relation': 'transferredFundsTo',
             'label_ko': '이체',
             'meaning': '계좌(지갑) 간 이체 — 건별 거래 원본을 (보낸 쪽, 받는 쪽) 쌍당 1엣지로 집계한 원천 사실 엣지',
@@ -1613,7 +1614,7 @@ class KICSCrimeDomainOntology:
         'recruits': {
             'domain': 'Person',
             'range': 'Person',
-            'source_types': [('recruiter', 'recruit'), ('person', 'person')],
+            'source_types': [('recruiter', 'recruit')],   # V4.9: (person, person) 제거 — 인물 두 명만으로 모집 관계 단정 불가
             'semantic_relation': 'recruits',
             'label_ko': '모집',
             'meaning': '인물이 다른 인물을 모집함 (대포통장·판매원·투자자 유인)',
@@ -1731,7 +1732,7 @@ class KICSCrimeDomainOntology:
         'contacted': {
             'domain': 'Phone|DigitalID',   # V4.8: 카톡 '대화상대 목록'(계정간 연락관계 요약) 4,107건 실적재 반영
             'range': 'Phone|DigitalID',    #   — 개별 메시지 이벤트가 아닌 집계 관계라 sent/received_msg reification 불가
-            'source_types': [],
+            'source_types': [('caller', 'callee'), ('phone', 'phone')],   # V4.9: 통화내역 발신·수신 컬럼 (같은 종류는 방향 필수)
             'semantic_relation': 'contacted',
             'label_ko': '연락관계',
             'meaning': '전화번호/메신저 계정 간 통화·연락 관계 (vt_call·대화상대 목록의 요약 엣지 성격)',
@@ -1823,16 +1824,87 @@ class KICSCrimeDomainOntology:
         },
     }
     
+    # ─── CSV 관계 자동 추론 정책 (V4.9, 2026-10-01) ─────────────────────────────
+    # CSV 한 행에 두 값이 함께 있다는 것은 '같은 기록에 나왔다'는 뜻일 뿐이다. 그것만으로 성립하는
+    # 관계만 자동(allow), 명의/사용/역할을 사람이 확인해야 하는 관계는 추천(suggest), 행위·판단·파생
+    # 관계는 자동 생성 금지(deny). 목록에 없는 엣지는 suggest. (RelationshipInferencer·KICSSchemaMapper 공용)
+    AUTO_INFER_POLICY = {
+        'allow': {
+            'eg_used_account', 'eg_used_phone', 'eg_used_ip',   # 사건 CSV 의 증거 항목 = 사건 기록 자체
+            'filed_as',                                         # 진정서 ↔ 사건 전환 기록
+            'belongs_to',                                       # 계좌 행의 은행
+            'contains_file',                                    # 첨부 기록
+            'sent_msg',                                         # 발신자 컬럼(방향 명시) ↔ 메시지
+            'transferred_to', 'contacted',                      # 출금→입금 · 발신→수신 (컬럼명 방향 필수)
+            'suspect_in', 'victim_in',                          # 컬럼명에 역할(피의자·피해자)이 명시된 경우
+        },
+        'deny': {
+            'recruits', 'blackmails', 'knows',                  # 행위·관계 판단 — 같은 행이라는 사실로 단정 불가
+            'same_as',                                          # 동일인 판단 — 엔티티 해소 검토 대상
+            'communicated_with',                                # 두 IP 의 통신 — 네트워크 로그 근거 필요
+            'belongs_to_cluster', 'belongs_to_campaign',        # 파생(군집 규칙 산출)
+        },
+    }
+    # 컬럼명 방향 단서 — 영문은 단어 단위(customer·photo 의 'to' 오인 방지), 한글은 부분 일치
+    _DIR_TOKENS_EN = {'source': {'from', 'sender', 'src', 'source', 'dsptch', 'orig', 'caller'},
+                      'target': {'to', 'receiver', 'dst', 'target', 'rcptn', 'dest', 'callee'}}
+    _DIR_TOKENS_KO = {'source': ('출금', '송금', '보낸', '발신', '송신'),
+                      'target': ('입금', '수취', '받는', '수신', '수령')}
+    _ROLE_TOKENS = (('suspect_in', ('피의자', '용의자', '범인', 'suspect')),
+                    ('victim_in',  ('피해자', 'victim')),
+                    ('witness_in', ('참고인', '목격자', 'witness')))
+
+    @staticmethod
+    def _col_tokens(col):
+        import re
+        return [t for t in re.split(r'[^a-z0-9]+', str(col).lower()) if t]
+
+    @classmethod
+    def pattern_in_column(cls, pattern, col):
+        """컬럼명 부분 일치 — 영문 3자 이하 패턴(ip·to·mac·tel·url 등)은 단어 단위로만 (zip→ip, photo→to 오인 방지)."""
+        p, c = str(pattern).lower(), str(col).lower()
+        if p.isascii() and p.isalnum() and len(p) <= 3:
+            return p in cls._col_tokens(c)
+        return p in c
+
+    @classmethod
+    def column_direction(cls, col):
+        """컬럼명에서 방향 단서 → 'source' | 'target' | None (둘 다 있으면 None)."""
+        c, toks = str(col).lower(), set(cls._col_tokens(col))
+        hit = {d for d in ('source', 'target')
+               if toks & cls._DIR_TOKENS_EN[d] or any(k in c for k in cls._DIR_TOKENS_KO[d])}
+        return hit.pop() if len(hit) == 1 else None
+
+    @classmethod
+    def resolve_role_edge(cls, col):
+        """인물 컬럼명 → (역할 엣지, 정책). 역할 단서가 없으면 witness_in role=unknown 추천."""
+        c = str(col).lower()
+        for edge, keys in cls._ROLE_TOKENS:
+            if any(k in c for k in keys):
+                return edge, 'allow'          # 컬럼명에 역할이 명시됨 = 원천 기록의 사실
+        return 'witness_in', 'suggest'        # 역할 미상 — 사람 확인 (적재 시 role='unknown')
+
+    @classmethod
+    def infer_policy(cls, edge):
+        """엣지의 자동 추론 정책: 'allow' | 'suggest' | 'deny' (SoT 밖 이름은 deny)."""
+        if edge not in cls.RELATIONSHIPS or edge in cls.AUTO_INFER_POLICY['deny']:
+            return 'deny'
+        return 'allow' if edge in cls.AUTO_INFER_POLICY['allow'] else 'suggest'
+
     @classmethod
     def get_relationship_rules(cls):
-        """LLM 추론용 관계 규칙 반환 (source_types → relation_type)"""
+        """LLM 추론용 관계 규칙 반환 (source_types → relation_type). V4.9: deny 엣지 제외 + policy 동봉."""
         rules = {}
         for rel_type, rel_def in cls.RELATIONSHIPS.items():
+            policy = cls.infer_policy(rel_type)
+            if policy == 'deny':
+                continue
             for source_types in rel_def.get('source_types', []):
                 rules[source_types] = {
                     'type': rel_type,
                     'description': rel_def.get('meaning', ''),
-                    'legal_significance': rel_def.get('legal_significance')
+                    'legal_significance': rel_def.get('legal_significance'),
+                    'policy': policy,
                 }
         return rules
 

@@ -15,6 +15,8 @@ from openai import OpenAI
 from flask import current_app
 import logging
 
+logger = logging.getLogger(__name__)
+
 
 class KICSSchemaMapper:
     """LLM 기반 KICS 확장 스키마 자동 매핑"""
@@ -195,6 +197,17 @@ Case 관계: suspect_in, victim_in, witness_in (Actor → Case, 역할 미상은
                     "confidence": 0.3
                 }
         
+        # V4.9 자동 추론 정책 — LLM 이 낸 관계도 SoT 밖 이름·deny 엣지(모집·동일인·IP통신 등)는 버리고 policy 부여
+        from app.services.ontology_service import KICSCrimeDomainOntology
+        kept = []
+        for rel in result.get("relationships") or []:
+            policy = KICSCrimeDomainOntology.infer_policy(rel.get("type"))
+            if policy == "deny":
+                logger.info(f"   [SchemaMapper] 자동 추론 제외: {rel.get('type')!r} ({rel.get('from_col')}→{rel.get('to_col')})")
+                continue
+            kept.append({**rel, "policy": policy, "requires_review": policy != "allow"})
+        result["relationships"] = kept
+
         # detected_action 기본값
         if "detected_action" not in result:
             result["detected_action"] = {
@@ -224,14 +237,14 @@ Case 관계: suspect_in, victim_in, witness_in (Actor → Case, 역할 미상은
             # Ontology 패턴 매칭
             for type_key, config in patterns.items():
                 # 패턴 매칭 (부분 일치, 대소문자 무시)
-                if any(p.lower() in col_lower for p in config["patterns"]):
+                if any(KICSCrimeDomainOntology.pattern_in_column(p, col_lower) for p in config["patterns"]):
                     info = cls._map_pattern_to_layer_info(type_key, config)
                     
-                    # [Role Detection] 컬럼명 기반 역할 조정
-                    if any(k in col_lower for k in ['출금', 'from', 'sender', '발신', 'source', 'src']):
-                        info['role'] = 'source'
-                    elif any(k in col_lower for k in ['입금', 'to', 'receiver', '수신', 'target', 'dst']):
-                        info['role'] = 'target'
+                    # [Role Detection] 컬럼명 기반 역할 조정 — V4.9: 영문은 단어 단위(customer·photo 의 'to' 오인 방지)
+                    direction = KICSCrimeDomainOntology.column_direction(col)
+                    if direction:
+                        info['role'] = direction
+                    info['role_explicit'] = bool(direction)
                     
                     layer_mapping[col] = info
                     
@@ -262,54 +275,38 @@ Case 관계: suspect_in, victim_in, witness_in (Actor → Case, 역할 미상은
             if role == "source": sources.append(col)
             elif role == "target": targets.append(col)
         
-        # 1. Source -> Target 연결 (기본 관계)
-        import itertools
+        # 1. Source -> Target 연결 — V4.9: SoT 엣지 이름·자동 추론 정책만 사용
+        #    (구: IP↔IP 를 무조건 communicated_with, SoT 밖 accessed·sent_message·related_to 생성)
+        #    엔티티 쌍 → (엣지, 방향 반전 여부). 같은 엔티티 쌍은 컬럼명에 방향이 명시돼야 한다.
+        pair_edges = {
+            ("BankAccount", "BankAccount"): ("transferred_to", False),
+            ("Phone", "Phone"):             ("contacted", False),
+            ("WebTrace", "NetworkTrace"):   ("resolves_to", False),
+            ("NetworkTrace", "WebTrace"):   ("resolves_to", True),    # 사이트→IP 방향으로 저장
+            ("Phone", "BankAccount"):       ("linked_to", False),
+        }
         for src in sources:
             for tgt in targets:
-                # 같은 컬럼 무시
-                if src == tgt: continue
-
-                # 엔티티 타입 확인
-                src_ent = layer_mapping.get(src, {}).get("entity")
-                tgt_ent = layer_mapping.get(tgt, {}).get("entity")
-
-                # Action 보정 (엔티티 기반)
-                action_type = detected_action.get("type")
-                if not action_type:
-                    if src_ent == "Phone" and tgt_ent == "Phone":
-                        action_type = "Call"
-                    elif src_ent == "NetworkTrace" and tgt_ent == "NetworkTrace":
-                        action_type = "Access" # IP-IP Communication
-                
-                # 관계 타입 결정 (엔티티 조합 우선)
-                # 1. 엔티티 기반 오버라이드 (액션 타입보다 우선)
-                if src_ent == "NetworkTrace" and tgt_ent == "WebTrace":
-                    rel_type = "accessed"
-                elif src_ent == "NetworkTrace" and tgt_ent == "NetworkTrace":
-                    rel_type = "communicated_with"
-                elif src_ent == "BankAccount" and tgt_ent == "BankAccount":
-                    rel_type = "transferred_to"
-                elif src_ent == "ContactInfo" and tgt_ent == "ContactInfo":
-                    rel_type = "contacted"
-                elif src_ent == "ContactInfo" and tgt_ent == "BankAccount":
-                    rel_type = "linked_to"
-                # 2. 액션 타입 기반
-                elif action_type == "Transfer":
-                    rel_type = "transferred_to"
-                elif action_type == "Call":
-                    rel_type = "contacted"
-                elif action_type == "Message":
-                    rel_type = "sent_message"
-                elif action_type == "Access":
-                    rel_type = "accessed"
-                else:
-                    rel_type = "related_to"
-                
+                if src == tgt:
+                    continue
+                si, ti = layer_mapping.get(src, {}), layer_mapping.get(tgt, {})
+                hit = pair_edges.get((si.get("entity"), ti.get("entity")))
+                if not hit:
+                    continue                      # 근거 없는 조합은 관계를 만들지 않는다
+                rel_type, swap = hit
+                if si.get("entity") == ti.get("entity") and not (si.get("role_explicit") and ti.get("role_explicit")):
+                    continue                      # 같은 종류는 출발·도착이 컬럼명에 명시된 경우만
+                policy = KICSCrimeDomainOntology.infer_policy(rel_type)
+                if policy == "deny":
+                    continue
+                a, b = (tgt, src) if swap else (src, tgt)
                 relationships.append({
-                    "from_col": src,
-                    "to_col": tgt,
+                    "from_col": a,
+                    "to_col": b,
                     "type": rel_type,
-                    "confidence": 0.5
+                    "policy": policy,
+                    "requires_review": policy != "allow",
+                    "confidence": 0.85 if policy == "allow" else 0.5
                 })
         
         return {
@@ -330,6 +327,8 @@ Case 관계: suspect_in, victim_in, witness_in (Actor → Case, 역할 미상은
         mapping_rules = {
             "case_id": {"layer": "Case", "entity": "Case", "role": "anchor"},
             "phone": {"layer": "Evidence", "entity": "Phone", "role": "source"}, 
+            "caller": {"layer": "Evidence", "entity": "Phone", "role": "source"},   # V4.9: 통화내역 발신·수신 번호
+            "callee": {"layer": "Evidence", "entity": "Phone", "role": "target"},
             "account": {"layer": "Evidence", "entity": "BankAccount", "role": "target"},
             "ip": {"layer": "Evidence", "entity": "NetworkTrace", "role": "source"},
             "site": {"layer": "Evidence", "entity": "WebTrace", "role": "target"},
