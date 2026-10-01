@@ -1668,7 +1668,7 @@ def pipeline_csv_to_v40_graph():
                 if fname.lower().startswith('tbl_'):
                     success, result = RDBService.import_predefined_schema_to_rdb(
                         temp_path, fname, clear_existing=clear_now,
-                        source_domain=source_domain, source_id=source_id,
+                        source_domain=source_domain, source_id=source_id, target_schema=target_schema,
                     )
                 else:
                     # P0-1(silent data loss 방지): 비-tbl_ 파일은 import_csv_to_rdb가 public 스키마에
@@ -1744,7 +1744,7 @@ def pipeline_csv_to_v40_graph():
                 # 적재된 파일이 없으면 변환하지 않음 — 이전 업로드의 스테이징 잔존분으로 그래프가
                 # 만들어져 '성공'처럼 보이는 것 방지
                 raise RuntimeError("적재된 파일이 없어 그래프 변환을 건너뜀")
-            success, stats = RdbToGraphService.transfer_data(graph_name)
+            success, stats = RdbToGraphService.transfer_data(graph_name, source_schema=target_schema)
             if success and isinstance(stats, dict):
                 layer_results['L4'].update({
                     'success': True,

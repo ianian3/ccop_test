@@ -16,7 +16,7 @@ import json
 import traceback
 import logging
 from flask import current_app
-from app.database import safe_set_graph_path
+from app.database import safe_set_graph_path, cypher_str, validate_graph_path
 from app.services.ontology_service import KICSCrimeDomainOntology, OntologyEnricher
 from app.services.ip_role_temporal import derive_valid_interval  # V4.6 S2: used_ip valid_from/to 백필 규칙
 
@@ -144,13 +144,20 @@ class RdbToGraphService:
             conn.close()
 
     @staticmethod
-    def transfer_data(graph_name="test_ai01"):
+    def transfer_data(graph_name="test_ai01", source_schema=None):
         """
         RDB V3(49개 테이블) 데이터를 POLE 6계층 온톨로지 기반으로 GDB(AgensGraph)에 변환 적재
         """
         from flask import current_app
         # V4.0 격리 스키마 — RDB 데이터 읽을 스키마 (기본 test_v40)
-        source_schema = current_app.config.get('_V40_TARGET_SCHEMA', 'test_v40')
+        # 2026-10-01 핫픽스: 인자로 받는다(요청값을 공용 app.config 에 써서 동시 요청이 서로 덮어쓰던 문제).
+        #   그래프명·스키마명은 쿼리에 식별자로 끼워 넣으므로 진입 시 화이트리스트 검증 — 검증 실패한 이름으로
+        #   CREATE GRAPH 를 실행하던 우회 경로도 이것으로 막힌다.
+        source_schema = source_schema or current_app.config.get('_V40_TARGET_SCHEMA', 'test_v40')
+        if not validate_graph_path(graph_name):
+            return False, f"허용되지 않는 그래프명: {graph_name!r}"
+        if not validate_graph_path(source_schema):
+            return False, f"허용되지 않는 스키마명: {source_schema!r}"
 
         logger.info(f"\n{'='*60}")
         logger.info(f"🚀 [RDB → GDB] V3.2 POLE 6계층 온톨로지 기반 변환 시작")
@@ -177,9 +184,11 @@ class RdbToGraphService:
 
         def safe_str(val):
             # Cypher 작은따옴표 문자열 리터럴용 이스케이프 — 값 삭제 금지(O'Brien·주소 보존).
-            # 순서 중요: 백슬래시 먼저 → 작은따옴표. 개행/제어문자는 공백화.
+            # 개행/제어문자는 공백화.
             if val is None: return ''
-            s = str(val).replace("\\", "\\\\").replace("'", "\\'")
+            # 2026-10-01 핫픽스: AgensGraph 는 \' 를 이스케이프로 보지 않는다(문자열이 끝남 → 행 누락·주입).
+            #   백슬래시 두 번(JSON 단계) + 작은따옴표 두 번('') — app.database.cypher_str 와 동일 규칙
+            s = str(val).replace("\\", "\\\\").replace("'", "''")
             return s.replace("\n", " ").replace("\r", " ").replace("\t", " ").strip()
 
         try:
@@ -671,33 +680,10 @@ class RdbToGraphService:
                     logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
             conn.commit()
 
-            # 4-4. 인물과 계좌/전화 소유관계 추론 (Person <-> Evidence)
-            # 여기서는 TB_FRD_VCTM_RPT로 엮인 증거와 케이스를 인물과 엮어 소유를 만들거나, PRSN 테이블 기반 간단 맾핑 조인
-            # 현재 스크립트에는 명시적인 소유 매핑이 적재되지 않으므로, V1 호환을 위해 피의자와 사건의 증거를 연결
-            try:
-                cur.execute("""
-                    SELECT P.PRSN_ID, R.SUSPCT_BACNT_NO, R.SUSPCT_TELNO
-                    FROM TB_PRSN P, TB_FRD_VCTM_RPT R
-                    WHERE R.DAM_CN LIKE '사건참조:%'
-                    LIMIT 1000
-                """)
-                rows = cur.fetchall()
-            except Exception:
-                conn.rollback(); rows = []
-                try: cur.execute(f'SET search_path = "{source_schema}", public;'); conn.commit()
-                except Exception: conn.rollback()
-            for r in rows:
-                try:
-                    pid, actno, telno = safe_str(r[0]), safe_str(r[1]), safe_str(r[2])
-                    if actno:
-                        cur.execute(f"MATCH (p:vt_psn {{id: '{pid}'}}), (a:vt_bacnt {{account_no: '{actno}'}}) MERGE (p)-[r:has_account]->(a) SET r.evid_grade = 'B', r.src_tier = 1")
-                        stats["edges"] += 1
-                    if telno:
-                        cur.execute(f"MATCH (p:vt_psn {{id: '{pid}'}}), (t:vt_telno {{telno: '{telno}'}}) MERGE (p)-[r:owns_phone]->(t) SET r.evid_grade = 'B', r.src_tier = 1")
-                        stats["edges"] += 1
-                except Exception as _e:
-                    logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
-            conn.commit()
+            # 4-4. (2026-10-01 핫픽스로 제거) 인물↔계좌/전화 소유관계 추론
+            #   종전 SQL `FROM TB_PRSN P, TB_FRD_VCTM_RPT R` 은 조인 조건이 없는 교차 조인이라 모든 인물을 모든 피의자
+            #   계좌·전화에 has_account·owns_phone 으로 이었다(거짓 명의 관계). 신고서의 피의자 계좌는 '사건에 쓰인 증거'일 뿐
+            #   명의 근거가 아니며, 그 관계는 위 4-3 의 eg_used_account·eg_used_phone 이 이미 표현한다.
 
             # ─── P1 확장: Phase 3 ───────────────────────────────
             logger.info(f"\n🔗 Phase 3: P1 도메인 확장 (조직/메시지/소유관계)")
@@ -2020,7 +2006,7 @@ class RdbToGraphService:
         stats = {"nodes": 0, "edges": 0}
 
         def safe_str(v):
-            return str(v).replace("'", "''") if v is not None else ''
+            return cypher_str(v)   # 2026-10-01 핫픽스: 백슬래시+따옴표 (app.database)
 
         try:
             from app.database import safe_set_graph_path
@@ -2109,7 +2095,9 @@ class RdbToGraphService:
                             stats["nodes"] += 1
                         cur.execute(f"MATCH (a:vt_bacnt {{account_no: '{actno}'}}), (s:vt_src {{src_id: 'src-kics-official'}}) MERGE (a)-[:sourced_from {{src_tier: 1, rec_created: toString(datetime())}}]->(s)")
                         stats["edges"] += 1
-                        cur.execute(f"MATCH (p:vt_psn {{id: '{pid_s}'}}), (a:vt_bacnt {{account_no: '{actno}'}}) MERGE (p)-[r:has_account]->(a) SET r.evid_grade = 'B', r.src_tier = 1")
+                        # 2026-10-01 핫픽스: 종전엔 사건 참여자 전원(피해자 포함)을 신고서의 피의자 계좌에 has_account(명의)로 이었다
+                        #   → 사건 증거 엣지로 (신고서 근거가 말하는 것은 '사건에 쓰인 계좌')
+                        cur.execute(f"MATCH (c:vt_case {{incdnt_no: '{case_s}'}}), (a:vt_bacnt {{account_no: '{actno}'}}) MERGE (c)-[r:eg_used_account]->(a) SET r.evid_grade = 'B', r.src_tier = 1")
                         stats["edges"] += 1
                     except Exception as _e:
                         logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
@@ -2136,7 +2124,7 @@ class RdbToGraphService:
                             stats["nodes"] += 1
                         cur.execute(f"MATCH (t:vt_telno {{telno: '{telno}'}}), (s:vt_src {{src_id: 'src-kics-official'}}) MERGE (t)-[:sourced_from {{src_tier: 1, rec_created: toString(datetime())}}]->(s)")
                         stats["edges"] += 1
-                        cur.execute(f"MATCH (p:vt_psn {{id: '{pid_s}'}}), (t:vt_telno {{telno: '{telno}'}}) MERGE (p)-[r:owns_phone]->(t) SET r.evid_grade = 'B', r.src_tier = 1")
+                        cur.execute(f"MATCH (c:vt_case {{incdnt_no: '{case_s}'}}), (t:vt_telno {{telno: '{telno}'}}) MERGE (c)-[r:eg_used_phone]->(t) SET r.evid_grade = 'B', r.src_tier = 1")   # 2026-10-01 핫픽스(구 owns_phone)
                         stats["edges"] += 1
                     except Exception as _e:
                         logger.debug("행/항목 처리 실패(건너뜀): %s", _e)

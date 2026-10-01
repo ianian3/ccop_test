@@ -50,7 +50,7 @@ class RDBService:
 
     @staticmethod
     def import_predefined_schema_to_rdb(file_path, filename, clear_existing=False,
-                                         source_domain='KICS', source_id=None):
+                                         source_domain='KICS', source_id=None, target_schema=None):
         # V4.0 메타: source_domain/source_id 는 Phase 2.1.E 에서 수신만 하고
         # 실제 SOURCE_DOMAIN/SOURCE_ID 컬럼 적재는 DA팀 V3.7 DDL 운영 적용(D+8) 이후 활성화.
         import pandas as pd
@@ -65,7 +65,11 @@ class RDBService:
             logger.warning(f"[V4.0] 미지원 규격 파일 거부: {_why}")
             return False, _why
         # V4.0 격리 스키마 (test_v40) 기본 사용 — public 충돌 회피
-        target_schema = current_app.config.get('_V40_TARGET_SCHEMA', 'test_v40')
+        # 2026-10-01 핫픽스: 인자 우선(공용 config 경유 시 동시 요청이 덮어씀) + 식별자 검증(search_path 주입 차단)
+        target_schema = target_schema or current_app.config.get('_V40_TARGET_SCHEMA', 'test_v40')
+        from app.database import validate_graph_path
+        if not validate_graph_path(target_schema):
+            return False, f"허용되지 않는 스키마명: {target_schema!r}"
         logger.info(f"[V4.0] import_predefined_schema source_domain={source_domain} source_id={source_id} target_schema={target_schema}")
         
         db_config = current_app.config['DB_CONFIG']

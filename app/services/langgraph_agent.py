@@ -12,6 +12,7 @@ from app.services.ai_service import AIService
 from app.services.graph_service import GraphService
 from app.services.schema_tools_server import SchemaToolServer
 from app.services.ontology_service import KICSCrimeDomainOntology
+from app.database import cypher_str
 
 logger = logging.getLogger(__name__)
 
@@ -164,7 +165,7 @@ def _bridge_two_hop(cypher: str, graph_path: str):
     if not anchors:
         return None, ""
     a_key, a_val = anchors[0]
-    esc = a_val.replace("'", "''")
+    esc = cypher_str(a_val)   # 2026-10-01: 백슬래시+따옴표 이스케이프
 
     conn = None
     try:
@@ -265,7 +266,7 @@ def _anchor_neighborhood(cypher: str, graph_path: str) -> str:
         cur = conn.cursor()
         safe_set_graph_path(cur, graph_path)
         for key, val in lits:
-            esc = val.replace("'", "''")
+            esc = cypher_str(val)   # 2026-10-01: 백슬래시+따옴표 이스케이프
             agg = {}
             for direction, pat in (('in', '(n)<-[r]-(m)'), ('out', '(n)-[r]->(m)')):
                 try:
@@ -439,7 +440,7 @@ def _augment_anchor_node(elements, cypher, graph_path):
         if isinstance(el, dict) and el.get('group') == 'nodes':
             if str(el.get('data', {}).get('props', {}).get(key, '')) == val:
                 return elements  # 앵커 노드가 이미 결과에 있음
-    ev = val.replace("'", "''")
+    ev = cypher_str(val)   # 2026-10-01: 백슬래시+따옴표 이스케이프
     wrapped = (f"SELECT * FROM cypher('{graph_path}', $$ MATCH (n:{lbl} {{{key}: '{ev}'}}) "
                f"OPTIONAL MATCH (n)-[r]-(m) RETURN n, r, m $$) AS (n agtype, r agtype, m agtype);")
     try:

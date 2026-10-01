@@ -1,6 +1,6 @@
 import json
 import logging
-from app.database import get_db_connection, safe_props, safe_set_graph_path, validate_graph_path
+from app.database import get_db_connection, safe_props, safe_set_graph_path, validate_graph_path, cypher_str, safe_ident, safe_elem_id
 from app.core import query_guard
 from app.services.subgraph_service import SubGraphService
 from app.services.ai_service import AIService
@@ -474,7 +474,7 @@ class GraphService:
         seen_nodes = set()
         node_ids = []
         # Cypher 문자열 리터럴 이스케이프
-        kw = (keyword or "").replace("\\", "\\\\").replace("'", "\\'")
+        kw = cypher_str(keyword or "")   # 2026-10-01 핫픽스: 검색어 주입 차단(구 \' 이스케이프는 AgensGraph 에서 무효)
         try:
             safe_set_graph_path(cur, graph_path)
 
@@ -1552,15 +1552,16 @@ class GraphService:
             if properties:
                 prop_list = []
                 for k, v in properties.items():
-                    k_str = str(k).replace('"', '').replace("'", "")
-                    if isinstance(v, (int, float)):
+                    k_str = safe_ident(k, '속성 키')                     # 2026-10-01 핫픽스: 키 검증
+                    if isinstance(v, bool):
+                        prop_list.append(f"{k_str}: {'true' if v else 'false'}")
+                    elif isinstance(v, (int, float)):
                         prop_list.append(f"{k_str}: {v}")
                     else:
-                        v_str = str(v).replace("'", "''")
-                        prop_list.append(f"{k_str}: '{v_str}'")
+                        prop_list.append(f"{k_str}: '{cypher_str(v)}'")
                 props_str = "{" + ", ".join(prop_list) + "}"
                 
-            cur.execute(f"CREATE (n:{label} {props_str}) RETURN id(n)")
+            cur.execute(f"CREATE (n:{safe_ident(label, '라벨')} {props_str}) RETURN id(n)")
             new_id = cur.fetchone()[0]
             logger.info(f"▶ [CreateNode] Cypher CREATE → {graph_name}.{label}, ID: {new_id}")
             return True, str(new_id)
@@ -1583,15 +1584,17 @@ class GraphService:
             if properties:
                 prop_list = []
                 for k, v in properties.items():
-                    k_str = str(k).replace('"', '').replace("'", "")
-                    if isinstance(v, (int, float)):
+                    k_str = safe_ident(k, '속성 키')                     # 2026-10-01 핫픽스: 키 검증
+                    if isinstance(v, bool):
+                        prop_list.append(f"{k_str}: {'true' if v else 'false'}")
+                    elif isinstance(v, (int, float)):
                         prop_list.append(f"{k_str}: {v}")
                     else:
-                        v_str = str(v).replace("'", "''") 
-                        prop_list.append(f"{k_str}: '{v_str}'")
+                        prop_list.append(f"{k_str}: '{cypher_str(v)}'")
                 props_str = "{" + ", ".join(prop_list) + "}"
                 
-            q = f"MATCH (a), (b) WHERE id(a) = '{src_id}' AND id(b) = '{tgt_id}' CREATE (a)-[r:{label} {props_str}]->(b) RETURN id(r)"
+            q = (f"MATCH (a), (b) WHERE id(a) = '{safe_elem_id(src_id)}' AND id(b) = '{safe_elem_id(tgt_id)}' "
+                 f"CREATE (a)-[r:{safe_ident(label, '엣지 타입')} {props_str}]->(b) RETURN id(r)")
             cur.execute(q)
             new_id = cur.fetchone()[0]
             conn.commit()

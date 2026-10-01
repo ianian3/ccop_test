@@ -3,7 +3,7 @@ import psycopg2
 import json
 import re
 from flask import current_app
-from app.database import safe_set_graph_path
+from app.database import safe_set_graph_path, cypher_str, safe_ident
 from app.services.subgraph_service import SubGraphService
 import logging
 
@@ -378,7 +378,10 @@ class ETLService:
                     if not id_key:
                         continue
                     
-                    id_value = str(enriched_props[id_key]).replace("'", "''")  # SQL escape
+                    # 2026-10-01 핫픽스: 라벨·키는 식별자 검증, 값은 Cypher 리터럴 이스케이프(cypher_str)
+                    dynamic_label = safe_ident(dynamic_label, '라벨')
+                    id_key = safe_ident(id_key, '속성 키')
+                    id_value = cypher_str(enriched_props[id_key])
                     
                     # 2. 노드 존재 확인
                     check_query = f"""
@@ -390,7 +393,7 @@ class ETLService:
                     
                     if existing:
                         # 3-A. 기존 노드 업데이트
-                        set_clauses = [f"n.{k} = '{str(v).replace(chr(39), chr(39)+chr(39))}'" 
+                        set_clauses = [f"n.{safe_ident(k, '속성 키')} = '{cypher_str(v)}'"
                                       for k, v in enriched_props.items()]
                         set_str = ", ".join(set_clauses)
                         
@@ -430,9 +433,9 @@ class ETLService:
                 edge_props = edge_data['props']
                 
                 try:
-                    # SQL escape
-                    src_val_escaped = str(src_val).replace("'", "''")
-                    tgt_val_escaped = str(tgt_val).replace("'", "''")
+                    # 2026-10-01 핫픽스: 노드 조회는 SQL 파라미터 바인딩(jsonb 포함 연산), 키는 식별자 검증
+                    src_match = json.dumps({safe_ident(src_prop_key, '속성 키'): str(src_val)}, ensure_ascii=False)
+                    tgt_match = json.dumps({safe_ident(tgt_prop_key, '속성 키'): str(tgt_val)}, ensure_ascii=False)
                     
                     # 온톨로지 메타데이터 추가 (엣지)
                     from app.services.ontology_service import OntologyEnricher
@@ -448,16 +451,16 @@ class ETLService:
                     )
 
                     # 엣지 속성 문자열 생성
-                    props_list = [f"{k}: '{str(v).replace(chr(39), chr(39)+chr(39))}'" for k, v in enriched_edge_props.items()]
+                    props_list = [f"{safe_ident(k, '속성 키')}: '{cypher_str(v)}'" for k, v in enriched_edge_props.items()]
                     edge_props_str = ", ".join(props_list) if props_list else ""
                     
                     # 1. Source 노드 찾기 (ag_vertex 사용 - 모든 라벨 검색)
                     find_src_query = f"""
                     SELECT id FROM "{target_graph}"."ag_vertex"
-                    WHERE properties @> '{{"{src_prop_key}": "{src_val_escaped}"}}'::jsonb
+                    WHERE properties @> %s::jsonb
                     LIMIT 1
                     """
-                    cur.execute(find_src_query)
+                    cur.execute(find_src_query, (src_match,))
                     src_result = cur.fetchone()
                     if not src_result:
                         continue
@@ -465,10 +468,10 @@ class ETLService:
                     # 2. Target 노드 찾기
                     find_tgt_query = f"""
                     SELECT id FROM "{target_graph}"."ag_vertex"
-                    WHERE properties @> '{{"{tgt_prop_key}": "{tgt_val_escaped}"}}'::jsonb
+                    WHERE properties @> %s::jsonb
                     LIMIT 1
                     """
-                    cur.execute(find_tgt_query)
+                    cur.execute(find_tgt_query, (tgt_match,))
                     tgt_result = cur.fetchone()
                     if not tgt_result:
                         continue
@@ -527,11 +530,12 @@ class ETLService:
                             SELECT v1.id, v2.id 
                             FROM "{target_graph}"."ag_vertex" v1,
                                  "{target_graph}"."ag_vertex" v2
-                            WHERE v1.properties ->> '{add_src_key}' = '{add_src_val}'
-                              AND v2.properties ->> '{add_tgt_key}' = '{add_tgt_val}'
+                            WHERE v1.properties ->> %s = %s
+                              AND v2.properties ->> %s = %s
                             LIMIT 1
                             """
-                            cur.execute(edge_create_query)
+                            # 2026-10-01 핫픽스: CSV 셀 값이 이스케이프 없이 SQL 에 들어가던 주입 경로 → 파라미터 바인딩
+                            cur.execute(edge_create_query, (add_src_key, add_src_val, add_tgt_key, add_tgt_val))
                             result = cur.fetchone()
                             
                             if result:

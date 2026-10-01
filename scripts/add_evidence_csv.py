@@ -40,7 +40,7 @@ def cy(v):
         return str(v).lower()
     # 주의: 전화번호·계좌번호 등 식별자는 순수 숫자여도 '문자열'로 저장해야 함
     #       (무따옴표 정수로 넣으면 선행 0 소실 → 01012345678 → 1012345678, 매칭 실패)
-    s = str(v).replace("\\", "\\\\").replace("'", "\\'")
+    s = str(v).replace("\\", "\\\\").replace("'", "''")   # 2026-10-01 핫픽스: AgensGraph 는 \\' 무효 — 백슬래시 두 번 + '' (app.database.cypher_str)
     return f"'{s}'"
 
 

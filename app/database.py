@@ -74,6 +74,39 @@ def release_db_connection(conn):
     except Exception as e:
         logger.error(f"DB 커넥션 반환 오류: {e}")
 
+def cypher_str(val):
+    """Cypher 작은따옴표 문자열 리터럴의 내용 이스케이프 (AgensGraph 실측, 2026-10-01).
+
+    두 단계로 해석된다:
+      ① SQL 문자열 단계 — 작은따옴표는 `''` 로만 이스케이프된다. `\'` 는 'a\' 에서 문자열이 끝나
+         문법 오류가 나고, 그 뒤가 Cypher 코드로 해석되는 주입 경로가 된다.
+      ② JSON(agtype) 단계 — 문자열이 JSON 값이 되며 백슬래시가 JSON 이스케이프로 처리된다
+         (`\p` 는 오류, `\\` 는 백슬래시 1개).
+    그래서 백슬래시를 먼저 두 번, 작은따옴표를 두 번 쓴다. 결과를 '...' 안에 넣어 쓴다.
+    """
+    return '' if val is None else str(val).replace('\\', '\\\\').replace("'", "''")
+
+
+_IDENT_RE = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*$')
+_ELEM_ID_RE = re.compile(r'^\d+\.\d+$')        # AgensGraph graphid 표기 (예: 3.17)
+
+
+def safe_ident(name, what='식별자'):
+    """라벨·엣지 타입·속성 키처럼 따옴표로 감쌀 수 없는 Cypher 식별자 검증 (2026-10-01 핫픽스)."""
+    s = str(name or '')
+    if not _IDENT_RE.match(s):
+        raise ValueError(f'허용되지 않는 {what}: {s!r}')
+    return s
+
+
+def safe_elem_id(val):
+    """요청으로 받은 노드·엣지 id(graphid) 형식 검증 — 쿼리에 끼워 넣기 전."""
+    s = str(val or '').strip()
+    if not _ELEM_ID_RE.match(s):
+        raise ValueError(f'잘못된 요소 id: {s!r}')
+    return s
+
+
 def safe_props(val):
     """JSON 파싱 안전장치"""
     if val is None: return {}

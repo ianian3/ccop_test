@@ -397,6 +397,12 @@ class AIService:
             tgt_ok = lambda l: expected_tgt is None or l == expected_tgt
 
             is_forward = not rel.startswith('<')  # -[...]-> vs <-[...]-
+            # 2026-10-01 핫픽스: 현재 방향이 규칙에 맞으면 절대 뒤집지 않는다. 종전에는 출발·도착 라벨이 같은
+            #   엣지(transferred_to·same_as 등)에서 '반대 방향도 맞음' 조건이 항상 참이라 정상 질의를 매번 반전시켰다
+            #   (나간 돈을 물으면 들어온 돈을 답함). 뒤집기는 '현재 방향 위반 + 반대 방향 적합' 일 때만.
+            src_l, dst_l = (label_a, label_b) if is_forward else (label_b, label_a)
+            if src_ok(src_l) and tgt_ok(dst_l):
+                return full
 
             if is_forward and tgt_ok(label_a) and src_ok(label_b):
                 # -[...]-> 방향이 뒤집힌 경우 → <-[...]-로 교정

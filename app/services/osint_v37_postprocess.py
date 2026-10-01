@@ -202,7 +202,7 @@ class OsintV37Postprocess:
 
                 # 엣지: vt_site → site_cluster
                 for url in members:
-                    url_esc = url.replace("'", "\\'")
+                    url_esc = url.replace("\\", "\\\\").replace("'", "''")   # 2026-10-01: AgensGraph 이스케이프는 ''
                     try:
                         cur.execute(f"""
                             MATCH (s:vt_site {{url_addr: '{url_esc}'}}),

@@ -802,10 +802,10 @@ def rdb_to_graph():
 
         # V4.0 격리 스키마 — 기본 test_v40 (DA팀 V3.7 운영 적용 전 안전 격리)
         source_schema = (data.get('source_schema') or 'test_v40').strip()
-        current_app.config['_V40_TARGET_SCHEMA'] = source_schema
         current_app.logger.info(f"[V4.0] /api/rdb/to-graph graph={graph_name} source_schema={source_schema}")
 
-        success, stats = RdbToGraphService.transfer_data(graph_name)
+        # 2026-10-01 핫픽스: 스키마를 공용 config 대신 인자로 (서비스가 이름 검증)
+        success, stats = RdbToGraphService.transfer_data(graph_name, source_schema=source_schema)
         
         if success:
             return jsonify({
@@ -1668,6 +1668,9 @@ def rdb_import():
         # V4.0 격리 스키마 — 표준화 RDB 적재 위치 (기본: test_v40)
         # DA팀 V3.7 운영 적용 전까지 public 충돌 방지
         target_schema = request.form.get('target_schema', 'test_v40').strip() or 'test_v40'
+        from app.database import validate_graph_path
+        if not validate_graph_path(target_schema):          # 2026-10-01 핫픽스: search_path 주입 차단
+            return jsonify({"status": "error", "message": f"허용되지 않는 스키마명: {target_schema!r}"}), 400
         current_app.logger.info(
             f"[V4.0] /api/rdb/import source_domain={source_domain} source_id={source_id} target_schema={target_schema}"
         )
@@ -1685,8 +1688,7 @@ def rdb_import():
         except Exception as _e:
             current_app.logger.warning(f"search_path 사전 설정 실패: {_e}")
 
-        # RDBService 가 사용할 search_path 를 config 에 임시 주입
-        current_app.config['_V40_TARGET_SCHEMA'] = target_schema
+        # 2026-10-01 핫픽스: 공용 config 주입 제거 — target_schema 는 서비스 인자로 전달(동시 요청 덮어쓰기 방지)
 
         if file.filename.lower().startswith('tbl_'):
             from app.core.csv_spec_v48 import ui_support
@@ -1700,7 +1702,7 @@ def rdb_import():
             if file.filename.lower().startswith('tbl_'):
                 success, result = RDBService.import_predefined_schema_to_rdb(
                     temp_path, file.filename, clear_existing=clear_rdb,
-                    source_domain=source_domain, source_id=source_id,
+                    source_domain=source_domain, source_id=source_id, target_schema=target_schema,
                 )
             else:
                 success, result = RDBService.import_csv_to_rdb(
@@ -1985,6 +1987,12 @@ def modeler_load_data():
             if not key_prop and col_map:
                 key_prop = col_map[0][1]
 
+            # 2026-10-01 핫픽스: 속성 키·RDB 컬럼도 식별자 검증 — 쿼리에 그대로 끼워 넣는 값이라 주입 경로였다
+            _ident = r'^[a-zA-Z_][a-zA-Z0-9_]*$'
+            if not _re.match(_ident, key_prop) or any(
+                    not _re.match(_ident, str(c)) or not _re.match(_ident, str(n)) for c, n, _ in col_map):
+                continue
+
             quoted_cols = ", ".join(f'"{rdb_col}"' for rdb_col, _, _ in col_map)
             try:
                 rdb_cur.execute(f'SELECT {quoted_cols} FROM {rdb_schema}."{table}" LIMIT 5000')
@@ -2002,7 +2010,7 @@ def modeler_load_data():
                     val = row[idx]
                     if val is None:
                         continue
-                    val_str = str(val).replace("'", "\\'")
+                    val_str = str(val).replace("\\", "\\\\").replace("'", "''")   # 2026-10-01 핫픽스: AgensGraph 이스케이프는 ''
 
                     # StandardCodeMapper 정규화
                     if prop_name in ('bank_cd', 'bank_code', 'bcode'):
@@ -2081,6 +2089,14 @@ def modeler_load_data():
                 # src_key, src_join, tgt_key, tgt_join 모두 가져오기
                 src_key_col = next((p.get('rdb_column') or p['name'] for p in src_node.get('properties', []) if p['name'] == src_key), src_join_col)
                 tgt_key_col = next((p.get('rdb_column') or p['name'] for p in tgt_node.get('properties', []) if p['name'] == tgt_key), tgt_join_col)
+                # 2026-10-01 핫픽스: 엣지 타입·라벨·키·테이블·조인 컬럼 식별자 검증 (종전엔 검증 없이 SQL·Cypher 에 삽입)
+                _bad = [x for x in (edge_type, src_label, tgt_label, src_table, tgt_table, src_key, tgt_key,
+                                    src_join_col, tgt_join_col, src_key_col, tgt_key_col)
+                        if not _re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', str(x or ''))]
+                if _bad:
+                    rdb_conn3.close()
+                    edge_stats.append({"type": edge_type, "loaded": 0, "error": f"허용되지 않는 식별자: {_bad}"})
+                    continue
 
                 rdb_cur3.execute(
                     f'SELECT DISTINCT s."{src_key_col}", t."{tgt_key_col}" '
@@ -2099,8 +2115,8 @@ def modeler_load_data():
             for src_val, tgt_val in key_pairs:
                 if src_val is None or tgt_val is None:
                     continue
-                sv = str(src_val).replace("'", "\\'")
-                tv = str(tgt_val).replace("'", "\\'")
+                sv = str(src_val).replace("\\", "\\\\").replace("'", "''")   # 2026-10-01 핫픽스: '' 이스케이프
+                tv = str(tgt_val).replace("\\", "\\\\").replace("'", "''")
                 cypher = (
                     f"MATCH (s:{src_label} {{{src_key}: '{sv}'}}), (t:{tgt_label} {{{tgt_key}: '{tv}'}})"
                     f" MERGE (s)-[r:{edge_type}]->(t)"

@@ -87,7 +87,7 @@ class TestPipelineStatus:
                 return False, "INSERT 오류"
             return True, {"cases": 1}
 
-        def fake_transfer(graph):
+        def fake_transfer(graph, source_schema=None):   # 2026-10-01: 스키마는 인자로 전달
             calls["transfer"] += 1
             return (calls.get("l4_ok", True), {"nodes": 3, "edges": 2} if calls.get("l4_ok", True) else "boom")
 

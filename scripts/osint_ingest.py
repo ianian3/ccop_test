@@ -42,7 +42,7 @@ def cy(v):
         return repr(v)
     if isinstance(v, (list, dict)):
         v = json.dumps(v, ensure_ascii=False)   # 복합타입은 JSON 문자열로 저장
-    s = str(v).replace("\\", "\\\\").replace("'", "\\'")
+    s = str(v).replace("\\", "\\\\").replace("'", "''")   # 2026-10-01 핫픽스: AgensGraph 는 \\' 무효 — 백슬래시 두 번 + '' (app.database.cypher_str)
     return f"'{s}'"
 
 
