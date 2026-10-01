@@ -599,7 +599,8 @@ class RdbToGraphService:
                 try:
                     eid, src_act, dt, amt, tgt_act, se_cd = safe_str(r[0]), safe_str(r[1]), safe_str(r[2]), safe_str(r[3]), safe_str(r[4]), safe_str(r[5])
                     sid = safe_str(r[6]) if len(r) > 6 else ''
-                    props = f"{{event_id: '{eid}', event_type: 'transfer', amount: '{amt}', timestamp: '{dt}', source_id: '{sid}', type: '이체'}}"
+                    # 정경 transfer_id + 호환 event_id (같은 값, 표준 파이프라인과 동일) — MERGE 키는 기존 그래프 호환 위해 event_id 유지
+                    props = f"{{transfer_id: '{eid}', event_id: '{eid}', event_type: 'transfer', amount: '{amt}', timestamp: '{dt}', source_id: '{sid}', type: '이체'}}"
                     cur.execute(f"MERGE (n:vt_transfer {{event_id: '{eid}'}}) SET n = {props}")
                     stats["nodes"] += 1; stats["transfers"] += 1
 
@@ -631,7 +632,7 @@ class RdbToGraphService:
                 try:
                     eid, caller, callee, dt, dur = safe_str(r[0]), _norm_telno(safe_str(r[1])), _norm_telno(safe_str(r[2])), safe_str(r[3]), safe_str(r[4])
                     sid = safe_str(r[5]) if len(r) > 5 else ''
-                    props = f"{{event_id: '{eid}', event_type: 'call', duration: '{dur}', timestamp: '{dt}', source_id: '{sid}', type: '통화'}}"
+                    props = f"{{call_id: '{eid}', event_id: '{eid}', event_type: 'call', duration: '{dur}', timestamp: '{dt}', source_id: '{sid}', type: '통화'}}"
                     cur.execute(f"MERGE (n:vt_call {{event_id: '{eid}'}}) SET n = {props}")
                     stats["nodes"] += 1; stats["calls"] += 1
                     
@@ -731,7 +732,7 @@ class RdbToGraphService:
                 try:
                     eid, sender, receiver, dt, content = safe_str(r[0]), safe_str(r[1]), safe_str(r[2]), safe_str(r[3]), safe_str(r[4])
                     summary = content[:50] if content else ''
-                    props = f"{{event_id: '{eid}', event_type: 'sms', timestamp: '{dt}', summary: '{summary}', type: '문자'}}"
+                    props = f"{{msg_id: '{eid}', event_id: '{eid}', event_type: 'sms', timestamp: '{dt}', summary: '{summary}', type: '문자'}}"
                     cur.execute(f"MERGE (n:vt_msg {{event_id: '{eid}'}}) SET n = {props}")
                     stats["nodes"] += 1
                     
@@ -1366,18 +1367,18 @@ class RdbToGraphService:
                             safe_str(r[4]), safe_str(r[5]), safe_str(r[6]),
                             safe_str(r[7]), safe_str(r[8])
                         )
-                        props = (f"{{device_sn: '{sn}', device_id: '{dev_id}', "
+                        props = (f"{{device_sn: '{sn}', dev_id: '{dev_id}', "
                                  f"dev_type: '{dev_type}', imei: '{imei}', "
                                  f"mac_addr: '{mac}', model: '{model}', "
                                  f"os: '{os_nm}', os_version: '{os_ver}', "
                                  f"src_id: '{src_id}', type: '기기'}}")
-                        cur.execute(f"MERGE (n:vt_dev {{device_id: '{dev_id}'}}) SET n = {props}")
+                        cur.execute(f"MERGE (n:vt_dev {{dev_id: '{dev_id}'}}) SET n = {props}")
                         stats["nodes"] += 1
                         # MAC → device↔access 연결: 보류(P2 설계 과제)
                         if mac:
                             # ⚠ 비활성: performed_by는 SoT range=Person(수행 주체=인물)이라 Device에 부적합(양끝 타입 위반).
                             #    device↔access 전용 엣지가 SoT에 미설계 → 위반 엣지 생성을 막기 위해 보류.
-                            # cur.execute(f"MATCH (d:vt_dev {{device_id: '{dev_id}'}}), (a:vt_access) WHERE a.mac_addr = '{mac}' MERGE (d)-[:performed_by]->(a)")
+                            # cur.execute(f"MATCH (d:vt_dev {{dev_id: '{dev_id}'}}), (a:vt_access) WHERE a.mac_addr = '{mac}' MERGE (d)-[:performed_by]->(a)")
                             pass
                     except Exception as _e:
                         logger.debug("행/항목 처리 실패(건너뜀): %s", _e)
@@ -1510,7 +1511,8 @@ class RdbToGraphService:
                         # ① vt_impersonation 노드 생성
                         cur.execute(f"""
                             MERGE (imp:vt_impersonation {{event_id: '{eid_s}'}})
-                            ON CREATE SET imp.method = '{typ_s}',
+                            ON CREATE SET imp.impersonation_id = '{eid_s}',
+                                          imp.method = '{typ_s}',
                                           imp.fake_name = '{fnm_s}',
                                           imp.script_type = '{sct_s}',
                                           imp.start_dt = '{dt_s}',
@@ -1649,7 +1651,7 @@ class RdbToGraphService:
                         dev_id, pid = safe_str(r[0]), safe_str(r[1])
                         cur.execute(f"""
                             MATCH (p:vt_psn {{id: '{pid}'}}),
-                                  (d:vt_dev {{device_id: '{dev_id}'}})
+                                  (d:vt_dev {{dev_id: '{dev_id}'}})
                             MERGE (p)-[r:uses_device {{evid_grade: 'B', src_tier: 2}}]->(d)
                         """)
                         stats["edges"] += 1
@@ -1785,7 +1787,7 @@ class RdbToGraphService:
                 cur.execute(f"MATCH (t:vt_telno) WHERE t.imei = '{imei_s}' RETURN t.telno")
                 telnos = [str(r[0]).strip('"') for r in cur.fetchall()]
                 device_id = f"DEV-RELAY-AUTO-{imei_s[-8:] if len(imei_s) >= 8 else imei_s}"
-                cur.execute(f"MERGE (d:vt_dev {{device_id: '{device_id}'}}) "
+                cur.execute(f"MERGE (d:vt_dev {{dev_id: '{device_id}'}}) "
                             f"SET d.dev_type = 'relay_station', d.imei = '{imei_s}', "
                             f"d.detected_by = 'auto_imei_share', d.rec_created = toString(now())")
                 out["relay_stations"] += 1
@@ -1794,7 +1796,7 @@ class RdbToGraphService:
                         continue
                     try:
                         cur.execute(f"MATCH (t:vt_telno {{telno: '{telno}'}}), "
-                                    f"(d:vt_dev {{device_id: '{device_id}'}}) "
+                                    f"(d:vt_dev {{dev_id: '{device_id}'}}) "
                                     f"MERGE (t)-[r:used_in_device]->(d) "
                                     f"SET r.source_id = 'auto_imei_share', r.rec_created = toString(now())")
                         out["used_in_device"] += 1

@@ -61,9 +61,28 @@ CCOP V4.9 온톨로지 — POLE 정렬 6레이어 아키텍처 (현행 SSOT)
              OSINT 적재분 13,769건은 DNS 결과의 역방향 복사본(짝 없는 hosts 0건) — 삭제 대상. resolves_to 추론 표시 제거
 노드: 24 | 엣지: 52 (deprecated 0) | 추론 규칙: 13종 통합 dict (탐지 9 + enrichment 4)
 """
+import json as _json
+import os as _os
+
+
+def _load_attribute_dictionary():
+    """SoT 동반 데이터 — 속성 설명(타입·설명·값유형)·카탈로그 분류·후보 속성.
+
+    무엇이 속성인지는 이 파일이 아니라 아래 ENTITIES·RELATIONSHIPS 가 정한다. 이 데이터는 사람이 읽는
+    설명만 담고, 엑셀 속성 정보(scripts/build_ontology_excel.py)가 둘을 합쳐 생성된다 (2026-10-01).
+    """
+    path = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), 'ontology_attribute_dictionary.json')
+    try:
+        with open(path, encoding='utf-8') as f:
+            return _json.load(f)
+    except (OSError, ValueError):
+        return {}
+
 
 class KICSCrimeDomainOntology:
     """KICS 기반 한국형 사이버 범죄 온톨로지 (V4.9 POLE 6레이어 · 노드 24 · 엣지 52 · 추론규칙 13종)"""
+
+    ATTRIBUTE_DICTIONARY = _load_attribute_dictionary()
 
     # 엣지 공통 메타속성 스키마 (EDGE_META_SCHEMA)
     EDGE_META_SCHEMA = {
@@ -173,8 +192,11 @@ class KICSCrimeDomainOntology:
     # standard=None: 표준 마스터 부재 · 리스트: N:1(여러 표준 테이블 → 1 노드)
     STANDARD_TABLE_MAP = {
         'vt_src':          {'standard': 'TB_DATA_SOU_A',         'public_v2': 'TB_DATA_SRC',          'test_v40': None},
-        'vt_case':         {'standard': 'TB_INCDNT_M',           'public_v2': 'TB_INCDNT_MST',        'test_v40': 'tb_incdnt_mst'},
-        'vt_petition':     {'standard': 'TB_PETTN_M',            'public_v2': 'TB_PETTN_MST',         'test_v40': None},
+        'vt_case':         {'standard': 'TB_INCDNT_M',           'public_v2': 'TB_INCDNT_MST',        'test_v40': 'tb_incdnt_mst',
+                            'std_columns': {'end_dt': 'END_DT', 'crime_method_cd': 'CRIM_TCNQ_CD', 'crime_step_cd': 'CRIM_STP_CD',
+                                            'risk_level': 'RISK_GRD_CD', 'risk_score': 'RISK_SCR'}},   # 2026-10-01 DDL 9/11판 대조
+        'vt_petition':     {'standard': 'TB_PETTN_M',            'public_v2': 'TB_PETTN_MST',         'test_v40': None,
+                            'std_columns': {'crime_method_cd': 'CRIM_TCNQ_CD', 'crime_step_cn': 'CRIM_STP_CN'}},   # 2026-10-01 DDL 대조
         'vt_psn':          {'standard': 'TB_PSN_M',              'public_v2': 'TB_PRSN',              'test_v40': 'tb_prsn',
                             'std_columns': {'occp_nm': 'CR_NM'}},  # 직업: 온톨로지 occp_nm ↔ 표준 CR_NM(직업명, DA 확정 DDL 8/12)
         'vt_org':          {'standard': 'TB_INST_M',             'public_v2': 'TB_INST',              'test_v40': None},
@@ -514,7 +536,7 @@ class KICSCrimeDomainOntology:
                              }},
         'vt_crypto':        {'color': '#F1C40F', 'shape': 'rectangle', 'icon': 'crypto.png',  'size': 30, 'label_property': 'wallet_addr'},
         'vt_vhcl':          {'color': '#34495E', 'shape': 'rectangle', 'icon': 'car.png',     'size': 30, 'label_property': 'vhclno'},
-        'vt_dev':           {'color': '#7D3C98', 'shape': 'rectangle', 'icon': 'device.png',  'size': 35, 'label_property': 'device_id',
+        'vt_dev':           {'color': '#7D3C98', 'shape': 'rectangle', 'icon': 'device.png',  'size': 35, 'label_property': 'dev_id',
                              'style_modifier': {
                                 "dev_type='relay_station'":            {'color': '#C0392B', 'shape': 'octagon', 'border_width': 3, 'size': 50},
                              }},
@@ -712,6 +734,8 @@ class KICSCrimeDomainOntology:
             'attributes': ['incdnt_nm', 'incdnt_typ_cd', 'crime_type', 'occrn_dt',
                            'damage_amount', 'case_summary', 'status',
                            'chrgdp_nm', 'chrg_plcmn_nm', 'police_station',
+                           # 2026-10-01 엑셀 정합: 표준 DDL TB_INCDNT_M 원천 컬럼이 있는 속성 등재 (std_columns 참조)
+                           'end_dt', 'crime_method_cd', 'crime_step_cd', 'risk_level', 'risk_score',
                            'source_id', 'rec_created'],
             'role': 'anchor',
             'legal_category': '수사사건',
@@ -723,7 +747,8 @@ class KICSCrimeDomainOntology:
             'label_ko': '진정서',
             'properties': ['petition_id'],
             'attributes': ['rcpt_dt', 'rcpt_channel', 'rcpt_station',
-                           'crime_type_cd', 'damage_amt', 'incdt_dt',
+                           'crime_type_cd', 'crime_method_cd', 'crime_step_cn',   # 2026-10-01 등재: 수법코드(실적재 12,216건)·단계내용
+                           'damage_amt', 'incdt_dt',
                            'status', 'linked_case_id',
                            'preprocessed_by', 'ocr_confidence', 'schema_version', 'raw_id',
                            'source_id', 'rec_created'],
@@ -860,7 +885,7 @@ class KICSCrimeDomainOntology:
             'label': 'vt_id',
             'label_ko': '디지털ID',
             'properties': ['id_val', 'platform'],
-            'attributes': ['id_type', 'profile_url', 'is_active', 'real_name',
+            'attributes': ['id_type', 'profile_url', 'is_active', 'real_name', 'is_anonymous',   # is_anonymous: 익명 계정(실적재 5건·시각화 사용)
                            'domain', 'provider', 'is_disposable',   # V4.9 이메일 흡수(platform='email')
                            'source_id', 'rec_created', 'verified', 'confidence'],
             'legal_category': '신원정보',
@@ -896,7 +921,7 @@ class KICSCrimeDomainOntology:
             'sublayer': 'Digital',
             'label': 'vt_dev',
             'label_ko': '기기',
-            'properties': ['device_id'],
+            'properties': ['dev_id'],            # 2026-10-01 정합: NODE_ID_STANDARD·참조 적재기와 동일 (구 device_id, 실적재 0건)
             'attributes': ['dev_type', 'imei', 'mac_addr', 'model', 'os', 'os_version',
                            'source_id', 'rec_created', 'verified', 'confidence'],
             'legal_category': '디지털증거',
@@ -939,8 +964,10 @@ class KICSCrimeDomainOntology:
             'layer': 'Event',
             'label': 'vt_transfer',
             'label_ko': '이체',
-            'properties': ['event_id'],          # PK: ETL에서 DLNG_SN 값 사용
-            'attributes': ['dlng_sn', 'dlng_amt', 'blnc_amt', 'dlng_se_cd',
+            # 2026-10-01 정합: 정경 식별자 = NODE_ID_STANDARD 의 transfer_id. event_id 는 이벤트 공통 키(호환 별칭,
+            #   같은 값) — 표준 파이프라인(v40_*)은 둘 다, OSINT 는 transfer_id, RDB 적재기·구 데모는 event_id 로 적재해 왔다
+            'properties': ['transfer_id'],       # 값: ETL 에서 DLNG_SN
+            'attributes': ['event_id', 'dlng_sn', 'dlng_amt', 'blnc_amt', 'dlng_se_cd',
                            'dlng_dt', 'dlng_memo_cn', 'trrc_psnnm', 'atm_mng_no',
                            'hop_level', 'is_suspicious',
                            'source_id', 'rec_created', 'verified', 'confidence'],
@@ -951,8 +978,8 @@ class KICSCrimeDomainOntology:
             'layer': 'Event',
             'label': 'vt_call',
             'label_ko': '통화',
-            'properties': ['event_id'],          # PK: ETL에서 CALL_SN 값 사용
-            'attributes': ['call_sn', 'call_strt_dt', 'call_dur_sec', 'call_typ_cd',
+            'properties': ['call_id'],           # 값: ETL 에서 CALL_SN (2026-10-01 정합 — event_id 는 호환 별칭)
+            'attributes': ['event_id', 'call_sn', 'call_strt_dt', 'call_dur_sec', 'call_typ_cd',
                            'dsptch_telno', 'rcptn_telno', 'bsst_loc_id',
                            'source_id', 'rec_created', 'verified', 'confidence'],
             'legal_category': '통신사실확인자료',
@@ -980,8 +1007,8 @@ class KICSCrimeDomainOntology:
             'layer': 'Event',
             'label': 'vt_msg',
             'label_ko': '메시지',
-            'properties': ['event_id'],          # PK: ETL에서 SMS_SN / MSG_SN 값 사용
-            'attributes': ['msg_sn', 'msg_type', 'app_nm', 'room_id', 'dsptch_dt',
+            'properties': ['msg_id'],            # 값: ETL 에서 SMS_SN / MSG_SN (2026-10-01 정합 — event_id 는 호환 별칭)
+            'attributes': ['event_id', 'msg_sn', 'msg_type', 'app_nm', 'room_id', 'dsptch_dt',
                            'content_hash', 'spam_yn', 'mentions_account',
                            'mentions_url', 'sentiment_cd',
                            'source_id', 'rec_created', 'verified', 'confidence'],
@@ -1016,8 +1043,9 @@ class KICSCrimeDomainOntology:
             'layer': 'Event',
             'label': 'vt_impersonation',
             'label_ko': '사칭이벤트',
-            'properties': ['event_id'],
-            'attributes': ['method',      # TELNO | EMAIL | ID | SITE
+            'properties': ['impersonation_id'],  # 2026-10-01 정합 — NODE_ID_STANDARD 와 일치, event_id 는 호환 별칭
+            'attributes': ['event_id',
+                           'method',      # TELNO | EMAIL | ID | SITE
                            'fake_name',   # 사칭 가명 (예: '김민수 검사')
                            'script_type', # 사칭 시나리오 종류 (예: '보이스피싱-대출사기')
                            'start_dt',    # 사칭 발생/확인 시작 (= valid_from)
@@ -2001,8 +2029,8 @@ class KICSCrimeDomainOntology:
             'description': 'ATM 관리번호'
         },
         'device': {
-            'patterns': ['기기', 'device', 'imei', 'device_id', 'mac', 'mac_addr', '단말기', '중계기'],
-            'kics_label': 'vt_dev', 'kics_property': 'device_id',
+            'patterns': ['기기', 'device', 'imei', 'device_id', 'dev_id', 'mac', 'mac_addr', '단말기', '중계기'],
+            'kics_label': 'vt_dev', 'kics_property': 'dev_id',
             'description': '기기 (IMEI·MAC 주소 기준 식별, relay_station 포함)'
         },
         'org': {
@@ -2305,7 +2333,7 @@ class OntologyEnricher:
             domain_concept = "차량"
             legal_category = "차량정보"
 
-        elif 'device_id' in properties or 'imei' in properties or 'mac_addr' in properties:
+        elif 'dev_id' in properties or 'device_id' in properties or 'imei' in properties or 'mac_addr' in properties:
             ontology_type = "Object"
             entity_subtype = "Device"
             domain_concept = "기기"

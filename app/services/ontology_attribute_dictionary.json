@@ -1,0 +1,2245 @@
+{
+ "_about": "SoT(app/services/ontology_service.py) 동반 데이터 — 속성 설명·카탈로그 분류. 엑셀은 이 파일과 SoT 로 생성(scripts/build_ontology_excel.py)",
+ "node_attrs": {
+  "vt_src": {
+   "src_id": [
+    "str",
+    "출처 식별자 (필수·고유, 예: src-dutcheat)",
+    "식별자"
+   ],
+   "src_name": [
+    "str",
+    "출처명 (더치트/금융감독원/경찰청 공유DB)",
+    "텍스트"
+   ],
+   "src_type": [
+    "str",
+    "OFFICIAL, AGENCY, PREPROCESSOR, PETITION, OSINT, REPORT",
+    "범주형"
+   ],
+   "reliability_tier": [
+    "int",
+    "신뢰등급 1(공식)~5(미확인)",
+    "범주형(순서형)"
+   ],
+   "collector": [
+    "str",
+    "수집 시스템/수사관 ID",
+    "텍스트"
+   ],
+   "collected_at": [
+    "str",
+    "최초 수집 일시(ISO8601)",
+    "날짜시간"
+   ],
+   "update_cycle": [
+    "str",
+    "daily, realtime, ondemand, batch",
+    "범주형"
+   ],
+   "contact": [
+    "str",
+    "출처 기관 연락처/URL",
+    "텍스트"
+   ]
+  },
+  "vt_case": {
+   "flnm": [
+    "str",
+    "보조 속성 — 식별자 아님(V4.9). 종전 내부 사건번호 용도였으나 사건 식별은 incdnt_no 로 이관",
+    "텍스트"
+   ],
+   "incdnt_no": [
+    "str",
+    "경찰청 공식 사건번호 — vt_case 정경 식별자(V4.9)",
+    "식별자"
+   ],
+   "incdnt_nm": [
+    "str",
+    "사건명",
+    "텍스트"
+   ],
+   "incdnt_typ_cd": [
+    "str",
+    "사건유형코드(VOICE_PHISHING, DRUG, FRAUD…)",
+    "범주형"
+   ],
+   "crime_type": [
+    "str",
+    "죄명(자유기술)",
+    "범주형"
+   ],
+   "occrn_dt": [
+    "str",
+    "발생일시(현실 시간)",
+    "날짜시간"
+   ],
+   "end_dt": [
+    "str",
+    "종료일시",
+    "날짜시간"
+   ],
+   "damage_amount": [
+    "int",
+    "피해금액(원)",
+    "수치형"
+   ],
+   "chrgdp_nm": [
+    "str",
+    "담당부서명",
+    "텍스트"
+   ],
+   "chrg_plcmn_nm": [
+    "str",
+    "담당경찰관명",
+    "텍스트"
+   ],
+   "police_station": [
+    "str",
+    "담당 경찰서",
+    "텍스트"
+   ],
+   "status": [
+    "str",
+    "OPEN, INVESTIGATING, CLOSED|SUSPENDED",
+    "범주형"
+   ],
+   "case_summary": [
+    "str",
+    "사건개요",
+    "텍스트"
+   ],
+   "crime_method_cd": [
+    "str",
+    "범행수법 코드",
+    "범주형"
+   ],
+   "crime_step_cd": [
+    "str",
+    "범죄단계(RECRUIT, TRANSFER, WITHDRAW, LAUNDER)",
+    "범주형"
+   ],
+   "risk_level": [
+    "int",
+    "위험도 1~5",
+    "범주형(순서형)"
+   ],
+   "risk_score": [
+    "float",
+    "위험점수 0~100",
+    "수치형"
+   ]
+  },
+  "vt_petition": {
+   "petition_id": [
+    "str",
+    "접수번호(자동 채번)",
+    "식별자"
+   ],
+   "rcpt_dt": [
+    "str",
+    "접수 일시",
+    "날짜시간"
+   ],
+   "rcpt_channel": [
+    "str",
+    "WEB,VISIT, EMAIL, FAX, API_112, FSS",
+    "범주형"
+   ],
+   "rcpt_station": [
+    "str",
+    "접수 경찰서",
+    "텍스트"
+   ],
+   "crime_type_cd": [
+    "str",
+    "표준 죄명 코드",
+    "범주형"
+   ],
+   "damage_amt": [
+    "int",
+    "피해금액(원)",
+    "수치형"
+   ],
+   "incdt_dt": [
+    "str",
+    "피해 발생 일시(=valid_from)",
+    "날짜시간"
+   ],
+   "status": [
+    "str",
+    "PENDING, LINKED, REJECTED, CLOSED",
+    "범주형"
+   ],
+   "linked_case_id": [
+    "str",
+    "연결된 vt_case.incdnt_no",
+    "식별자"
+   ],
+   "preprocessed_by": [
+    "str",
+    "전처리 기관 ID",
+    "텍스트"
+   ],
+   "ocr_confidence": [
+    "float",
+    "OCR 신뢰도",
+    "수치형"
+   ],
+   "schema_version": [
+    "str",
+    "전처리 표준 버전",
+    "텍스트"
+   ],
+   "raw_id": [
+    "int",
+    "RDB 원본 레코드 FK",
+    "식별자"
+   ],
+   "crime_method_cd": [
+    "str",
+    "범행수법 코드",
+    "범주형"
+   ],
+   "crime_step_cn": [
+    "str",
+    "범죄단계 자유기술",
+    "텍스트"
+   ]
+  },
+  "pt_cluster": {
+   "cluster_id": [
+    "str",
+    "군집 식별자(예: ptc-2026-001)",
+    "식별자"
+   ],
+   "crime_type_cd": [
+    "str",
+    "군집 대표 죄명 코드",
+    "범주형"
+   ],
+   "petition_cnt": [
+    "int",
+    "소속 진정서 수(집계 캐시)",
+    "수치형"
+   ],
+   "status": [
+    "str",
+    "ACTIVE, MERGED, DISSOLVED",
+    "범주형"
+   ],
+   "cluster_method": [
+    "str",
+    "군집 산출 방법 (simhash·임베딩 유사도 등)",
+    "범주형"
+   ],
+   "damage_amt_sum": [
+    "int",
+    "소속 진정서 피해금액 합계(원)",
+    "수치형"
+   ],
+   "first_rcpt_dt": [
+    "str",
+    "소속 진정서 최초 접수일시",
+    "날짜시간"
+   ],
+   "last_rcpt_dt": [
+    "str",
+    "소속 진정서 최종 접수일시",
+    "날짜시간"
+   ]
+  },
+  "vt_psn": {
+   "psn_id": [
+    "str",
+    "내부 인물 ID(UUID)",
+    "식별자"
+   ],
+   "name": [
+    "str",
+    "성명(표시용, 미상 시 '성명불상')",
+    "텍스트"
+   ],
+   "korn_flnm": [
+    "str",
+    "한글성명",
+    "텍스트"
+   ],
+   "dob": [
+    "str",
+    "생년월일 YYYYMMDD (POLE 필수)",
+    "날짜시간"
+   ],
+   "gender": [
+    "str",
+    "M, F, U (POLE 필수)",
+    "범주형"
+   ],
+   "nationality": [
+    "str",
+    "국적(ISO 3166-1)",
+    "텍스트"
+   ],
+   "rrno_hash": [
+    "str",
+    "주민번호 SHA-256(평문 미저장)",
+    "식별자"
+   ],
+   "passport_no": [
+    "str",
+    "여권번호(외국인)",
+    "식별자"
+   ],
+   "contact": [
+    "str",
+    "주요 연락처",
+    "텍스트"
+   ],
+   "aliases": [
+    "list",
+    "알려진 별칭 목록",
+    "텍스트"
+   ],
+   "risk_level": [
+    "int",
+    "위험도 1~5",
+    "범주형(순서형)"
+   ],
+   "is_anonymous": [
+    "bool",
+    "성명불상(신원 미확인 피의자) 플래그 ",
+    "불리언"
+   ],
+   "occp_nm": [
+    "str",
+    "직업명 (TB_PSN_M.CR_NM)",
+    "텍스트"
+   ]
+  },
+  "vt_org": {
+   "org_id": [
+    "str",
+    "조직/기관 ID",
+    "식별자"
+   ],
+   "org_name": [
+    "str",
+    "조직명/기관명",
+    "텍스트"
+   ],
+   "org_category": [
+    "str",
+    "조직 분류 — 값도메인 시트 참조 (bank/telco/crypto_exchange/police 등)",
+    "범주형"
+   ],
+   "inst_se_cd": [
+    "str",
+    "기관구분(BANK, TELECOM, PLATFORM, GOVT)",
+    "범주형"
+   ],
+   "brno": [
+    "str",
+    "사업자등록번호",
+    "텍스트"
+   ],
+   "bank_cd": [
+    "str",
+    "은행코드(금융기관)",
+    "범주형"
+   ],
+   "addr": [
+    "str",
+    "주소",
+    "식별자"
+   ],
+   "member_count": [
+    "int",
+    "추정 조직원 수(criminal)",
+    "수치형"
+   ],
+   "activity_type": [
+    "str",
+    "활동유형(VOICE_PHISHING, DRUG, GAMBLING…)",
+    "범주형"
+   ],
+   "hierarchy_level": [
+    "str",
+    "총책, 모집책, 인출책, 말단",
+    "범주형"
+   ]
+  },
+  "vt_bacnt": {
+   "account_no": [
+    "str",
+    "계좌번호(필수)",
+    "식별자"
+   ],
+   "bank_cd": [
+    "str",
+    "은행코드(필수·복합키)",
+    "범주형"
+   ],
+   "bank_nm": [
+    "str",
+    "은행명",
+    "텍스트"
+   ],
+   "dpstr_nm": [
+    "str",
+    "예금주명(명의자)",
+    "텍스트"
+   ],
+   "account_type": [
+    "str",
+    "계좌 유형 — 값도메인 시트 참조 (personal/corporate/exchange_virtual 등)",
+    "범주형"
+   ],
+   "bacnt_opn_dt": [
+    "str",
+    "개설일자 YYYYMMDD",
+    "날짜시간"
+   ],
+   "inst_id": [
+    "str",
+    "소속 금융기관 vt_org FK",
+    "식별자"
+   ],
+   "is_burner": [
+    "bool",
+    "대포계좌 여부 — 파생값. 규칙: 사용기간(duration_days) ≤ 2 (rule_version 병기 필수)",
+    "불리언"
+   ],
+   "is_frozen": [
+    "bool",
+    "지급정지 여부",
+    "불리언"
+   ],
+   "total_received": [
+    "int",
+    "총 입금액(집계)",
+    "수치형"
+   ],
+   "total_sent": [
+    "int",
+    "총 출금액(집계)",
+    "수치형"
+   ],
+   "transaction_cnt": [
+    "int",
+    "거래 건수",
+    "수치형"
+   ]
+  },
+  "vt_telno": {
+   "telno": [
+    "str",
+    "전화번호(숫자만 정규화)",
+    "식별자"
+   ],
+   "country_code": [
+    "str",
+    "국가코드(기본 +82)",
+    "범주형"
+   ],
+   "telco_nm": [
+    "str",
+    "통신사(SKT, KT, LGU+, MVNO)",
+    "범주형"
+   ],
+   "join_typ_cd": [
+    "str",
+    "가입유형 INDIVIDUAL, CORPORATE, PREPAID",
+    "범주형"
+   ],
+   "is_registered": [
+    "bool",
+    "정식 가입 여부",
+    "불리언"
+   ],
+   "is_burner": [
+    "bool",
+    "대포폰 여부 — 파생값. 규칙: 사용기간(duration_days) ≤ 30 (rule_version 병기 필수)",
+    "불리언"
+   ],
+   "subs_holder": [
+    "str",
+    "명의자 이름",
+    "텍스트"
+   ],
+   "imsi": [
+    "str",
+    "IMSI(SIM 식별, 기기 추적)",
+    "식별자"
+   ],
+   "spam_cnt": [
+    "int",
+    "스팸 신고 건수",
+    "수치형"
+   ]
+  },
+  "vt_ip": {
+   "ip_addr": [
+    "str",
+    "IP 주소(IPv4/IPv6)",
+    "식별자"
+   ],
+   "version": [
+    "str",
+    "IPv4|IPv6",
+    "범주형"
+   ],
+   "isp": [
+    "str",
+    "ISP 명",
+    "텍스트"
+   ],
+   "asn": [
+    "str",
+    "AS Number",
+    "텍스트"
+   ],
+   "org": [
+    "str",
+    "IP 등록 조직",
+    "텍스트"
+   ],
+   "country": [
+    "str",
+    "국가 코드 — GeoIP 판정. 판정 소스와 판정일을 vt_src로 등록 권장",
+    "범주형"
+   ],
+   "geo_region": [
+    "str",
+    "지역(시도)",
+    "텍스트"
+   ],
+   "city": [
+    "str",
+    "도시",
+    "텍스트"
+   ],
+   "is_vpn": [
+    "bool",
+    "VPN 여부 — 외부 IP 인텔리전스 연동 필요 (vt_src 등록 대상)",
+    "불리언"
+   ],
+   "is_tor": [
+    "bool",
+    "Tor 출구 노드",
+    "불리언"
+   ],
+   "is_proxy": [
+    "bool",
+    "프록시 여부",
+    "불리언"
+   ],
+   "is_hosting": [
+    "bool",
+    "호스팅·VPS 대역 여부 — 외부 IP 인텔리전스 연동 필요. 우회 접속 판별의 핵심",
+    "불리언"
+   ],
+   "abuse_score": [
+    "int",
+    "악용 점수 0~100(AbuseIPDB)",
+    "수치형"
+   ],
+   "linked_subject_cnt": [
+    "int",
+    "이 IP를 사용한 식별자 수 (번호·계정·기기) — 동일성 해소 전 원시값. 파생",
+    "수치형"
+   ],
+   "ip_role": [
+    "str",
+    "차수 기반 분류 — linked_entity_cnt 기준. same_as 해소 전에는 provisional 접미어 부여. 파생",
+    "범주형"
+   ],
+   "linked_entity_cnt": [
+    "int",
+    "same_as(confirmed) 해소 후의 실체 수. ip_role 판정의 정식 입력값. 파생",
+    "수치형"
+   ],
+   "role_resolution_stage": [
+    "str",
+    "ip_role 산출 시점의 해소 단계 (provisional | resolved)",
+    "범주형"
+   ],
+   "ip_role_current": [
+    "str",
+    "V4.6 파생. 최신 구간 역할(single_user/shared_small/call_center/infra). 무시간 쿼리·시각화 alias",
+    "범주"
+   ],
+   "ip_role_timeline": [
+    "list",
+    "V4.6 파생. 구간별 역할 [{from,to,role,entity_cnt,subject_cnt}] (인접 동일구간 coalesce)",
+    "구조"
+   ]
+  },
+  "vt_site": {
+   "url_addr": [
+    "str",
+    "전체 URL(필수 식별자)",
+    "식별자"
+   ],
+   "dmn_addr": [
+    "str",
+    "도메인(추출·캐시)",
+    "식별자"
+   ],
+   "site_type": [
+    "str",
+    "phishing, malware, fraud, normal, unknown",
+    "범주형"
+   ],
+   "is_malicious": [
+    "bool",
+    "악성 여부",
+    "불리언"
+   ],
+   "risk_grd": [
+    "str",
+    "HIGH, MEDIUM, LOW, UNKNOWN",
+    "범주형(순서형)"
+   ],
+   "sign_kwrd": [
+    "str",
+    "탐지 시그니처 키워드",
+    "텍스트"
+   ],
+   "detct_dt": [
+    "str",
+    "최초 탐지 일시",
+    "날짜시간"
+   ],
+   "registrar": [
+    "str",
+    "도메인 등록기관",
+    "텍스트"
+   ],
+   "whois_org": [
+    "str",
+    "등록 조직",
+    "텍스트"
+   ],
+   "reg_dt": [
+    "str",
+    "도메인 등록일",
+    "날짜시간"
+   ],
+   "exp_dt": [
+    "str",
+    "만료일",
+    "날짜시간"
+   ],
+   "page_title": [
+    "str",
+    "페이지 제목",
+    "텍스트"
+   ],
+   "page_hash": [
+    "str",
+    "페이지 SHA-256",
+    "식별자"
+   ]
+  },
+  "site_cluster": {
+   "cluster_id": [
+    "str",
+    "군집 식별자(예: sc-2026-001)",
+    "식별자"
+   ],
+   "html_fingerprint": [
+    "str",
+    "DOM SimHash 64bit(군집화 기준)",
+    "텍스트"
+   ],
+   "campaign_name": [
+    "str",
+    "수사관 명명 캠페인명",
+    "텍스트"
+   ],
+   "first_seen": [
+    "str",
+    "최초 발견일",
+    "날짜시간"
+   ],
+   "last_seen": [
+    "str",
+    "최종 발견일",
+    "날짜시간"
+   ],
+   "site_cnt": [
+    "int",
+    "소속 vt_site 수",
+    "수치형"
+   ],
+   "ip_cnt": [
+    "int",
+    "소속 vt_ip 수",
+    "수치형"
+   ],
+   "cluster_method": [
+    "str",
+    "군집 산출 방법 (html_fingerprint·simhash 등)",
+    "범주형"
+   ]
+  },
+  "vt_file": {
+   "hash_val": [
+    "str",
+    "SHA-256 해시(필수 식별자)",
+    "식별자"
+   ],
+   "file_nm": [
+    "str",
+    "파일명",
+    "텍스트"
+   ],
+   "file_extsn_nm": [
+    "str",
+    "확장자(.exe/.pdf/.jpg)",
+    "텍스트"
+   ],
+   "file_sz": [
+    "int",
+    "파일 크기(바이트)",
+    "수치형"
+   ],
+   "file_path": [
+    "str",
+    "원본 경로",
+    "텍스트"
+   ],
+   "creat_dt": [
+    "str",
+    "파일 생성일시",
+    "날짜시간"
+   ],
+   "mdfr_dt": [
+    "str",
+    "파일 수정일시",
+    "날짜시간"
+   ],
+   "is_malicious": [
+    "bool",
+    "악성 여부",
+    "불리언"
+   ],
+   "vt_score": [
+    "str",
+    "VirusTotal 탐지율(예: 35/72)",
+    "수치형"
+   ]
+  },
+  "vt_id": {
+   "id_val": [
+    "str",
+    "식별자 값(예: gildong99)",
+    "식별자"
+   ],
+   "platform": [
+    "str",
+    "KakaoTalk|Telegram|Instagram|Naver… · 이메일은 platform=email (V4.9)",
+    "범주형"
+   ],
+   "id_type": [
+    "str",
+    "account_id|nickname|email_id|user_no",
+    "범주형"
+   ],
+   "profile_url": [
+    "str",
+    "프로필 URL",
+    "텍스트"
+   ],
+   "is_active": [
+    "bool",
+    "현재 활성 여부",
+    "불리언"
+   ],
+   "real_name": [
+    "str",
+    "실명(확인된 경우)",
+    "텍스트"
+   ],
+   "is_anonymous": [
+    "bool",
+    "비식별 플래그",
+    "불리언"
+   ],
+   "domain": [
+    "str",
+    "도메인 부분(추출) (platform=email)",
+    "텍스트"
+   ],
+   "provider": [
+    "str",
+    "Gmail|Naver|Daum|Unknown (platform=email)",
+    "범주형"
+   ],
+   "is_disposable": [
+    "bool",
+    "일회용 이메일 여부 (platform=email)",
+    "불리언"
+   ]
+  },
+  "vt_crypto": {
+   "wallet_addr": [
+    "str",
+    "지갑 주소(필수 식별자)",
+    "식별자"
+   ],
+   "blockchain": [
+    "str",
+    "BTC|ETH|USDT|XMR…",
+    "범주형"
+   ],
+   "asset_type": [
+    "str",
+    "coin|token|nft",
+    "범주형"
+   ],
+   "exchange": [
+    "str",
+    "연결 거래소(Upbit|Bithumb|Binance)",
+    "범주형"
+   ],
+   "balance": [
+    "float",
+    "잔액(분석 시점)",
+    "수치형"
+   ],
+   "risk_score": [
+    "int",
+    "체인분석 위험도 0~100",
+    "수치형"
+   ],
+   "kyc_verified": [
+    "bool",
+    "KYC 인증 여부",
+    "불리언"
+   ],
+   "tx_cnt": [
+    "int",
+    "총 트랜잭션 수",
+    "수치형"
+   ]
+  },
+  "vt_vhcl": {
+   "vhclno": [
+    "str",
+    "차량번호(번호판, 필수 식별자)",
+    "식별자"
+   ],
+   "carmdl_nm": [
+    "str",
+    "차종명",
+    "텍스트"
+   ],
+   "carmdl_dtl_nm": [
+    "str",
+    "차명/모델명",
+    "텍스트"
+   ],
+   "color": [
+    "str",
+    "차량 색상",
+    "텍스트"
+   ],
+   "ownr_nm": [
+    "str",
+    "소유자명",
+    "텍스트"
+   ],
+   "rgst_dt": [
+    "str",
+    "등록일자",
+    "날짜시간"
+   ],
+   "stolen_yn": [
+    "bool",
+    "도난 차량 여부",
+    "불리언"
+   ]
+  },
+  "vt_dev": {
+   "dev_id": [
+    "str",
+    "내부 기기 ID (2026-10-01: 구 device_id)",
+    "식별자"
+   ],
+   "dev_type": [
+    "str",
+    "smartphone, pc, tablet, iot, pos, relay_station ",
+    "범주형"
+   ],
+   "imei": [
+    "str",
+    "IMEI(스마트폰·중계기 식별 핵심)",
+    "식별자"
+   ],
+   "mac_addr": [
+    "str",
+    "MAC 주소",
+    "식별자"
+   ],
+   "model": [
+    "str",
+    "기기 모델명",
+    "텍스트"
+   ],
+   "os": [
+    "str",
+    "Android|iOS|Windows|Linux",
+    "범주형"
+   ],
+   "os_version": [
+    "str",
+    "OS 버전",
+    "텍스트"
+   ]
+  },
+  "vt_atm": {
+   "atm_id": [
+    "str",
+    "ATM 관리번호",
+    "식별자"
+   ],
+   "bank_nm": [
+    "str",
+    "소속 은행",
+    "텍스트"
+   ],
+   "bank_cd": [
+    "str",
+    "은행코드",
+    "범주형"
+   ],
+   "loc_id": [
+    "str",
+    "설치 위치 vt_loc FK",
+    "식별자"
+   ],
+   "address": [
+    "str",
+    "설치 주소(캐시)",
+    "텍스트"
+   ],
+   "is_outdoor": [
+    "bool",
+    "실외 설치 여부",
+    "불리언"
+   ]
+  },
+  "vt_transfer": {
+   "transfer_id": [
+    "str",
+    "내부 이체 ID",
+    "식별자"
+   ],
+   "dlng_sn": [
+    "int",
+    "RDB FK(TB_FIN_BACNT_DLNG.DLNG_SN)",
+    "식별자"
+   ],
+   "dlng_amt": [
+    "int",
+    "거래금액(원)",
+    "수치형"
+   ],
+   "blnc_amt": [
+    "int",
+    "거래 후 잔액",
+    "수치형"
+   ],
+   "dlng_se_cd": [
+    "str",
+    "DEPOSIT|WITHDRAW|TRANSFER|ATM",
+    "범주형"
+   ],
+   "dlng_dt": [
+    "str",
+    "거래일시(=valid_from)",
+    "날짜시간"
+   ],
+   "dlng_memo_cn": [
+    "str",
+    "거래메모",
+    "텍스트"
+   ],
+   "trrc_psnnm": [
+    "str",
+    "송수신자명",
+    "텍스트"
+   ],
+   "atm_mng_no": [
+    "str",
+    "ATM관리번호(ATM 출금)",
+    "식별자"
+   ],
+   "hop_level": [
+    "int",
+    "자금흐름 단계(1=직접, N=N단계 세탁)",
+    "수치형"
+   ],
+   "is_suspicious": [
+    "bool",
+    "의심 거래 플래그",
+    "불리언"
+   ],
+   "event_id": [
+    "str",
+    "이벤트 공통 키 — transfer_id 와 같은 값(호환 별칭, 2026-10-01 정합)",
+    "식별자"
+   ]
+  },
+  "vt_call": {
+   "call_id": [
+    "str",
+    "내부 통화 ID",
+    "식별자"
+   ],
+   "call_sn": [
+    "int",
+    "RDB FK(TB_TELNO_CALL_DTL.CALL_SN)",
+    "식별자"
+   ],
+   "call_strt_dt": [
+    "str",
+    "통화시작일시(=valid_from)",
+    "날짜시간"
+   ],
+   "call_dur_sec": [
+    "int",
+    "통화시간(초)",
+    "수치형"
+   ],
+   "call_typ_cd": [
+    "str",
+    "VOICE|DATA|SMS_ALT",
+    "범주형"
+   ],
+   "dsptch_telno": [
+    "str",
+    "발신번호(캐시)",
+    "텍스트"
+   ],
+   "rcptn_telno": [
+    "str",
+    "수신번호(캐시)",
+    "텍스트"
+   ],
+   "bsst_loc_id": [
+    "str",
+    "기지국 vt_loc FK",
+    "식별자"
+   ],
+   "event_id": [
+    "str",
+    "이벤트 공통 키 — call_id 와 같은 값(호환 별칭, 2026-10-01 정합)",
+    "식별자"
+   ]
+  },
+  "vt_access": {
+   "access_id": [
+    "str",
+    "내부 접속 ID",
+    "식별자"
+   ],
+   "access_dt": [
+    "str",
+    "접속일시(=valid_from)",
+    "날짜시간"
+   ],
+   "action": [
+    "str",
+    "수행 동작 (login/read/write 등) — optional. 통신사·플랫폼 회신자료에는 부재",
+    "범주형"
+   ],
+   "user_agent": [
+    "str",
+    "클라이언트 UA — optional (웹서버 로그 전용)",
+    "텍스트"
+   ],
+   "status_code": [
+    "int",
+    "HTTP 상태코드 — optional (웹서버 로그 전용)",
+    "범주형"
+   ],
+   "bytes_sent": [
+    "int",
+    "송신 바이트 — optional (웹서버 로그 전용)",
+    "수치형"
+   ],
+   "bytes_recv": [
+    "int",
+    "수신 바이트 — optional (웹서버 로그 전용)",
+    "수치형"
+   ],
+   "aggregation_level": [
+    "str",
+    "적재 수준 (individual | aggregated) — 집약 적재 시 aggregated",
+    "범주형"
+   ],
+   "event_count": [
+    "int",
+    "집약 적재된 원본 이벤트 건수 (aggregation_level=aggregated 일 때 필수)",
+    "수치형"
+   ],
+   "sample_event_ids": [
+    "list",
+    "집약 대상 원본 이벤트의 표본 ID (지연 확장·법정 대조용)",
+    "식별자"
+   ],
+   "access_type": [
+    "str",
+    "V4.6 R8. 접속 서브타입 web|comm|banking (web만 5속성 유효)",
+    "범주"
+   ],
+   "lgn_sn": [
+    "str",
+    "로그인 일련번호 (원천 TB_SYS_LGN_EVT_T.LGN_SN, Bridge Key)",
+    "식별자"
+   ],
+   "user_id": [
+    "str",
+    "접속 계정 ID",
+    "식별자"
+   ],
+   "result_cd": [
+    "str",
+    "접속 결과 코드 (성공·실패 등)",
+    "범주형"
+   ],
+   "service_nm": [
+    "str",
+    "접속 서비스명",
+    "텍스트"
+   ]
+  },
+  "vt_msg": {
+   "msg_id": [
+    "str",
+    "내부 메시지 ID",
+    "식별자"
+   ],
+   "msg_type": [
+    "str",
+    "SMS, CHAT, EMAIL, PUSH",
+    "범주형"
+   ],
+   "app_nm": [
+    "str",
+    "KakaoTalk, Telegram, SMS, iMessage",
+    "범주형"
+   ],
+   "room_id": [
+    "str",
+    "대화방 식별자 — optional (회신자료에 미포함되는 경우 다수)",
+    "식별자"
+   ],
+   "dsptch_dt": [
+    "str",
+    "발신일시(=valid_from)",
+    "날짜시간"
+   ],
+   "content_hash": [
+    "str",
+    "본문 해시 — optional. 통신사 착발신내역은 메타만 제공하므로 공란 가능",
+    "식별자"
+   ],
+   "spam_yn": [
+    "bool",
+    "스팸 여부",
+    "불리언"
+   ],
+   "mentions_account": [
+    "bool",
+    "계좌번호 언급",
+    "불리언"
+   ],
+   "mentions_url": [
+    "bool",
+    "URL 포함",
+    "불리언"
+   ],
+   "sentiment_cd": [
+    "str",
+    "THREAT, LURE, NORMAL, UNKNOWN",
+    "범주형"
+   ],
+   "aggregation_level": [
+    "str",
+    "적재 수준 (individual | aggregated)",
+    "범주형"
+   ],
+   "event_count": [
+    "int",
+    "집약 적재된 원본 메시지 건수",
+    "수치형"
+   ],
+   "event_id": [
+    "str",
+    "이벤트 공통 키 — msg_id 와 같은 값(호환 별칭, 2026-10-01 정합)",
+    "식별자"
+   ],
+   "msg_sn": [
+    "str",
+    "메시지 일련번호 (원천 MSG_SN, Bridge Key)",
+    "식별자"
+   ]
+  },
+  "vt_movement": {
+   "mov_id": [
+    "str",
+    "내부 이동 ID",
+    "식별자"
+   ],
+   "mov_type": [
+    "str",
+    "lpr, cell_tower, transit_card",
+    "범주형"
+   ],
+   "timestamp": [
+    "str",
+    "발생 일시(=valid_from)",
+    "날짜시간"
+   ],
+   "loc_id": [
+    "str",
+    "발생 위치 vt_loc FK",
+    "식별자"
+   ],
+   "vhclno": [
+    "str",
+    "차량번호(lpr, 캐시)",
+    "텍스트"
+   ],
+   "cctv_id": [
+    "str",
+    "CCTV ID(lpr)",
+    "식별자"
+   ],
+   "rcgn_sn": [
+    "int",
+    "RDB FK(lpr)",
+    "수치형"
+   ],
+   "telno": [
+    "str",
+    "전화번호(cell, 캐시)",
+    "식별자"
+   ],
+   "evt_typ_nm": [
+    "str",
+    "발신, 착신, 위치등록(cell)",
+    "범주형"
+   ],
+   "loc_evt_sn": [
+    "int",
+    "RDB FK(cell)",
+    "수치형"
+   ],
+   "card_no": [
+    "str",
+    "교통카드번호(transit)",
+    "식별자"
+   ],
+   "tk_pnm": [
+    "str",
+    "승차장소명(transit)",
+    "텍스트"
+   ],
+   "gf_pnm": [
+    "str",
+    "하차장소명(transit)",
+    "텍스트"
+   ],
+   "vhcl_no": [
+    "str",
+    "버스/택시 차량번호(transit)",
+    "식별자"
+   ],
+   "mv_sn": [
+    "int",
+    "RDB FK(transit)",
+    "수치형"
+   ],
+   "imgr_se_cd": [
+    "str",
+    "출입국 구분코드 (출국·입국)",
+    "범주형"
+   ],
+   "flight_no": [
+    "str",
+    "항공편명",
+    "텍스트"
+   ],
+   "port_nm": [
+    "str",
+    "출입국항명",
+    "텍스트"
+   ],
+   "imgr_sn": [
+    "str",
+    "출입국 원본 일련번호 (Bridge Key)",
+    "식별자"
+   ]
+  },
+  "vt_impersonation": {
+   "event_id": [
+    "str",
+    "내부 사칭 ID",
+    "식별자"
+   ],
+   "method": [
+    "str",
+    "TELNO, EMAIL, ID, SITE",
+    "범주형"
+   ],
+   "fake_name": [
+    "str",
+    "사용된 사칭 가명(예: '김민수 검사')",
+    "텍스트"
+   ],
+   "script_type": [
+    "str",
+    "사칭 시나리오(예: 보이스피싱-대출사기)",
+    "범주형"
+   ],
+   "start_dt": [
+    "str",
+    "사칭 시작(=valid_from)",
+    "날짜시간"
+   ],
+   "end_dt": [
+    "str",
+    "사칭 종료",
+    "날짜시간"
+   ],
+   "impersonation_id": [
+    "str",
+    "사칭 이벤트 정경 식별자 (event_id 는 호환 별칭)",
+    "식별자"
+   ]
+  },
+  "vt_loc": {
+   "loc_id": [
+    "str",
+    "내부 위치 ID",
+    "식별자"
+   ],
+   "loc_type": [
+    "str",
+    "위치 유형 — 값도메인 시트 참조 (bank_branch/atm/airport/bsst 등)",
+    "범주형"
+   ],
+   "address": [
+    "str",
+    "주소(도로명)",
+    "텍스트"
+   ],
+   "lat": [
+    "float",
+    "위도",
+    "수치형"
+   ],
+   "lng": [
+    "float",
+    "경도",
+    "수치형"
+   ],
+   "place_name": [
+    "str",
+    "장소명",
+    "텍스트"
+   ],
+   "sido_nm": [
+    "str",
+    "시도명",
+    "텍스트"
+   ],
+   "sigungu_nm": [
+    "str",
+    "시군구명",
+    "텍스트"
+   ],
+   "bsst_nm": [
+    "str",
+    "기지국명(cell_tower)",
+    "텍스트"
+   ],
+   "bsst_addr": [
+    "str",
+    "기지국주소(cell_tower)",
+    "식별자"
+   ],
+   "telecom": [
+    "str",
+    "통신사(cell_tower)",
+    "텍스트"
+   ],
+   "cctv_id": [
+    "str",
+    "CCTV 관리 ID(cctv)",
+    "식별자"
+   ],
+   "cctv_operator": [
+    "str",
+    "운영주체(경찰청, 지자체, 민간)(cctv)",
+    "범주형"
+   ]
+  }
+ },
+ "edge_attrs": {
+  "confidence": [
+   "float",
+   "신뢰도 0.0~1.0 (숫자)",
+   "수치형"
+  ],
+  "verified": [
+   "bool",
+   "사실 검증 여부(true=확인된 사실)",
+   "불리언"
+  ],
+  "valid_from": [
+   "str",
+   "관계 유효 시작 시각(선택적 이중시간)",
+   "날짜시간"
+  ],
+  "valid_to": [
+   "str",
+   "관계 유효 종료 시각",
+   "날짜시간"
+  ],
+  "source_id": [
+   "str",
+   "데이터 출처(vt_src) 참조",
+   "식별자"
+  ],
+  "rec_created": [
+   "str",
+   "관계 DB 기록 시각(ISO8601)",
+   "날짜시간"
+  ],
+  "sim_score": [
+   "float",
+   "군집 유사도 점수(0~1)",
+   "수치형"
+  ],
+  "match_basis": [
+   "str",
+   "동일인 판단 근거(공유 전화/계좌 등)",
+   "텍스트"
+  ],
+  "review_status": [
+   "str",
+   "매칭 검토 상태(pending|confirmed|rejected) — traversal_policy 와 1:1",
+   "범주형"
+  ],
+  "role": [
+   "str",
+   "조직 내 역할 / 재직 직위",
+   "텍스트"
+  ],
+  "port": [
+   "int/str",
+   "호스팅 포트 / 탐지 시각",
+   "날짜시간"
+  ],
+  "detected_at": [
+   "int/str",
+   "호스팅 포트 / 탐지 시각",
+   "날짜시간"
+  ],
+  "resolved_dt": [
+   "str",
+   "DNS 해석 시각",
+   "날짜시간"
+  ],
+  "basis": [
+   "str",
+   "연결 근거 — 'dns'(DNS 조회 관측, 미기재 시 기본) · 'origin'(원본 서버 확인: 호스팅사 회신·압수)",
+   "범주형"
+  ],
+  "src_tier": [
+   "int",
+   "출처 신뢰등급(1~5)",
+   "범주형"
+  ],
+  "first_seen": [
+   "str",
+   "최초/최종 관측 시각",
+   "날짜시간"
+  ],
+  "last_seen": [
+   "str",
+   "최초/최종 관측 시각",
+   "날짜시간"
+  ],
+  "converted_dt": [
+   "str",
+   "사건 전환 시각 / 주체",
+   "날짜시간"
+  ],
+  "converted_by": [
+   "str",
+   "사건 전환 시각 / 주체",
+   "날짜시간"
+  ],
+  "damage_amount": [
+   "int",
+   "피해금액(원)",
+   "수치형"
+  ],
+  "statement_date": [
+   "str",
+   "참고인 진술일",
+   "날짜시간"
+  ],
+  "recruit_type": [
+   "str",
+   "모집 유형 / 대가",
+   "범주형"
+  ],
+  "method": [
+   "str",
+   "협박 방법 / 일자",
+   "텍스트"
+  ],
+  "date": [
+   "str",
+   "협박 방법 / 일자",
+   "텍스트"
+  ],
+  "file_role": [
+   "str",
+   "파일의 역할(첨부/배포/증거)",
+   "텍스트"
+  ],
+  "usage_count": [
+   "int",
+   "IP 사용(접속) 행 수 — (주체,IP)쌍 집계 시 합계 (V4.9)",
+   "수치형"
+  ],
+  "relation_type": [
+   "str",
+   "지인 관계 유형(친구/동창/가족 등)",
+   "범주형"
+  ],
+  "link_basis": [
+   "str",
+   "식별자 연결 근거(인증서발급/포털역조회 등)",
+   "범주형"
+  ],
+  "traversal_policy": [
+   "str",
+   "탐색 시 이 엣지를 따라갈지 결정 (follow | candidate_only | block). review_status 와 연동",
+   "범주형"
+  ],
+  "edge_id": [
+   "str",
+   "엣지의 안정적 고유 식별자 — evidence_edge_ids 가 참조. 재적재 시에도 불변이어야 함",
+   "식별자"
+  ],
+  "first_dlng_dt": [
+   "str",
+   "V4.6. 출발계좌 첫 거래일시 (추론경로 이체 기간 시작)",
+   "시각"
+  ],
+  "last_dlng_dt": [
+   "str",
+   "V4.6. 출발계좌 마지막 거래일시 (추론경로 이체 기간 종료)",
+   "시각"
+  ],
+  "txn_count": [
+   "int",
+   "V4.6. 출발계좌 거래 건수 (기간 내)",
+   "수치"
+  ],
+  "total_amount": [
+   "int",
+   "V4.6. 출발계좌 거래 총액(원)",
+   "수치"
+  ],
+  "rprs_se_cd": [
+   "str",
+   "V4.7. 법인 대표 구분코드 (TB_INST_RPRSV_REL_T.RPRS_SE_CD)",
+   "텍스트"
+  ],
+  "channel": [
+   "str",
+   "연락 수단 구분 — 'call'|'kakao'|'sms' (V4.8)",
+   "enum"
+  ],
+  "first_dt": [
+   "str",
+   "쌍 집계 엣지의 최초/최종 관측 시각 (V4.9)",
+   "날짜시간"
+  ],
+  "last_dt": [
+   "str",
+   "쌍 집계 엣지의 최초/최종 관측 시각 (V4.9)",
+   "날짜시간"
+  ],
+  "evt_count": [
+   "int",
+   "시각 있는 위치 관측 행 수 (V4.9)",
+   "수치"
+  ],
+  "access_type": [
+   "str",
+   "접속 유형 web|comm|banking — 여러 값이면 '|' 결합 (V4.9)",
+   "enum"
+  ],
+  "call_count": [
+   "int",
+   "통화 건수 / 메시지 건수 / 통화 총 초 (V4.9 집계)",
+   "수치"
+  ],
+  "msg_count": [
+   "int",
+   "통화 건수 / 메시지 건수 / 통화 총 초 (V4.9 집계)",
+   "수치"
+  ],
+  "total_dur_sec": [
+   "int",
+   "통화 건수 / 메시지 건수 / 통화 총 초 (V4.9 집계)",
+   "수치"
+  ],
+  "amount": [
+   "int",
+   "환전 금액",
+   "수치형"
+  ],
+  "exchanged_at": [
+   "str",
+   "환전 일시",
+   "날짜시간"
+  ],
+  "extract_method": [
+   "str",
+   "본문 추출 방식 (NER·정규식·수기)",
+   "범주형"
+  ],
+  "platform": [
+   "str",
+   "계정 플랫폼 (KakaoTalk·Telegram·email 등)",
+   "범주형"
+  ],
+  "status": [
+   "str",
+   "진정서→사건 연계 상태 — 'converted'(전환) · 'linked'(연계)",
+   "범주형"
+  ]
+ },
+ "edge_catalog": {
+  "suspect_in": [
+   "A. Case/Petition",
+   ""
+  ],
+  "victim_in": [
+   "A. Case/Petition",
+   ""
+  ],
+  "witness_in": [
+   "A. Case/Petition",
+   "V4.9 involves 통합"
+  ],
+  "filed_as": [
+   "A. Case/Petition",
+   "V4.9 linked_petition 통합"
+  ],
+  "belongs_to_cluster": [
+   "A. Case/Petition",
+   "V4.9 파생 엣지(군집 결과, PtClusterDetection 생성) — 원천 사실 아님"
+  ],
+  "eg_used_account": [
+   "B. Case→Object 증거",
+   "V4.4 유효구간 추가 (G5)"
+  ],
+  "eg_used_phone": [
+   "B. Case→Object 증거",
+   "V4.4 유효구간 추가 (G5)"
+  ],
+  "eg_used_ip": [
+   "B. Case→Object 증거",
+   "V4.4 유효구간 추가 (G5)"
+  ],
+  "has_account": [
+   "C. Person 관계",
+   ""
+  ],
+  "owns_phone": [
+   "C. Person 관계",
+   ""
+  ],
+  "owns_vehicle": [
+   "C. Person 관계",
+   ""
+  ],
+  "drives": [
+   "C. Person 관계",
+   ""
+  ],
+  "used_ip": [
+   "C. Person 관계",
+   "V4.4 domain 확장 (G3) · V4.5 vt_dev 추가 + 무방향 탐색 (G10) [V4.8 domain+BankAccount, R8 reification 우선 노트] · V4.9 (주체,IP)쌍 집계: valid_from=최초·valid_to=마지막 관측·usage_count"
+  ],
+  "member_of": [
+   "C. Person 관계",
+   "V4.9 works_at 통합"
+  ],
+  "represents": [
+   "C. Person 관계",
+   "V4.7 신규 (수사단서·TB_INST_RPRSV_REL_T)"
+  ],
+  "same_as": [
+   "C. Person 관계",
+   "V4.3 range 확장 → V4.4 vt_telno·근거 구조화 → V4.5 traversal_policy (G11) [V4.8 same_as 개명] · V4.9 속성명 통일(confidence·match_basis)·같은 라벨끼리"
+  ],
+  "recruits": [
+   "C. Person 관계",
+   ""
+  ],
+  "blackmails": [
+   "C. Person 관계",
+   ""
+  ],
+  "uses_id": [
+   "D. Person→Digital",
+   ""
+  ],
+  "owns_wallet": [
+   "D. Person→Digital",
+   ""
+  ],
+  "uses_device": [
+   "D. Person→Digital",
+   "V4.9 owns_device 통합"
+  ],
+  "registered_to": [
+   "E. Object 관계",
+   "Object→Person 예외 허용 V4.4 유효구간 추가 (G5) [V4.8 domain+DigitalID]"
+  ],
+  "operates": [
+   "E. Object 관계",
+   ""
+  ],
+  "belongs_to": [
+   "E. Object 관계",
+   ""
+  ],
+  "resolves_to": [
+   "E. Object 관계",
+   "V4.9 hosts 통합 (OSINT 13,769건은 DNS 결과 역방향 복사본)"
+  ],
+  "contains_file": [
+   "E. Object 관계",
+   ""
+  ],
+  "communicated_with": [
+   "E. Object 관계",
+   ""
+  ],
+  "transferred_to": [
+   "E. Object 관계",
+   "V4.9 직접 엣지로 재정의(추론·직접생성 금지 해제) · 다단계 흐름은 경로 조회 · (쌍) 집계"
+  ],
+  "linked_to": [
+   "E. Object 관계",
+   "V4.9 중복 행(Petition→Case, deprecated) 정리 — 진정서→사건은 filed_as · V4.9 linked_id 통합"
+  ],
+  "belongs_to_campaign": [
+   "E. Object 관계",
+   "V4.9 파생 엣지(군집 결과, SiteClusterDetection 생성) — 원천 사실 아님"
+  ],
+  "from_account": [
+   "F. Event 흐름",
+   ""
+  ],
+  "to_account": [
+   "F. Event 흐름",
+   ""
+  ],
+  "caller": [
+   "F. Event 흐름",
+   ""
+  ],
+  "callee": [
+   "F. Event 흐름",
+   ""
+  ],
+  "contacted": [
+   "F. Event 흐름",
+   "[V4.8 domain/range+DigitalID, channel 속성] · V4.9 (쌍,channel) 집계 속성 명시"
+  ],
+  "sent_msg": [
+   "F. Event 흐름",
+   ""
+  ],
+  "received_msg": [
+   "F. Event 흐름",
+   ""
+  ],
+  "accessed_from": [
+   "F. Event 흐름",
+   "V4.9 통합 (via_ip·sent_from_ip) — T2C 학습 표기 유지"
+  ],
+  "accessed_to": [
+   "F. Event 흐름",
+   "V4.5 range 확장 (G8)"
+  ],
+  "recorded_in": [
+   "F. Event 흐름",
+   ""
+  ],
+  "used_in_device": [
+   "F. Event 흐름",
+   ""
+  ],
+  "used_for": [
+   "G. 사칭/접속주체",
+   ""
+  ],
+  "targets": [
+   "G. 사칭/접속주체",
+   ""
+  ],
+  "performed_by": [
+   "G. 사칭/접속주체",
+   "V4.4 range 확장 (G1)"
+  ],
+  "sourced_from": [
+   "H. Provenance",
+   "tier1~3만 엣지 생성"
+  ],
+  "controls": [
+   "C. Person 관계",
+   "정합화 등재 V4.4 근거 구조화 (G7)"
+  ],
+  "located_at": [
+   "I. 위치",
+   "정합화 등재 · V4.9 (주체,위치)쌍 집계 — 시각 있는 행만 first_dt/last_dt/evt_count · V4.9 occurred_at 통합"
+  ],
+  "knows": [
+   "J. V4.3 시나리오",
+   "V4.3 신규"
+  ],
+  "mentions": [
+   "J. V4.3 시나리오",
+   "V4.9 통합 (mentions_id·mentions_account·mentions_location)"
+  ],
+  "eg_used_id": [
+   "B. Case→Object 증거",
+   "V4.4 신규 (R3)"
+  ],
+  "exchanged_to": [
+   "F. Event 흐름",
+   "V4.4 신규 (G6)"
+  ],
+  "access_via": [
+   "F. Event 흐름",
+   "V4.5 (access 다형화)"
+  ]
+ },
+ "node_core": {
+  "vt_src": "reliability_tier, src_type, collector",
+  "vt_case": "incdnt_typ_cd, damage_amount",
+  "vt_petition": "rcpt_dt, crime_type_cd",
+  "vt_psn": "name, is_anonymous, risk_level",
+  "vt_org": "org_name, org_category",
+  "vt_bacnt": "bank_cd, account_type, is_burner(파생)",
+  "vt_telno": "telco_nm, is_burner(파생), imei/imsi",
+  "vt_ip": "country, is_vpn·is_hosting(외부 연동), linked_subject_cnt(파생), ip_role(파생)",
+  "vt_site": "is_malicious, site_type",
+  "vt_file": "file_nm, is_malicious",
+  "vt_id": "platform, is_anonymous · 이메일(platform=email): domain, provider, is_disposable",
+  "vt_crypto": "blockchain, risk_score · vt_bacnt→exchanged_to 로 진입",
+  "vt_vhcl": "carmdl_nm, stolen_yn",
+  "vt_dev": "dev_type, imei, mac_addr · used_ip 로 IP 연결 가능",
+  "vt_atm": "bank_nm, address",
+  "vt_transfer": "dlng_amt, dlng_dt",
+  "vt_call": "call_strt_dt, call_dur_sec",
+  "vt_access": "access_dt, actor_type, aggregation_level · 웹로그 5속성 optional",
+  "vt_msg": "msg_type, content_hash, peer_count, aggregation_level",
+  "vt_movement": "mov_type, timestamp",
+  "vt_impersonation": "method, fake_name",
+  "vt_loc": "loc_type(값도메인), address, lat, lng",
+  "pt_cluster": "petition_cnt, damage_amt_sum, first_rcpt_dt / last_rcpt_dt",
+  "site_cluster": "site_cnt, ip_cnt, campaign_name"
+ },
+ "candidates": [
+  {
+   "kind": "node",
+   "target": "vt_src",
+   "attr": "preprocessor_version",
+   "type": "str",
+   "desc": "전처리 표준 버전(예: ETRI-v0.8)",
+   "value_type": "텍스트",
+   "status": "후보",
+   "basis": "표준 DDL 원천 컬럼 없음 · 적재 실적 0 — 설계 확정(DA) 전까지 SoT 미등재"
+  },
+  {
+   "kind": "node",
+   "target": "vt_src",
+   "attr": "activity_typ_cd",
+   "type": "str",
+   "desc": "PROV-O Activity 코드(COLLECT, OCR, NER, LINK)",
+   "value_type": "범주형",
+   "status": "후보",
+   "basis": "표준 DDL 원천 컬럼 없음 · 적재 실적 0 — 설계 확정(DA) 전까지 SoT 미등재"
+  },
+  {
+   "kind": "node",
+   "target": "pt_cluster",
+   "attr": "crime_method_cd",
+   "type": "str",
+   "desc": "군집 대표 범행수법 코드",
+   "value_type": "범주형",
+   "status": "후보",
+   "basis": "표준 DDL 원천 컬럼 없음 · 적재 실적 0 — 설계 확정(DA) 전까지 SoT 미등재"
+  },
+  {
+   "kind": "node",
+   "target": "pt_cluster",
+   "attr": "sim_threshold",
+   "type": "float",
+   "desc": "군집화 유사도 기준값(0~1)",
+   "value_type": "수치형",
+   "status": "후보",
+   "basis": "표준 DDL 원천 컬럼 없음 · 적재 실적 0 — 설계 확정(DA) 전까지 SoT 미등재"
+  },
+  {
+   "kind": "node",
+   "target": "pt_cluster",
+   "attr": "representative_id",
+   "type": "str",
+   "desc": "대표 vt_petition.petition_id",
+   "value_type": "식별자",
+   "status": "후보",
+   "basis": "표준 DDL 원천 컬럼 없음 · 적재 실적 0 — 설계 확정(DA) 전까지 SoT 미등재"
+  },
+  {
+   "kind": "node",
+   "target": "pt_cluster",
+   "attr": "linked_case_id",
+   "type": "str",
+   "desc": "단일 사건 전환 시 FK",
+   "value_type": "식별자",
+   "status": "후보",
+   "basis": "표준 DDL 원천 컬럼 없음 · 적재 실적 0 — 설계 확정(DA) 전까지 SoT 미등재"
+  },
+  {
+   "kind": "node",
+   "target": "pt_cluster",
+   "attr": "last_updated",
+   "type": "str",
+   "desc": "최종 갱신 시각",
+   "value_type": "날짜시간",
+   "status": "후보",
+   "basis": "표준 DDL 원천 컬럼 없음 · 적재 실적 0 — 설계 확정(DA) 전까지 SoT 미등재"
+  },
+  {
+   "kind": "node",
+   "target": "site_cluster",
+   "attr": "phishing_type",
+   "type": "str",
+   "desc": "FINANCIAL, TELECOM, PORTAL, SHOPPING, GOVERNMENT",
+   "value_type": "범주형",
+   "status": "후보",
+   "basis": "표준 DDL 원천 컬럼 없음 · 적재 실적 0 — 설계 확정(DA) 전까지 SoT 미등재"
+  },
+  {
+   "kind": "node",
+   "target": "site_cluster",
+   "attr": "cluster_status",
+   "type": "str",
+   "desc": "ACTIVE, INACTIVE, TAKEDOWN",
+   "value_type": "범주형",
+   "status": "후보",
+   "basis": "표준 DDL 원천 컬럼 없음 · 적재 실적 0 — 설계 확정(DA) 전까지 SoT 미등재"
+  },
+  {
+   "kind": "node",
+   "target": "vt_msg",
+   "attr": "peer_count",
+   "type": "int",
+   "desc": "대화 상대 수 (room 규모 추정 · 1:1 vs 단체 구분)",
+   "value_type": "수치형",
+   "status": "후보",
+   "basis": "표준 DDL 원천 컬럼 없음 · 적재 실적 0 — 설계 확정(DA) 전까지 SoT 미등재"
+  },
+  {
+   "kind": "node",
+   "target": "vt_bacnt",
+   "attr": "duration_days",
+   "type": "int",
+   "desc": "관측된 사용 기간(일) — is_burner 파생의 입력값",
+   "value_type": "수치형",
+   "status": "후보",
+   "basis": "표준 DDL 원천 컬럼 없음 · 적재 실적 0 — 설계 확정(DA) 전까지 SoT 미등재"
+  },
+  {
+   "kind": "node",
+   "target": "vt_telno",
+   "attr": "duration_days",
+   "type": "int",
+   "desc": "관측된 사용 기간(일) — is_burner 파생의 입력값",
+   "value_type": "수치형",
+   "status": "후보",
+   "basis": "표준 DDL 원천 컬럼 없음 · 적재 실적 0 — 설계 확정(DA) 전까지 SoT 미등재"
+  },
+  {
+   "kind": "node",
+   "target": "vt_bacnt",
+   "attr": "rule_version",
+   "type": "str",
+   "desc": "파생속성 산출에 사용한 규칙 버전",
+   "value_type": "텍스트",
+   "status": "후보",
+   "basis": "표준 DDL 원천 컬럼 없음 · 적재 실적 0 — 설계 확정(DA) 전까지 SoT 미등재"
+  },
+  {
+   "kind": "node",
+   "target": "vt_telno",
+   "attr": "rule_version",
+   "type": "str",
+   "desc": "파생속성 산출에 사용한 규칙 버전",
+   "value_type": "텍스트",
+   "status": "후보",
+   "basis": "표준 DDL 원천 컬럼 없음 · 적재 실적 0 — 설계 확정(DA) 전까지 SoT 미등재"
+  },
+  {
+   "kind": "node",
+   "target": "vt_ip",
+   "attr": "degree_calc_dt",
+   "type": "str",
+   "desc": "파생값 산출 시각",
+   "value_type": "날짜시간",
+   "status": "후보",
+   "basis": "표준 DDL 원천 컬럼 없음 · 적재 실적 0 — 설계 확정(DA) 전까지 SoT 미등재"
+  },
+  {
+   "kind": "edge",
+   "target": "member_of",
+   "attr": "position",
+   "type": "str",
+   "desc": "조직 내 역할 / 재직 직위",
+   "value_type": "텍스트",
+   "status": "후보",
+   "basis": "표준 DDL 원천 컬럼 없음 · 적재 실적 0 — 설계 확정(DA) 전까지 SoT 미등재"
+  },
+  {
+   "kind": "edge",
+   "target": "recruits",
+   "attr": "payment",
+   "type": "str",
+   "desc": "모집 유형 / 대가",
+   "value_type": "범주형",
+   "status": "후보",
+   "basis": "표준 DDL 원천 컬럼 없음 · 적재 실적 0 — 설계 확정(DA) 전까지 SoT 미등재"
+  },
+  {
+   "kind": "edge",
+   "target": "performed_by",
+   "attr": "actor_type",
+   "type": "str",
+   "desc": "이벤트 행위 주체의 유형 (person | telno | online_id)",
+   "value_type": "범주형",
+   "status": "후보",
+   "basis": "표준 DDL 원천 컬럼 없음 · 적재 실적 0 — 설계 확정(DA) 전까지 SoT 미등재"
+  },
+  {
+   "kind": "edge",
+   "target": "performed_by",
+   "attr": "resolved_to",
+   "type": "str",
+   "desc": "후속 특정된 vt_psn.psn_id (미특정 시 null)",
+   "value_type": "식별자",
+   "status": "후보",
+   "basis": "표준 DDL 원천 컬럼 없음 · 적재 실적 0 — 설계 확정(DA) 전까지 SoT 미등재"
+  },
+  {
+   "kind": "edge",
+   "target": "performed_by",
+   "attr": "resolved_at",
+   "type": "str",
+   "desc": "주체가 인물로 특정된 시각(ISO8601)",
+   "value_type": "날짜시간",
+   "status": "후보",
+   "basis": "표준 DDL 원천 컬럼 없음 · 적재 실적 0 — 설계 확정(DA) 전까지 SoT 미등재"
+  },
+  {
+   "kind": "edge",
+   "target": "used_ip",
+   "attr": "subject_type",
+   "type": "str",
+   "desc": "관계 주체의 유형 (person | telno | online_id)",
+   "value_type": "범주형",
+   "status": "후보",
+   "basis": "표준 DDL 원천 컬럼 없음 · 적재 실적 0 — 설계 확정(DA) 전까지 SoT 미등재"
+  },
+  {
+   "kind": "edge",
+   "target": "registered_to",
+   "attr": "duration_days",
+   "type": "int",
+   "desc": "관계 유효 기간(일) = valid_to - valid_from. 파생값",
+   "value_type": "수치형",
+   "status": "후보",
+   "basis": "표준 DDL 원천 컬럼 없음 · 적재 실적 0 — 설계 확정(DA) 전까지 SoT 미등재"
+  },
+  {
+   "kind": "edge",
+   "target": "linked_to",
+   "attr": "warrant_no",
+   "type": "str",
+   "desc": "근거 영장·허가서 번호",
+   "value_type": "식별자",
+   "status": "후보",
+   "basis": "표준 DDL 원천 컬럼 없음 · 적재 실적 0 — 설계 확정(DA) 전까지 SoT 미등재"
+  },
+  {
+   "kind": "edge",
+   "target": "exchanged_to",
+   "attr": "exchange_nm",
+   "type": "str",
+   "desc": "가상자산 거래소명",
+   "value_type": "텍스트",
+   "status": "후보",
+   "basis": "표준 DDL 원천 컬럼 없음 · 적재 실적 0 — 설계 확정(DA) 전까지 SoT 미등재"
+  },
+  {
+   "kind": "edge",
+   "target": "exchanged_to",
+   "attr": "fiat_amt",
+   "type": "int",
+   "desc": "전환 원화 금액(원)",
+   "value_type": "수치형",
+   "status": "후보",
+   "basis": "표준 DDL 원천 컬럼 없음 · 적재 실적 0 — 설계 확정(DA) 전까지 SoT 미등재"
+  },
+  {
+   "kind": "edge",
+   "target": "exchanged_to",
+   "attr": "asset_amt",
+   "type": "float",
+   "desc": "전환 가상자산 수량",
+   "value_type": "수치형",
+   "status": "후보",
+   "basis": "표준 DDL 원천 컬럼 없음 · 적재 실적 0 — 설계 확정(DA) 전까지 SoT 미등재"
+  },
+  {
+   "kind": "edge",
+   "target": "accessed_to",
+   "attr": "target_type",
+   "type": "str",
+   "desc": "접속 목적지 유형 (site | account | online_id)",
+   "value_type": "범주형",
+   "status": "후보",
+   "basis": "표준 DDL 원천 컬럼 없음 · 적재 실적 0 — 설계 확정(DA) 전까지 SoT 미등재"
+  }
+ ],
+ "dropped_20261001": [
+  [
+   "node",
+   "vt_case",
+   "crime_method",
+   "→ crime_method_cd (SoT 이름)"
+  ],
+  [
+   "node",
+   "vt_case",
+   "crime_step",
+   "→ crime_step_cd (SoT 이름)"
+  ],
+  [
+   "node",
+   "pt_cluster",
+   "cluster_size",
+   "→ petition_cnt (SoT 이름)"
+  ],
+  [
+   "node",
+   "pt_cluster",
+   "cluster_status",
+   "→ status (SoT 이름)"
+  ],
+  [
+   "node",
+   "site_cluster",
+   "site_count",
+   "→ site_cnt (SoT 이름)"
+  ],
+  [
+   "node",
+   "site_cluster",
+   "ip_count",
+   "→ ip_cnt (SoT 이름)"
+  ],
+  [
+   "node",
+   "vt_id",
+   "platform=email",
+   "설명 행"
+  ],
+  [
+   "edge",
+   "linked_to",
+   "link_type",
+   "linked_to 는 link_basis"
+  ],
+  [
+   "edge",
+   "linked_to",
+   "link_reason",
+   "linked_petition 삭제(V4.9)"
+  ],
+  [
+   "edge",
+   "controls",
+   "inference_basis_type",
+   "V4.9 추론 표시 제거 — controls·mentions 는 confidence"
+  ],
+  [
+   "edge",
+   "filed_as(구 linked_petition)",
+   "link_reason",
+   "linked_petition 삭제(V4.9)"
+  ],
+  [
+   "edge",
+   "used_ip, contacted, communicated_with",
+   "direction",
+   "방향은 엣지 자체가 표현"
+  ],
+  [
+   "node",
+   "vt_dev",
+   "device_id",
+   "→ dev_id (NODE_ID_STANDARD·참조 적재기 기준, 실적재 device_id 0건)"
+  ]
+ ],
+ "common_attrs": {
+  "source_id": [
+   "str",
+   "출처 ID — 원본 대조용 (규약 EP{n}-{문서번호}-{종류})",
+   "식별자"
+  ],
+  "rec_created": [
+   "str",
+   "레코드 생성 시각(ISO8601)",
+   "날짜시간"
+  ],
+  "verified": [
+   "bool",
+   "수사관 검증 여부",
+   "불리언"
+  ],
+  "confidence": [
+   "float",
+   "신뢰도 0.0~1.0",
+   "수치형"
+  ]
+ }
+}

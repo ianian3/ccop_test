@@ -227,7 +227,7 @@ class GraphService:
             return 'vt_vhcl'
 
         # 기기 (스마트폰/PC 등)
-        if 'device_id' in props or 'imei' in props or 'mac_addr' in props:
+        if 'dev_id' in props or 'device_id' in props or 'imei' in props or 'mac_addr' in props:
             return 'vt_dev'
 
         # 파일 (v3: hash_val 표준, hash_md5/hash_sha256 구형 호환)

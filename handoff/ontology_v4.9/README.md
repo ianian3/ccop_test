@@ -28,7 +28,9 @@ V4.8 로 적재기·검증기를 만드셨다면 아래 항목을 확인하시�
 - 집계 규칙은 정의 스펙의 `RELATIONSHIPS['used_ip'|'located_at']['aggregation']` 에 기계 판독 형태로 들어 있습니다.
 - [부록] `COLUMN_PATTERNS`(전처리 힌트): `case` → `incdnt_no`(사건번호), 신설 `case_file` → `flnm`(사건파일번호, 보조 속성). `sender`·`receiver` 는 이체 출금·입금 **계좌**(`vt_bacnt.account_no` + `direction`)로 정정(구: 이벤트 노드 `vt_transfer`).
 - CSV 적재 규격(`csv_spec_v4.8`)은 **형식 변경이 없어 V4.8 그대로**입니다 — 참조 적재기가 위 규칙대로 만듭니다.
-- 설계 이력은 `spec/CCOP_ONTOLOGY_DESIGN_HISTORY.md`, 엑셀 `변경이력` 시트 R18~R29.
+- 엑셀의 카탈로그·속성 사전 시트는 정의 스펙에서 **생성**됩니다(정의와 엑셀이 어긋나지 않도록). 설계 근거가 아직 없는 속성 27종은 `후보 속성(미확정)` 시트에 따로 두었습니다 — 구현 대상이 아닙니다.
+- 노드 식별자는 `NODE_ID_STANDARD` 그대로입니다(`transfer_id`·`call_id`·`msg_id`·`dev_id` 등). 당사 내부 정의에 남아 있던 `event_id`·`device_id` 표기를 이에 맞췄을 뿐 귀 기관 적재에는 변화가 없습니다.
+- 설계 이력은 `spec/CCOP_ONTOLOGY_DESIGN_HISTORY.md`, 엑셀 `변경이력` 시트 R18~R30.
 
 ---
 

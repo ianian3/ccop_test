@@ -99,7 +99,7 @@ CCOP 온톨로지를 V4.8 에서 **V4.9** 로 올려 안내드립니다. V4.8 �
 ## 5. 참고 자료 (`ontology_v4.9.zip`)
 
 - `README.md` — 변경점 표(12항목)와 적재 시 주의사항
-- `spec/CCOP_Ontology_V4.9_node_edge_attrs.xlsx` — 노드·엣지·속성 정본, `변경이력` 시트 R18~R29
+- `spec/CCOP_Ontology_V4.9_node_edge_attrs.xlsx` — 노드·엣지·속성 정본, `변경이력` 시트 R18~R30 · `후보 속성(미확정)` 시트(설계 근거 확인 전 속성 — 구현 대상 아님)
 - `code/ccop_ontology_v49.py` — 기계가 읽는 정의 스펙 / `code/audit_ontology_v49.py` — 감사 도구
 
 확인하시다가 궁금한 점이나 귀 기관 데이터에 맞지 않는 부분이 있으면 편하게 말씀해 주십시오.
