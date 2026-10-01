@@ -115,21 +115,14 @@ class MonitoringService:
                     # 실제 count(*)는 느릴 수 있으므로, 여기서는 테이블 개수로 대체하거나
                     # 꼭 필요하면 count(*) 수행. (모니터링이므로 성능 주의)
                     
-                    # 1. Vertex Label 수 (테이블명 vt_로 시작)
-                    cur.execute(f"""
-                        SELECT count(*) FROM information_schema.tables 
-                        WHERE table_schema = '{g}' AND table_name LIKE 'vt_%'
-                    """)
-                    v_labels = cur.fetchone()[0]
-                    
-                    # 2. Edge Label 수 (나머지, 제외: ag_label, ag_vertex, ag_edge)
-                    cur.execute(f"""
-                        SELECT count(*) FROM information_schema.tables 
-                        WHERE table_schema = '{g}' 
-                        AND table_name NOT LIKE 'vt_%' 
-                        AND table_name NOT IN ('ag_label', 'ag_vertex', 'ag_edge')
-                    """)
-                    e_labels = cur.fetchone()[0]
+                    # 1·2. Vertex/Edge Label 수 — 2026-10-01: AgensGraph 카탈로그 labkind 로 판정
+                    #   (종전 `table_name LIKE 'vt_%'` 는 pt_cluster·site_cluster 를 엣지로 셌다)
+                    cur.execute("""
+                        SELECT count(*) FILTER (WHERE l.labkind = 'v'), count(*) FILTER (WHERE l.labkind = 'e')
+                        FROM ag_label l JOIN ag_graph gr ON l.graphid = gr.oid
+                        WHERE gr.graphname = %s AND l.labname NOT IN ('ag_vertex', 'ag_edge')
+                    """, (g,))
+                    v_labels, e_labels = cur.fetchone()
                     
                     graph_stats.append({
                         "name": g,

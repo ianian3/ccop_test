@@ -609,7 +609,7 @@ class RdbToGraphService:
                     eid, src_act, dt, amt, tgt_act, se_cd = safe_str(r[0]), safe_str(r[1]), safe_str(r[2]), safe_str(r[3]), safe_str(r[4]), safe_str(r[5])
                     sid = safe_str(r[6]) if len(r) > 6 else ''
                     # 정경 transfer_id + 호환 event_id (같은 값, 표준 파이프라인과 동일) — MERGE 키는 기존 그래프 호환 위해 event_id 유지
-                    props = f"{{transfer_id: '{eid}', event_id: '{eid}', event_type: 'transfer', amount: '{amt}', timestamp: '{dt}', source_id: '{sid}', type: '이체'}}"
+                    props = f"{{transfer_id: '{eid}', event_id: '{eid}', event_type: 'transfer', dlng_amt: '{amt}', dlng_dt: '{dt}', amount: '{amt}', timestamp: '{dt}', source_id: '{sid}', type: '이체'}}"
                     cur.execute(f"MERGE (n:vt_transfer {{event_id: '{eid}'}}) SET n = {props}")
                     stats["nodes"] += 1; stats["transfers"] += 1
 
@@ -641,7 +641,7 @@ class RdbToGraphService:
                 try:
                     eid, caller, callee, dt, dur = safe_str(r[0]), _norm_telno(safe_str(r[1])), _norm_telno(safe_str(r[2])), safe_str(r[3]), safe_str(r[4])
                     sid = safe_str(r[5]) if len(r) > 5 else ''
-                    props = f"{{call_id: '{eid}', event_id: '{eid}', event_type: 'call', duration: '{dur}', timestamp: '{dt}', source_id: '{sid}', type: '통화'}}"
+                    props = f"{{call_id: '{eid}', event_id: '{eid}', event_type: 'call', call_dur_sec: '{dur}', call_strt_dt: '{dt}', duration: '{dur}', timestamp: '{dt}', source_id: '{sid}', type: '통화'}}"
                     cur.execute(f"MERGE (n:vt_call {{event_id: '{eid}'}}) SET n = {props}")
                     stats["nodes"] += 1; stats["calls"] += 1
                     
@@ -718,7 +718,7 @@ class RdbToGraphService:
                 try:
                     eid, sender, receiver, dt, content = safe_str(r[0]), safe_str(r[1]), safe_str(r[2]), safe_str(r[3]), safe_str(r[4])
                     summary = content[:50] if content else ''
-                    props = f"{{msg_id: '{eid}', event_id: '{eid}', event_type: 'sms', timestamp: '{dt}', summary: '{summary}', type: '문자'}}"
+                    props = f"{{msg_id: '{eid}', event_id: '{eid}', event_type: 'sms', dsptch_dt: '{dt}', timestamp: '{dt}', summary: '{summary}', type: '문자'}}"
                     cur.execute(f"MERGE (n:vt_msg {{event_id: '{eid}'}}) SET n = {props}")
                     stats["nodes"] += 1
                     
@@ -873,7 +873,7 @@ class RdbToGraphService:
                     eid, telno = safe_str(r[0]), safe_str(r[1])
                     lat, lng = safe_str(r[2]), safe_str(r[3])
                     dt, evt_type = safe_str(r[4]), safe_str(r[5])
-                    props = f"{{mov_id: 'cell-{eid}', mov_type: 'cell_tower', loc_evt_sn: '{eid}', telno: '{telno}', lat: '{lat}', lng: '{lng}', timestamp: '{dt}', evt_typ_nm: '{evt_type}'}}"
+                    props = f"{{mov_id: 'cell-{eid}', mov_type: 'cell_tower', loc_evt_sn: '{eid}', telno: '{telno}', lat: '{lat}', lng: '{lng}', mov_dt: '{dt}', timestamp: '{dt}', evt_typ_nm: '{evt_type}'}}"
                     cur.execute(f"MERGE (n:vt_movement {{mov_id: 'cell-{eid}'}}) SET n = {props}")
                     stats["nodes"] += 1
                     if telno:
@@ -896,7 +896,7 @@ class RdbToGraphService:
                     eid, vno = safe_str(r[0]), safe_str(r[1])
                     dt, lat, lng = safe_str(r[2]), safe_str(r[3]), safe_str(r[4])
                     loc_nm = safe_str(r[5])
-                    props = f"{{mov_id: 'lpr-{eid}', mov_type: 'lpr', rcgn_sn: '{eid}', vhclno: '{vno}', lat: '{lat}', lng: '{lng}', timestamp: '{dt}', cctv_id: '{loc_nm}'}}"
+                    props = f"{{mov_id: 'lpr-{eid}', mov_type: 'lpr', rcgn_sn: '{eid}', vhclno: '{vno}', lat: '{lat}', lng: '{lng}', mov_dt: '{dt}', timestamp: '{dt}', cctv_id: '{loc_nm}'}}"
                     cur.execute(f"MERGE (n:vt_movement {{mov_id: 'lpr-{eid}'}}) SET n = {props}")
                     stats["nodes"] += 1
                     if vno:

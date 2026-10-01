@@ -59,10 +59,9 @@ def test_pole_schema_node_labels_subset_of_sot():
     labels = set()
     for pair in _pole_edge_dirs().values():
         f, t = (pair if isinstance(pair, (list, tuple)) else (None, None))
-        if f:
-            labels.add(f)
-        if t:
-            labels.add(t)
+        for side in (f, t):                     # 2026-10-01: 다형은 'a|b', Any 는 None
+            if side:
+                labels.update(str(side).split('|'))
     extra = labels - sot_nodes()
     assert not extra, f'POLE_SCHEMA에 SoT 밖 노드 라벨: {sorted(extra)}'
 

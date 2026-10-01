@@ -49,6 +49,8 @@ class PatternAnalyzer:
         all_patterns = PatternLibrary.get_all_patterns()
         
         for pattern_id, pattern in all_patterns.items():
+            if not getattr(pattern, 'supported', True):     # 2026-10-01: SoT 에 없는 엣지를 요구하는 패턴 제외
+                continue
             match_result = PatternAnalyzer._match_pattern(subgraph, pattern)
             
             if match_result["score"] >= pattern.scoring["min_threshold"]:

@@ -19,7 +19,7 @@ from app.services.ontology_service import KICSCrimeDomainOntology as O
 # Event 노드 라벨 → 발생시각 속성 (V형 기준)
 EVENT_VT = {
     'vt_transfer': 'dlng_dt', 'vt_call': 'call_strt_dt', 'vt_access': 'access_dt',
-    'vt_msg': 'dsptch_dt', 'vt_movement': 'timestamp', 'vt_impersonation': 'start_dt',
+    'vt_msg': 'dsptch_dt', 'vt_movement': 'mov_dt', 'vt_impersonation': 'start_dt',   # 2026-10-01: SoT mov_dt (구 timestamp)
 }
 # 도메인/레인지 개념명 (Event) — V형 판정
 EVENT_CONCEPTS = {'Transfer', 'Call', 'Access', 'Message', 'Movement', 'Impersonation', 'Event'}

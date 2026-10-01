@@ -44,11 +44,11 @@
       "examples": [
         {
           "question": "IP 192.168.1.10에 호스팅된 사이트",
-          "cypher": "MATCH (ip:vt_ip {ip_addr: '192.168.1.10'})-[:hosts]->(s:vt_site) RETURN ip, s"
+          "cypher": "MATCH (ip:vt_ip {ip_addr: '192.168.1.10'})<-[:resolves_to]-(s:vt_site) RETURN ip, s"
         },
         {
           "question": "피싱 사이트 호스팅 IP 역추적",
-          "cypher": "MATCH (ip:vt_ip)-[:hosts]->(s:vt_site {is_phishing: true}) RETURN ip, s"
+          "cypher": "MATCH (ip:vt_ip)<-[:resolves_to]-(s:vt_site {is_phishing: true}) RETURN ip, s"
         },
         {
           "question": "사이트에 포함된 악성 파일",
@@ -89,7 +89,7 @@
         },
         {
           "question": "IP에서 호스팅된 사이트의 악성 파일",
-          "cypher": "MATCH (ip:vt_ip)-[:hosts]->(s:vt_site)-[:contains_file]->(f:vt_file) RETURN ip, s, f"
+          "cypher": "MATCH (ip:vt_ip)<-[:resolves_to]-(s:vt_site)-[:contains_file]->(f:vt_file) RETURN ip, s, f"
         },
         {
           "question": "대포폰 → 사칭 → 피해기관 체인",
@@ -105,11 +105,11 @@
         },
         {
           "question": "김민준의 차량 LPR 기록 위치",
-          "cypher": "MATCH (p:vt_psn {name: '김민준'})-[:drives]->(c:vt_vhcl)-[:recorded_in]->(m:vt_movement)-[:occurred_at]->(l:vt_loc) RETURN p, c, m, l"
+          "cypher": "MATCH (p:vt_psn {name: '김민준'})-[:drives]->(c:vt_vhcl)-[:recorded_in]->(m:vt_movement)-[:located_at]->(l:vt_loc) RETURN p, c, m, l"
         },
         {
           "question": "김민준이 발송한 메시지에 언급된 계좌",
-          "cypher": "MATCH (p:vt_psn {name: '김민준'})-[:sent_msg]->(m:vt_msg)-[:mentions_account]->(b:vt_bacnt) RETURN p, m, b"
+          "cypher": "MATCH (p:vt_psn {name: '김민준'})-[:sent_msg]->(m:vt_msg)-[:mentions]->(b:vt_bacnt) RETURN p, m, b"
         }
       ]
     },
@@ -221,7 +221,7 @@
         },
         {
           "question": "계좌 1002-110-100001 이체의 접속 IP",
-          "cypher": "MATCH (b:vt_bacnt {account_no: '1002-110-100001'})-[:from_account]->(tr:vt_transfer)-[:via_ip]->(ip:vt_ip) RETURN tr, ip"
+          "cypher": "MATCH (b:vt_bacnt {account_no: '1002-110-100001'})-[:from_account]->(tr:vt_transfer)-[:accessed_from]->(ip:vt_ip) RETURN tr, ip"
         },
         {
           "question": "계좌에서 가상자산 지갑으로 전송한 이체",
@@ -233,11 +233,11 @@
         },
         {
           "question": "메시지에 언급된 거래 장소",
-          "cypher": "MATCH (m:vt_msg)-[:mentions_location]->(l:vt_loc) RETURN m, l"
+          "cypher": "MATCH (m:vt_msg)-[:mentions]->(l:vt_loc) RETURN m, l"
         },
         {
           "question": "전화번호 010-1234-5678의 통화 발신 위치",
-          "cypher": "MATCH (t:vt_telno {telno: '010-1234-5678'})-[:caller]->(c:vt_call)-[:occurred_at]->(l:vt_loc) RETURN c, l"
+          "cypher": "MATCH (t:vt_telno {telno: '010-1234-5678'})-[:caller]->(c:vt_call)-[:located_at]->(l:vt_loc) RETURN c, l"
         },
         {
           "question": "두 계정 간 주고받은 메시지",

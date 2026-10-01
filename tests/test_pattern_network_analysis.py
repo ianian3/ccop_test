@@ -23,7 +23,7 @@ from app.services.graph_service import GraphService
 # ─── 헬퍼: 몸캠피싱(단일라벨 패턴)용 서브그래프 구성 ────────────────
 def _bodycamp_nodes(include_ip=True, include_phone=True, drop_account=False):
     nodes = {
-        "n_case": {"label": "vt_flnm", "properties": {"flnm": "2019-000392"}},
+        "n_case": {"label": "vt_case", "properties": {"incdnt_no": "2019-000392"}},
         "n_site": {"label": "vt_site", "properties": {}},
         "n_file": {"label": "vt_file", "properties": {}},
     }
@@ -40,7 +40,7 @@ def _bodycamp_edges(drop_edge=None):
     edges = [
         {"from": "n_case", "to": "n_site", "type": "digital_trace"},
         {"from": "n_case", "to": "n_file", "type": "related_to"},
-        {"from": "n_case", "to": "n_acc", "type": "used_account"},
+        {"from": "n_case", "to": "n_acc", "type": "eg_used_account"},
     ]
     if drop_edge is not None:
         del edges[drop_edge]

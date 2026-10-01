@@ -880,13 +880,9 @@ def network_project_1mode():
         proj_edge    = data.get('projection_edge') or f"co_{pivot_label.replace('vt_', '')}"
 
         # 입력 검증 — 허용된 레이블만 사용
-        allowed_labels = {
-            'vt_psn','vt_org','vt_case','vt_petition',
-            'vt_bacnt','vt_crypto','vt_telno','vt_ip','vt_site',
-            'vt_file','vt_id','vt_email','vt_vhcl','vt_dev','vt_atm',
-            'vt_loc','vt_transfer','vt_call','vt_msg','vt_access',
-            'vt_movement','vt_impersonation','vt_src'
-        }
+        # 2026-10-01: SoT 라벨 (종전 하드코딩은 vt_email 잔존·군집 라벨 누락)
+        from app.services.ontology_service import KICSCrimeDomainOntology as _O
+        allowed_labels = {v['label'] for v in _O.ENTITIES.values()}
         if actor_label not in allowed_labels or pivot_label not in allowed_labels:
             return jsonify({"error": "Invalid label"}), 400
         if actor_label == pivot_label:
@@ -992,10 +988,10 @@ def network_bipartite_stats():
         actor_label = data.get('actor_label', 'vt_psn')
         pivot_label = data.get('pivot_label', 'vt_bacnt')
 
-        allowed = {
-            'vt_psn','vt_org','vt_bacnt','vt_telno','vt_ip',
-            'vt_site','vt_file','vt_id','vt_email','vt_dev','vt_atm'
-        }
+        # 2026-10-01: SoT Person·Object 레이어 라벨 (종전 하드코딩은 vt_email 잔존, crypto·vhcl 누락)
+        from app.services.ontology_service import KICSCrimeDomainOntology as _O
+        allowed = {_O.ENTITIES[c]['label'] for layer in ('Person', 'Object') for c in _O.LAYERS[layer]
+                   if c in _O.ENTITIES}
         if actor_label not in allowed or pivot_label not in allowed:
             return jsonify({"error": "Invalid label"}), 400
 
@@ -1429,6 +1425,32 @@ def edge_style():
     return jsonify({"status": "success", "version": "v4.0",
                     "count": len(Ont.EDGE_STYLE_V40),
                     "styles": Ont.EDGE_STYLE_V40}), 200
+
+
+@api_v1.route('/ontology', methods=['GET'])
+@require_api_or_ui
+def ontology_view():
+    """온톨로지 SoT 런타임 뷰 (2026-10-01 정합 1단계) — 화면 팔레트·레이어·라벨 맵이 손사본 대신 이것을 읽는다.
+
+    nodes: 라벨 → {concept, label_ko, layer, keys, attributes, legal_category}
+    edges: 엣지 → {label_ko, domain(라벨 목록|null=Any), range, properties, meaning}
+    deprecated: V4.9 폐기·개명 엣지/라벨 표 (이전 적재분 표시용)
+    """
+    from app.services.ontology_service import KICSCrimeDomainOntology as Ont
+    rules = Ont.edge_rules()
+    nodes = {v['label']: {'concept': c, 'label_ko': v.get('label_ko'), 'layer': v.get('layer'),
+                          'keys': v.get('properties', []), 'attributes': v.get('attributes', []),
+                          'legal_category': v.get('legal_category')}
+             for c, v in Ont.ENTITIES.items()}
+    edges = {e: {'label_ko': d.get('label_ko'), 'meaning': d.get('meaning'),
+                 'domain': sorted(rules[e][0]) if rules[e][0] is not None else None,
+                 'range': sorted(rules[e][1]) if rules[e][1] is not None else None,
+                 'properties': d.get('properties') or []}
+             for e, d in Ont.RELATIONSHIPS.items()}
+    return jsonify({"status": "success", "version": "V4.9", "node_count": len(nodes), "edge_count": len(edges),
+                    "nodes": nodes, "edges": edges, "layers": Ont.LAYERS_GDB,
+                    "common_groups": Ont.NODE_COMMON_GROUPS,
+                    "deprecated": {"edges": Ont.DEPRECATED_EDGES, "labels": Ont.DEPRECATED_LABELS}}), 200
 
 
 @api_v1.route('/layout-presets', methods=['GET'])

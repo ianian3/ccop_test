@@ -171,7 +171,8 @@ class AIService:
     _EN_LABEL_HINTS = {
         'vt_ip': (r'\bip\b', r'아이피'), 'vt_atm': (r'\batm\b', r'현금인출'),
         'vt_site': (r'\burl\b', r'\bdomain\b'),
-        'vt_id': (r'\bid\b', r'아이디', r'계정', r'\bemail\b', r'\bmail\b'),   # V4.9 이메일 흡수 'vt_crypto': (r'지갑', r'코인', r'가상화폐'),
+        'vt_id': (r'\bid\b', r'아이디', r'계정', r'\bemail\b', r'\bmail\b'),   # V4.9 이메일 흡수
+        'vt_crypto': (r'지갑', r'코인', r'가상화폐'),   # 2026-10-01: 주석 안에 묻혀 무효였던 힌트 복구
     }
 
     @staticmethod
@@ -318,51 +319,12 @@ class AIService:
         AIService._ROUTER_CACHE[key] = dict(result)
         return result
 
-    # V3.3 POLE 온톨로지 엣지 방향 규칙 (source → target)
-    _EDGE_DIRECTION_MAP = {
-        # 역할 (Person → Case)
-        "suspect_in":     ("vt_psn",      "vt_case"),
-        "victim_in":      ("vt_psn",      "vt_case"),
-        "witness_in":     ("vt_psn",      "vt_case"),
-        # 사건·진정서
-        "filed_as":       ("vt_petition", "vt_case"),
-        # 소유 (Person → Object)
-        "has_account":    ("vt_psn",      "vt_bacnt"),
-        "controls":       ("vt_psn",      "vt_bacnt"),
-        "owns_phone":     ("vt_psn",      "vt_telno"),
-        "owns_vehicle":   ("vt_psn",      "vt_vhcl"),
-        "used_ip":        ("vt_psn",      "vt_ip"),
-        "member_of":      ("vt_psn",      "vt_org"),
-        "uses_id":        ("vt_psn",      "vt_id"),
-        # 금융 이벤트
-        "from_account":   ("vt_bacnt",    "vt_transfer"),
-        "to_account":     ("vt_transfer", "vt_bacnt"),
-        "transferred_to": ("vt_bacnt",    "vt_bacnt"),
-        # 통신 이벤트
-        "caller":         ("vt_telno",    "vt_call"),
-        "callee":         ("vt_call",     "vt_telno"),
-        "sent_msg":       ("vt_telno",    "vt_msg"),
-        "received_msg":   ("vt_msg",      "vt_telno"),
-        # 이동·위치
-        "recorded_in":    ("vt_vhcl",     "vt_movement"),
-        "located_at":     ("vt_movement", "vt_loc"),   # V4.9 occurred_at 통합
-        # 귀속·메타
-        "belongs_to":     ("vt_bacnt",    "vt_org"),
-        "resolves_to":    ("vt_site",     "vt_ip"),
-        # sourced_from: 모든 노드 타입 → vt_src (None = Any)
-        # 버그수정 v3.7: ("vt_psn","vt_src") 제한 → 방향 교정이 vt_case 등에서 무작동
-        "sourced_from":   (None,          "vt_src"),
-        # ── v3.7 신규 엣지 ────────────────────────────────────────────
-        "belongs_to_cluster":  ("vt_petition", "pt_cluster"),
-        "used_in_device":      ("vt_telno",    "vt_dev"),
-        "belongs_to_campaign": ("vt_site",     "site_cluster"),
-        # 사칭 V3.3 2-홉 패턴
-        "used_for":       ("vt_telno",    "vt_impersonation"),  # 수단 → 사칭이벤트
-        "targets":        ("vt_impersonation", "vt_org"),       # 사칭이벤트 → 대상기관
-        # 사칭 V3.2 레거시 (deprecated — 읽기 전용)
-        # 엔티티 해소
-        "same_as":        ("vt_psn",      "vt_psn"),
-    }
+    # 엣지 방향 규칙 — 2026-10-01 정합 1단계: SoT(KICSCrimeDomainOntology.edge_rules) 에서 만든다.
+    #   종전 손사본은 SoT 엣지 23종 누락·located_at 등 방향이 다른 사본들과 어긋났다. 값은 (출발 집합|None, 도착 집합|None)
+    @staticmethod
+    def _edge_direction_rules():
+        from app.services.ontology_service import KICSCrimeDomainOntology as O
+        return O.edge_rules()
 
     @staticmethod
     def _fix_relation_direction(cypher: str) -> str:
@@ -381,6 +343,8 @@ class AIService:
             re.IGNORECASE
         )
 
+        rules = AIService._edge_direction_rules()
+
         def _fix_match(m):
             full = m.group(0)
             rel = m.group(3)       # e.g. "-[:suspect_in]->" or "<-[:suspect_in]-"
@@ -388,13 +352,13 @@ class AIService:
             label_a = m.group(2)
             label_b = m.group(6)
 
-            rule = AIService._EDGE_DIRECTION_MAP.get(edge_type)
+            rule = rules.get(edge_type)
             if not rule:
                 return full
 
-            expected_src, expected_tgt = rule
-            src_ok = lambda l: expected_src is None or l == expected_src
-            tgt_ok = lambda l: expected_tgt is None or l == expected_tgt
+            expected_src, expected_tgt = rule          # 라벨 집합 또는 None(Any) — 다형 domain/range 지원
+            src_ok = lambda l: expected_src is None or l in expected_src
+            tgt_ok = lambda l: expected_tgt is None or l in expected_tgt
 
             is_forward = not rel.startswith('<')  # -[...]-> vs <-[...]-
             # 2026-10-01 핫픽스: 현재 방향이 규칙에 맞으면 절대 뒤집지 않는다. 종전에는 출발·도착 라벨이 같은

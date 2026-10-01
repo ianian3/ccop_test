@@ -4,6 +4,7 @@ from app.database import get_db_connection, safe_props, safe_set_graph_path, val
 from app.core import query_guard
 from app.services.subgraph_service import SubGraphService
 from app.services.ai_service import AIService
+from app.services.ontology_service import KICSCrimeDomainOntology
 
 def _extract_keyword(question: str) -> str:
     """질문에서 가장 긴 단어를 키워드로 추출 (LLM 호출 없이 규칙 기반)"""
@@ -36,75 +37,19 @@ WRITABLE_GRAPHS = frozenset({'ccop_test_graph'})
 
 class GraphService:
 
-    # KICS 온톨로지 엣지 방향 — v3.7 POLE 6레이어 기준
-    # (docs/ONTOLOGY_FINAL_ARCHITECTURE_v3.7.md §4 엣지 카탈로그)
-    # 동적 DB 조회 실패 시 fallback으로 사용.
-    _KICS_EDGE_DIRECTIONS = {
-        # ── CASE 관련 역할 엣지 ───────────────────────────────────────
-        "suspect_in":    ("vt_psn",      "vt_case"),
-        "victim_in":     ("vt_psn",      "vt_case"),
-        "witness_in":    ("vt_psn",      "vt_case"),
-        "filed_as":      ("vt_petition", "vt_case"),
-        "linked_to":     ("vt_petition", "vt_case"),
-        # ── CASE → OBJECT 증거 연결 (v3.5 공식 등재) ─────────────────
-        "eg_used_account": ("vt_case",   "vt_bacnt"),
-        "eg_used_phone":   ("vt_case",   "vt_telno"),
-        "eg_used_ip":      ("vt_case",   "vt_ip"),
-        # ── (V4.9) involves 삭제 — 사건 관련 인물은 suspect_in·victim_in·witness_in
-        "involves_org":  ("vt_case",     "vt_org"),
-        # ── PERSON 소유/귀속 엣지 ─────────────────────────────────────
-        "has_account":   ("vt_psn",      "vt_bacnt"),
-        "controls":      ("vt_psn",      "vt_bacnt"),
-        "owns_phone":    ("vt_psn",      "vt_telno"),
-        "uses_id":       ("vt_psn",      "vt_id"),
-        "uses_email":    ("vt_psn",      "vt_email"),   # V4.9 삭제 — 이전 적재분 조회 호환 (신규는 uses_id)
-        "drives":        ("vt_psn",      "vt_vhcl"),   # 운행 (LPR·CDR 기반)
-        "owns_vehicle":  ("vt_psn",      "vt_vhcl"),   # v3.5: 법적 소유 (등록원부)
-        "used_ip":       ("vt_psn",      "vt_ip"),
-        "member_of":     ("vt_psn",      "vt_org"),
-        # ── PERSON 간 관계 ────────────────────────────────────────────
-        "same_as":        ("vt_psn",      "vt_psn"),
-        # ── PERSON v3.4 신규 ──────────────────────────────────────────
-        "operates":      ("vt_psn",      "vt_site"),
-        "recruits":      ("vt_psn",      "vt_psn"),
-        "blackmails":    ("vt_psn",      "vt_psn"),
-        # ── OBJECT → PERSON 예외 엣지 (v3.5 공식 허용) ───────────────
-        "registered_to": ("vt_telno",    "vt_psn"),    # v3.5: 전화 명의자 (Phone→Person)
-        # ── OBJECT 간 관계 ────────────────────────────────────────────
-        "transferred_to": ("vt_bacnt",   "vt_bacnt"),
-        "hosts":         ("vt_ip",       "vt_site"),   # V4.9 삭제(→ resolves_to basis=origin) — 이전 적재분 조회 호환
-        "resolves_to":   ("vt_site",     "vt_ip"),     # DNS 해석
-        "communicated_with": ("vt_ip",   "vt_ip"),     # IP 간 통신
-        "belongs_to":    ("vt_bacnt",    "vt_org"),    # 계좌 소속 금융기관
-        "contains_file": ("vt_site",     "vt_file"),   # 파일 내장·배포
-        "located_at":    ("vt_atm",      "vt_loc"),    # 객체 고정 위치
-        "mentions_account": ("vt_msg",   "vt_bacnt"),  # V4.9 삭제(→ mentions) — 이전 적재분 조회 호환
-        # ── [호환성] deprecated, 신규 생성 금지 ──────────────────────
-        "hosted_at":     ("vt_site",     "vt_ip"),     # → hosts 대체됨
-        "contacted":     ("vt_telno",    "vt_telno"),  # → caller/callee 대체됨
-        # ── EVENT 관련 엣지 ───────────────────────────────────────────
-        "from_account":  ("vt_bacnt",    "vt_transfer"),
-        "to_account":    ("vt_transfer", "vt_bacnt"),
-        "caller":        ("vt_telno",    "vt_call"),
-        "callee":        ("vt_call",     "vt_telno"),
-        "accessed_from": ("vt_access",   "vt_ip"),     # 접속 출발 IP
-        "accessed_to":   ("vt_access",   "vt_site"),   # v3.5 복원: 접속 목적지 사이트
-        "sent_msg":      ("vt_telno",    "vt_msg"),    # sent_via 대체
-        "received_msg":  ("vt_msg",      "vt_telno"),  # received_by 대체
-        "occurred_at":   ("vt_transfer", "vt_loc"),    # V4.9 삭제(→ located_at) — 이전 적재분 조회 호환
-        "recorded_in":   ("vt_vhcl",     "vt_movement"),
-        # ── 사칭 범죄 엣지 (v3.3+) ────────────────────────────────────
-        "used_for":      ("vt_telno",    "vt_impersonation"),
-        "targets":       ("vt_impersonation", "vt_org"),
-        # ── META (Provenance) ─────────────────────────────────────────
-        # sourced_from: 모든 노드 타입 → vt_src (None = Any)
-        # 버그수정 v3.7: ("vt_psn", "vt_src") 로 제한되어 있어 vt_case 등에서 방향 교정 불가
-        "sourced_from":  (None,          "vt_src"),
-        # ── v3.7 신규 엣지 ────────────────────────────────────────────
-        "belongs_to_cluster":  ("vt_petition", "pt_cluster"),
-        "used_in_device":      ("vt_telno",    "vt_dev"),
-        "belongs_to_campaign": ("vt_site",     "site_cluster"),
+    # 엣지 방향 — 2026-10-01 정합 1단계: SoT(t2c_schema) 에서 만든다. 종전 손사본은 SoT 밖 이름(involves_org·hosted_at)·
+    #   SoT 와 다른 방향(linked_to 진정서→사건, located_at ATM 한정 등)으로 실제 DB 방향까지 덮어썼다.
+    #   값: (출발, 도착) — 라벨 1개면 그 라벨, 여럿이면 'a|b', 제약 없으면 None.
+    #   이전 적재분 조회 호환: V4.9 에서 삭제됐지만 재빌드 전 그래프에 남은 엣지의 옛 방향.
+    _LEGACY_EDGE_DIRECTIONS = {
+        "uses_email":       ("vt_psn",  "vt_email"),
+        "hosts":            ("vt_ip",   "vt_site"),
+        "mentions_account": ("vt_msg",  "vt_bacnt"),
+        "occurred_at":      (None,      "vt_loc"),
+        "sameas":           ("vt_psn",  "vt_psn"),
     }
+    _KICS_EDGE_DIRECTIONS = {**_LEGACY_EDGE_DIRECTIONS,
+                             **KICSCrimeDomainOntology.t2c_schema()['edge_directions']}
 
     # 스키마 캐시 (graph_path 별 저장)
     _SCHEMA_CACHE = {}
@@ -294,17 +239,19 @@ class GraphService:
                 logger.info(f"▶ [SchemaCache] 캐시 히트: {graph_path}")
                 return cached_data
 
+        if not validate_graph_path(graph_path):                 # 2026-10-01: 아래 SQL 에 이름을 끼워 넣는다
+            return {"node_labels": {}, "edge_types": []}
         conn, cur = GraphService.get_db_connection()
         if not conn: return {"node_labels": {}, "edge_types": []}
         try:
-            # Vertex 라벨 및 대표 속성 샘플링 조회
-            cur.execute(f"""
-                SELECT table_name 
-                FROM information_schema.tables 
-                WHERE table_schema = '{graph_path}' 
-                  AND table_name LIKE 'vt_%'
-            """)
-            vertex_labels = [r[0] for r in cur.fetchall()]
+            # Vertex 라벨 — 2026-10-01: 종전 `table_name LIKE 'vt_%'` 는 pt_cluster·site_cluster 를 엣지로 분류했다.
+            #   AgensGraph 카탈로그 ag_label.labkind('v'/'e')로 판정
+            cur.execute("""
+                SELECT l.labname, l.labkind FROM ag_label l JOIN ag_graph g ON l.graphid = g.oid
+                WHERE g.graphname = %s AND l.labname NOT IN ('ag_vertex', 'ag_edge')
+            """, (graph_path,))
+            _labs = cur.fetchall()
+            vertex_labels = [n for n, k in _labs if k == 'v']
             
             node_info = {}
             for label in vertex_labels:
@@ -321,17 +268,12 @@ class GraphService:
                 prop_keys = list(set([r[0] for r in cur.fetchall()]))
                 node_info[label] = list(set(cols + prop_keys))
 
-            # Edge 라벨 조회
-            cur.execute(f"""
-                SELECT table_name
-                FROM information_schema.tables
-                WHERE table_schema = '{graph_path}'
-                  AND table_name NOT LIKE 'vt_%'
-                  AND table_name NOT IN ('ag_vertex', 'ag_label', 'ag_edge')
-            """)
-            edge_labels = [r[0] for r in cur.fetchall()]
+            # Edge 라벨 (labkind = 'e')
+            edge_labels = [n for n, k in _labs if k == 'e']
 
             # 엣지 방향 조회: 각 엣지 테이블에서 시작/끝 노드 레이블 샘플링
+            #   2026-10-01: 샘플링 MATCH 전에 graph_path 설정 — 종전엔 미설정이라 SoT 밖 엣지 방향 샘플링이 항상 실패
+            safe_set_graph_path(cur, graph_path)
             edge_directions = {}
             for edge in edge_labels:
                 # KICS 매핑에 있으면 바로 사용 (DB 쿼리 절약)
@@ -419,26 +361,12 @@ class GraphService:
             cur.execute(f"CREATE GRAPH IF NOT EXISTS {graph_name};")
             safe_set_graph_path(cur, graph_name)
             
-            # 기본 vertex/edge 라벨 생성
-            cur.execute("CREATE VLABEL IF NOT EXISTS vt_psn;")
-            cur.execute("CREATE VLABEL IF NOT EXISTS vt_bacnt;")
-            cur.execute("CREATE VLABEL IF NOT EXISTS vt_telno;")
-            cur.execute("CREATE VLABEL IF NOT EXISTS vt_site;")
-            cur.execute("CREATE VLABEL IF NOT EXISTS vt_ip;")
-            cur.execute("CREATE VLABEL IF NOT EXISTS vt_flnm;")
-            cur.execute("CREATE VLABEL IF NOT EXISTS vt_id;")
-            cur.execute("CREATE VLABEL IF NOT EXISTS vt_atm;")
-            cur.execute("CREATE VLABEL IF NOT EXISTS vt_event;")
-            cur.execute("CREATE VLABEL IF NOT EXISTS vt_persona;")
-            
-            cur.execute("CREATE ELABEL IF NOT EXISTS related_to;")
-            cur.execute("CREATE ELABEL IF NOT EXISTS uses_persona;")
-            cur.execute("CREATE ELABEL IF NOT EXISTS participated_in;")
-            cur.execute("CREATE ELABEL IF NOT EXISTS event_involved;")
-            cur.execute("CREATE ELABEL IF NOT EXISTS supported_by;")
-            cur.execute("CREATE ELABEL IF NOT EXISTS used_account;")
-            cur.execute("CREATE ELABEL IF NOT EXISTS used_phone;")
-            cur.execute("CREATE ELABEL IF NOT EXISTS digital_trace;")
+            # 기본 vertex/edge 라벨 생성 — 2026-10-01: SoT 라벨·엣지 (종전 목록은 vt_flnm·vt_event·vt_persona·
+            #   used_account 등 삭제된 이름을 만들었다)
+            for _lab in sorted({v['label'] for v in KICSCrimeDomainOntology.ENTITIES.values()}):
+                cur.execute(f"CREATE VLABEL IF NOT EXISTS {_lab};")
+            for _el in KICSCrimeDomainOntology.RELATIONSHIPS:
+                cur.execute(f"CREATE ELABEL IF NOT EXISTS {_el};")
             
             return True, f"그래프 '{graph_name}' 생성 완료"
         except Exception as e:
@@ -931,7 +859,7 @@ class GraphService:
 
             # 3. 공유 자원 (계좌/전화) 추적
             for rel, res_label, prop_name in [
-                ('has_account', 'vt_bacnt', 'actno'),
+                ('has_account', 'vt_bacnt', 'account_no'),   # 2026-10-01: SoT 키 (구 actno)
                 ('owns_phone', 'vt_telno', 'telno'),
                 ('used_ip', 'vt_ip', 'ip_addr')
             ]:

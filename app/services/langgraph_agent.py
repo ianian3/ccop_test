@@ -488,116 +488,10 @@ class LangGraphAgent:
     순환형 구조(Reflection 루프)를 통해 쿼리 정확도를 스스로 개선합니다.
     """
 
-    # V3.2 POLE 6계층 정적 fallback 스키마 (동적 조회 비활성화 또는 빈 그래프 시 사용)
-    _POLE_SCHEMA: Dict[str, Any] = {
-        "node_labels": {
-            "vt_src":      ["src_id", "src_name", "src_type", "reliability_tier",
-                            "collector", "collected_at", "update_cycle"],
-            "vt_case":     ["flnm", "incdnt_no", "incdnt_nm", "incdnt_typ_cd",
-                            "occrn_dt", "damage_amt", "crime_site", "status", "source_id"],
-            "vt_petition": ["petition_id", "raw_id", "rcpt_dt", "rcpt_channel",
-                            "crime_type_cd", "damage_amt", "status", "source_id"],
-            "vt_psn":      ["psn_id", "name", "korn_flnm", "dob", "gender",
-                            "nationality", "risk_level", "rrno_hash", "source_id"],
-            "vt_org":      ["org_id", "org_name", "org_category", "brno", "source_id"],
-            "vt_bacnt":    ["account_no", "bank_cd", "bank_nm", "dpstr",
-                            "account_type", "is_burner", "source_id"],
-            "vt_telno":    ["telno", "country_code", "telco_nm", "join_typ_cd",
-                            "imsi", "is_burner", "source_id"],
-            "vt_ip":       ["ip_addr", "ip_ver", "isp", "asn_nm", "ctry_cd",
-                            "is_vpn", "is_tor", "is_proxy", "abuse_score", "source_id"],
-            "vt_site":     ["url_addr", "dmn_addr", "site_type", "is_malicious",
-                            "risk_grd", "source_id"],
-            "vt_file":     ["hash_val", "file_nm", "file_ext", "file_sz",
-                            "is_malicious", "vt_score", "source_id"],
-            "vt_id":       ["id_val", "platform", "id_type", "is_active",
-                            "domain", "provider", "is_disposable", "source_id"],   # V4.9 이메일=platform 'email'
-            "vt_crypto":   ["wallet_addr", "blockchain", "exchange", "risk_score",
-                            "balance", "tx_cnt", "source_id"],
-            "vt_vhcl":     ["vhclno", "vhcl_model", "owner_nm", "source_id"],
-            "vt_dev":      ["dev_id", "dev_type", "imei", "mac_addr",
-                            "model_nm", "os_nm", "source_id"],
-            "vt_atm":      ["atm_id", "bank_nm", "bank_cd", "address",
-                            "lat", "lng", "source_id"],
-            "vt_loc":      ["loc_id", "loc_type", "address", "lat", "lng",
-                            "place_nm", "sido", "sigungu", "source_id"],
-            "vt_transfer": ["transfer_id", "event_id", "dlng_sn", "dlng_amt", "dlng_dt",
-                            "dlng_se_cd", "hop_level", "is_suspicious", "source_id"],
-            "vt_call":     ["call_id", "event_id", "call_sn", "call_strt_dt", "call_dur_sec",
-                            "call_typ_cd", "source_id"],
-            "vt_msg":      ["msg_id", "event_id", "msg_sn", "msg_type", "content",
-                            "send_dt", "source_id"],
-            "vt_access":   ["event_id", "lgn_sn", "lgn_dt", "lgn_ip",
-                            "device_info", "success_yn", "source_id"],
-            "vt_movement": ["event_id", "mov_type", "timestamp", "lat", "lng",
-                            "speed", "source_id"],
-            "vt_impersonation": ["impersonation_id", "event_id", "method", "fake_name", "script_type",
-                                 "start_dt", "end_dt", "source_id", "verified"],
-        },
-        "edge_types": [
-            "suspect_in", "victim_in", "witness_in",
-            "filed_as",
-            "has_account", "controls", "owns_phone", "owns_vehicle",
-            "used_ip", "member_of", "uses_id",
-            "from_account", "to_account", "transferred_to",
-            "caller", "callee", "contacted",
-            "sent_msg", "received_msg",
-            "recorded_in", "located_at",
-            "belongs_to", "resolves_to", "contains_file", "sourced_from",
-            "same_as", "used_for", "targets",
-            "eg_used_account", "eg_used_phone", "eg_used_ip",
-            "owns_wallet", "uses_device",
-            "accessed_from", "performed_by",
-        ],
-        "edge_directions": {
-            "suspect_in":    ("vt_psn",      "vt_case"),
-            "victim_in":     ("vt_psn",      "vt_case"),
-            "witness_in":    ("vt_psn",      "vt_case"),
-            "filed_as":      ("vt_petition", "vt_case"),
-            "has_account":   ("vt_psn",      "vt_bacnt"),
-            "controls":      ("vt_psn",      "vt_bacnt"),
-            "owns_phone":    ("vt_psn",      "vt_telno"),
-            "owns_vehicle":  ("vt_psn",      "vt_vhcl"),
-            "used_ip":       ("vt_psn",      "vt_ip"),
-            "member_of":     ("vt_psn",      "vt_org"),
-            "uses_id":       ("vt_psn",      "vt_id"),
-            "owns_wallet":   ("vt_psn",      "vt_crypto"),
-            "uses_device":   ("vt_psn",      "vt_dev"),
-            "from_account":  ("vt_bacnt",    "vt_transfer"),
-            "to_account":    ("vt_transfer", "vt_bacnt"),
-            "transferred_to":("vt_bacnt",    "vt_bacnt"),
-            "caller":        ("vt_telno",    "vt_call"),
-            "callee":        ("vt_call",     "vt_telno"),
-            "contacted":     ("vt_telno",    "vt_telno"),
-            "sent_msg":      ("vt_telno",    "vt_msg"),
-            "received_msg":  ("vt_msg",      "vt_telno"),
-            "recorded_in":   ("vt_vhcl",     "vt_movement"),
-            "located_at":    (None,          "vt_loc"),     # V4.9 occurred_at 통합 (객체·이벤트 다형 domain)
-            "accessed_from": ("vt_access",   "vt_ip"),
-            "performed_by":  ("vt_access",   "vt_psn"),
-            "belongs_to":    ("vt_bacnt",    "vt_org"),
-            "resolves_to":   ("vt_site",     "vt_ip"),
-            "contains_file": ("vt_dev",      "vt_file"),
-            # sourced_from: 모든 노드 타입 → vt_src (None = Any)
-            # 버그수정 v3.7: ("vt_psn","vt_src") 제한 → vt_case 등 방향 교정 무작동
-            "sourced_from":  (None,          "vt_src"),
-            "same_as":        ("vt_psn",      "vt_psn"),
-            "used_for":      ("vt_telno",    "vt_impersonation"),
-            "targets":       ("vt_impersonation", "vt_org"),
-            "eg_used_account":("vt_petition","vt_bacnt"),
-            "eg_used_phone": ("vt_petition", "vt_telno"),
-            "eg_used_ip":    ("vt_petition", "vt_ip"),
-            # v3.7 신규 엣지
-            "belongs_to_cluster":  ("vt_petition", "pt_cluster"),
-            "used_in_device":      ("vt_telno",    "vt_dev"),
-            "belongs_to_campaign": ("vt_site",     "site_cluster"),
-            # V4.3 시나리오 직접 엣지 (속성적 연결)
-            "knows":         ("vt_psn",      "vt_psn"),
-            "mentions":      ("vt_msg",      None),         # V4.9 mentions_* 통합 → id/bacnt/loc (다형 range)
-            # V4.4 reification 참여 엣지
-            "access_via":         ("vt_access",   None),        # → telno/id/bacnt (다형 range)
-        },
-    }
+    # 정적 fallback 스키마 (동적 조회 비활성화 또는 빈 그래프 시) — 2026-10-01 정합 1단계: 손으로 쓴 사본 대신
+    #   SoT(KICSCrimeDomainOntology.t2c_schema) 에서 만든다. 종전 사본은 SoT 엣지 11종 누락(registered_to 등)·
+    #   eg_used_* 출발 오기(진정서)·옛 속성명(timestamp·send_dt 등)으로 검증기가 정상 질의를 거부했다.
+    _POLE_SCHEMA: Dict[str, Any] = KICSCrimeDomainOntology.t2c_schema()
 
     _workflow_app = None
 
@@ -745,9 +639,8 @@ class LangGraphAgent:
         if not edges:
             return ""
 
-        _LBL = {'vt_psn': '인물', 'vt_bacnt': '계좌', 'vt_telno': '전화', 'vt_ip': 'IP',
-                'vt_id': '계정', 'vt_loc': '위치', 'vt_org': '조직', 'vt_case': '사건',
-                'vt_atm': 'ATM', 'vt_email': '이메일'}
+        _LBL = {**KICSCrimeDomainOntology.LABEL_KO_MAP,   # 2026-10-01: SoT 한글명 (구 하드코딩 — vt_email 잔존)
+                'vt_telno': '전화', 'vt_id': '계정', 'vt_bacnt': '계좌'}
 
         def name(d):
             # 동명 노드(계좌 예금주 vs 인물 등)를 구분하도록 라벨을 접두로 붙인다
@@ -828,7 +721,7 @@ class LangGraphAgent:
         for edge in schema.get("edge_types", []):
             if edge in edge_directions:
                 src, dst = edge_directions[edge]
-                lines.append(f"  ({src})-[:{edge}]->({dst})")
+                lines.append(f"  ({src or '*'})-[:{edge}]->({dst or '*'})")   # * = 모든 라벨, a|b = 다형
             else:
                 lines.append(f"  (?)-[:{edge}]->(?) # 방향 미확인")
 
@@ -845,16 +738,19 @@ class LangGraphAgent:
         edge_types = schema.get("edge_types", [])
 
         label_set = set(predicted_labels)
+        side = lambda x: set() if x is None else set(str(x).split('|'))   # None = Any, 'a|b' = 다형
 
-        # 예측 레이블에 연결된 엣지도 포함 (src 또는 tgt 가 예측 레이블이면 상대방도 포함)
+        # 예측 레이블에 연결된 엣지도 포함 (src 또는 tgt 가 예측 레이블이면 상대방도 포함) — 1홉만.
+        #   2026-10-01: 순회 중에 label_set 을 늘리면 dict 순서에 따라 전이적으로 번져(계좌 1개 → 19라벨) 축소가 무의미했다
+        base = set(label_set)
         for edge, (src, tgt) in edge_directions.items():
-            if src in label_set or tgt in label_set:
-                label_set.add(src)
-                label_set.add(tgt)
+            s_set, t_set = side(src), side(tgt)
+            if (s_set & base) or (t_set & base):
+                label_set |= s_set | t_set
 
         filtered_nodes = {k: v for k, v in node_labels.items() if k in label_set}
-        filtered_edges = {k: v for k, v in edge_directions.items()
-                         if v[0] in label_set and v[1] in label_set}
+        ok = lambda x: x is None or bool(side(x) & label_set)
+        filtered_edges = {k: v for k, v in edge_directions.items() if ok(v[0]) and ok(v[1])}
         filtered_edge_types = [e for e in edge_types if e in filtered_edges]
 
         return {
@@ -938,16 +834,17 @@ class LangGraphAgent:
         return True
 
     @staticmethod
-    def _validate_cypher_schema(cypher: str) -> tuple:
-        """Cypher의 라벨/엣지가 _POLE_SCHEMA에 정의되어 있는지 사전 검증.
+    def _validate_cypher_schema(cypher: str, present: set = None) -> tuple:
+        """Cypher의 라벨/엣지가 SoT(또는 대상 그래프에 실제로 있는 이름)인지 사전 검증.
 
         Phase 3-A: AgensGraph 실행 전 화이트리스트 검사로 빠른 실패 + 명확한 reflection 피드백 유도.
+        2026-10-01: 기준을 SoT 로 — 종전 _POLE_SCHEMA 사본은 SoT 엣지 11종을 몰라 정상 질의를 거부했다.
+        present: 대상 그래프의 실제 라벨·엣지(재빌드 전 옛 이름 데이터도 유효).
         Returns (is_valid: bool, error_message: str).
         """
-        schema = LangGraphAgent._POLE_SCHEMA
-        valid_labels = set(schema.get('node_labels', {}).keys()) | {'pt_cluster', 'site_cluster'}
-        # edge_types는 list, edge_directions는 dict — 둘 다 합쳐서 v3.7 신규 엣지까지 포괄
-        valid_edges = set(schema.get('edge_types', [])) | set(schema.get('edge_directions', {}).keys())
+        schema = KICSCrimeDomainOntology.t2c_schema()
+        valid_labels = set(schema['node_labels']) | set(present or ())
+        valid_edges = set(schema['edge_types']) | set(present or ())
 
         used_labels = set(re.findall(r'[:(](\s*[A-Za-z_][\w]*)', cypher))
         used_labels = {l.strip() for l in used_labels}
@@ -1309,10 +1206,28 @@ AS (p agtype);
                         "error_message": f"보안 정책 위반: 데이터 변경 명령어({keyword})가 감지되어 차단되었습니다."
                     }
 
+            # --- 2a. V4.9 표기 변환 (2026-10-01) — 학습 고정 프롬프트가 가르치는 삭제·개명 이름을 결정론적으로 교정.
+            #   대상 그래프에 옛 이름 데이터가 실제로 있으면 그대로 둔다(재빌드 전 호환).
+            present = None
+            try:
+                _sch = GraphService.get_current_schema(state['graph_path'])
+                present = set(_sch.get('node_labels', {})) | set(_sch.get('edge_types', []))
+            except Exception as _e:
+                logger.debug("schema for V4.9 rewrite unavailable: %s", _e)
+            from app.services.cypher_compat import rewrite_v49
+            cypher, v49_changes, v49_errors = rewrite_v49(cypher, present)
+            upper_cypher = cypher.upper()
+            if v49_changes:
+                logger.info(f"[V4.9 rewrite] {v49_changes}")
+            if v49_errors and state['error_count'] < state.get('config', {}).get('max_retries', 1):
+                msg = " / ".join(v49_errors)
+                return {"cypher_query": cypher, "error_message": f"SCHEMA_VALIDATION_FAILED: {msg}",
+                        "reflection_log": state['reflection_log'] + [msg]}
+
             # --- 2b. Phase 3-A: Schema 사전 검증 (라벨/엣지 화이트리스트) ---
             #   AgensGraph 실행 전 무효 라벨/엣지를 잡아 reflection 피드백 유도.
             if state['error_count'] < state.get('config', {}).get('max_retries', 1):  # P1-③: 재시도 예산 설정화(config.max_retries, 기본 1)
-                is_valid, validation_err = LangGraphAgent._validate_cypher_schema(cypher)
+                is_valid, validation_err = LangGraphAgent._validate_cypher_schema(cypher, present)
                 if not is_valid:
                     logger.warning(f"[Schema Validation] {validation_err}")
                     return {

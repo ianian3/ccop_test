@@ -2,7 +2,13 @@
 범죄 패턴 템플릿 라이브러리
 
 KICS 기반 사이버 범죄 패턴 정의 및 관리
+
+2026-10-01 정합 1단계: V4.9 표기로 번역 — vt_flnm→vt_case, used_account/used_phone→eg_used_account/eg_used_phone,
+속성 site→url_addr·flnm→incdnt_no·actno→account_no·timestamp→dlng_dt·amount→dlng_amt·filename→file_nm·bank→bank_nm.
+digital_trace(사건→사이트)·related_to(사건→파일)는 SoT 에 대응 엣지가 없어 그 패턴은 supported=False 로
+표시하고 매칭에서 뺀다(CrimePattern.unsupported_edges — SoT 와 자동 대조).
 """
+from app.services.ontology_service import KICSCrimeDomainOntology as _O
 
 class CrimePattern:
     """범죄 패턴 정의 클래스"""
@@ -21,6 +27,10 @@ class CrimePattern:
             "min_threshold": 0.85
         }
         self.cypher_query = cypher_query or ""
+        # SoT 에 없는 엣지를 요구하면 V4.9 데이터와 매칭될 수 없다
+        types = {e.get('type') for e in (required_edges or []) if isinstance(e, dict)}
+        self.unsupported_edges = sorted(t for t in types if t and t not in _O.RELATIONSHIPS)
+        self.supported = not self.unsupported_edges
     
     def to_dict(self):
         """패턴을 딕셔너리로 변환"""
@@ -32,7 +42,9 @@ class CrimePattern:
             "required_edges": self.required_edges,
             "optional_nodes": self.optional_nodes,
             "scoring": self.scoring,
-            "cypher_query": self.cypher_query
+            "cypher_query": self.cypher_query,
+            "supported": self.supported,
+            "unsupported_edges": self.unsupported_edges,
         }
 
 
@@ -48,7 +60,7 @@ class PatternLibrary:
             description="성인 사이트를 통한 영상 협박 사기. 피해자를 성인 사이트로 유인하여 영상을 녹화한 후 협박하여 금전 요구",
             required_nodes={
                 "case": {
-                    "label": "vt_flnm",
+                    "label": "vt_case",
                     "properties": {},
                     "description": "사건 정보"
                 },
@@ -84,7 +96,7 @@ class PatternLibrary:
                 {
                     "from": "case",
                     "to": "account",
-                    "type": "used_account",
+                    "type": "eg_used_account",
                     "description": "범죄 수익 계좌"
                 }
             ],
@@ -106,17 +118,17 @@ class PatternLibrary:
                 "min_threshold": 0.85
             },
             cypher_query="""
-MATCH (c:vt_flnm)-[:related_to]->(f:vt_file)
+MATCH (c:vt_case)-[:related_to]->(f:vt_file)
 MATCH (c)-[:digital_trace]->(s:vt_site)
-MATCH (c)-[:used_account]->(a:vt_bacnt)
+MATCH (c)-[:eg_used_account]->(a:vt_bacnt)
 WHERE 
-  f.filename =~ '.*(avi|mp4|mov|wmv).*'
-  AND (s.site CONTAINS 'chat' OR s.site CONTAINS 'cam' OR s.site CONTAINS '만남')
+  f.file_nm =~ '.*(avi|mp4|mov|wmv).*'
+  AND (s.url_addr CONTAINS 'chat' OR s.url_addr CONTAINS 'cam' OR s.url_addr CONTAINS '만남')
 RETURN 
-  c.flnm AS case_id, 
-  s.site AS site_url, 
-  f.filename AS video_file, 
-  a.actno AS account_no,
+  c.incdnt_no AS case_id, 
+  s.url_addr AS site_url, 
+  f.file_nm AS video_file, 
+  a.account_no AS account_no,
   '몸캠피싱 의심' AS pattern_name
 """
         ),
@@ -128,7 +140,7 @@ RETURN
             description="전화를 통한 금융 사기. 금융기관이나 공공기관을 사칭하여 금전 요구",
             required_nodes={
                 "case": {
-                    "label": "vt_flnm",
+                    "label": "vt_case",
                     "properties": {},
                     "description": "사건 정보"
                 },
@@ -147,13 +159,13 @@ RETURN
                 {
                     "from": "case",
                     "to": "phone",
-                    "type": "used_phone",
+                    "type": "eg_used_phone",
                     "description": "전화 사용"
                 },
                 {
                     "from": "case",
                     "to": "account",
-                    "type": "used_account",
+                    "type": "eg_used_account",
                     "description": "범죄 수익 계좌"
                 }
             ],
@@ -175,12 +187,12 @@ RETURN
                 "min_threshold": 0.80
             },
             cypher_query="""
-MATCH (c:vt_flnm)-[:used_phone]->(p:vt_telno)
-MATCH (c)-[:used_account]->(a:vt_bacnt)
+MATCH (c:vt_case)-[:eg_used_phone]->(p:vt_telno)
+MATCH (c)-[:eg_used_account]->(a:vt_bacnt)
 RETURN 
-  c.flnm AS case_id, 
+  c.incdnt_no AS case_id, 
   p.telno AS phone_number,
-  a.actno AS account_no,
+  a.account_no AS account_no,
   '보이스피싱 의심' AS pattern_name
 """
         ),
@@ -192,7 +204,7 @@ RETURN
             description="전화를 이용한 금융 사기. 여러 계좌로 금전 이체",
             required_nodes={
                 "case": {
-                    "label": "vt_flnm",
+                    "label": "vt_case",
                     "properties": {},
                     "description": "사건 정보"
                 },
@@ -216,19 +228,19 @@ RETURN
                 {
                     "from": "case",
                     "to": "phone",
-                    "type": "used_phone",
+                    "type": "eg_used_phone",
                     "description": "전화 사용"
                 },
                 {
                     "from": "case",
                     "to": "account1",
-                    "type": "used_account",
+                    "type": "eg_used_account",
                     "description": "1차 계좌"
                 },
                 {
                     "from": "case",
                     "to": "account2",
-                    "type": "used_account",
+                    "type": "eg_used_account",
                     "description": "2차 계좌"
                 }
             ],
@@ -245,15 +257,15 @@ RETURN
                 "min_threshold": 0.80
             },
             cypher_query="""
-MATCH (c:vt_flnm)-[:used_phone]->(p:vt_telno)
-MATCH (c)-[:used_account]->(a1:vt_bacnt)
-MATCH (c)-[:used_account]->(a2:vt_bacnt)
+MATCH (c:vt_case)-[:eg_used_phone]->(p:vt_telno)
+MATCH (c)-[:eg_used_account]->(a1:vt_bacnt)
+MATCH (c)-[:eg_used_account]->(a2:vt_bacnt)
 WHERE a1 <> a2
 RETURN 
-  c.flnm AS case_id, 
+  c.incdnt_no AS case_id, 
   p.telno AS phone_number,
-  a1.actno AS account1,
-  a2.actno AS account2,
+  a1.account_no AS account1,
+  a2.account_no AS account2,
   '전화금융사기 의심' AS pattern_name
 """
         ),
@@ -265,7 +277,7 @@ RETURN
             description="가상의 투자 상품을 제시하여 금전 편취. 사이트 또는 앱 활용",
             required_nodes={
                 "case": {
-                    "label": "vt_flnm",
+                    "label": "vt_case",
                     "properties": {},
                     "description": "사건 정보"
                 },
@@ -290,7 +302,7 @@ RETURN
                 {
                     "from": "case",
                     "to": "account",
-                    "type": "used_account",
+                    "type": "eg_used_account",
                     "description": "투자금 입금 계좌"
                 }
             ],
@@ -312,13 +324,13 @@ RETURN
                 "min_threshold": 0.85
             },
             cypher_query="""
-MATCH (c:vt_flnm)-[:digital_trace]->(s:vt_site)
-MATCH (c)-[:used_account]->(a:vt_bacnt)
-WHERE s.site CONTAINS '투자' OR s.site CONTAINS 'invest' OR s.site CONTAINS 'coin'
+MATCH (c:vt_case)-[:digital_trace]->(s:vt_site)
+MATCH (c)-[:eg_used_account]->(a:vt_bacnt)
+WHERE s.url_addr CONTAINS '투자' OR s.url_addr CONTAINS 'invest' OR s.url_addr CONTAINS 'coin'
 RETURN 
-  c.flnm AS case_id, 
-  s.site AS site_url,
-  a.actno AS account_no,
+  c.incdnt_no AS case_id, 
+  s.url_addr AS site_url,
+  a.account_no AS account_no,
   '투자사기 의심' AS pattern_name
 """
         ),
@@ -330,7 +342,7 @@ RETURN
             description="문자 메시지를 통한 피싱. 악성 링크 클릭 유도",
             required_nodes={
                 "case": {
-                    "label": "vt_flnm",
+                    "label": "vt_case",
                     "properties": {},
                     "description": "사건 정보"
                 },
@@ -354,7 +366,7 @@ RETURN
                 {
                     "from": "case",
                     "to": "phone",
-                    "type": "used_phone",
+                    "type": "eg_used_phone",
                     "description": "문자 발신"
                 },
                 {
@@ -366,7 +378,7 @@ RETURN
                 {
                     "from": "case",
                     "to": "account",
-                    "type": "used_account",
+                    "type": "eg_used_account",
                     "description": "범죄 수익"
                 }
             ],
@@ -388,15 +400,15 @@ RETURN
                 "min_threshold": 0.85
             },
             cypher_query="""
-MATCH (c:vt_flnm)-[:used_phone]->(p:vt_telno)
+MATCH (c:vt_case)-[:eg_used_phone]->(p:vt_telno)
 MATCH (c)-[:digital_trace]->(s:vt_site)
-MATCH (c)-[:used_account]->(a:vt_bacnt)
-WHERE s.site CONTAINS 'http' OR s.site CONTAINS 'bit.ly' OR s.site CONTAINS 'apk'
+MATCH (c)-[:eg_used_account]->(a:vt_bacnt)
+WHERE s.url_addr CONTAINS 'http' OR s.url_addr CONTAINS 'bit.ly' OR s.url_addr CONTAINS 'apk'
 RETURN 
-  c.flnm AS case_id,
+  c.incdnt_no AS case_id,
   p.telno AS phone_number,
-  s.site AS malicious_url,
-  a.actno AS account_no,
+  s.url_addr AS malicious_url,
+  a.account_no AS account_no,
   '스미싱 의심' AS pattern_name
 """
         ),
@@ -465,11 +477,11 @@ RETURN
 MATCH path = (a1:vt_bacnt)<-[:from_account]-(t1:vt_transfer)-[:to_account]->(a2:vt_bacnt)
              <-[:from_account]-(t2:vt_transfer)-[:to_account]->(a3:vt_bacnt)
              <-[:from_account]-(t3:vt_transfer)-[:to_account]->(a4:vt_bacnt)
-WHERE t1.timestamp < t2.timestamp AND t2.timestamp < t3.timestamp
+WHERE t1.dlng_dt < t2.dlng_dt AND t2.dlng_dt < t3.dlng_dt
 RETURN 
-  a1.actno AS start_account,
-  a4.actno AS end_account,
-  t1.amount + t2.amount + t3.amount AS total_amount,
+  a1.account_no AS start_account,
+  a4.account_no AS end_account,
+  t1.dlng_amt + t2.dlng_amt + t3.dlng_amt AS total_amount,
   length(path) AS hop_count,
   '자금세탁체인' AS pattern_name
 ORDER BY total_amount DESC
@@ -558,9 +570,9 @@ LIMIT 10
                 }
             },
             required_edges=[
-                {"from": "case1", "to": "account", "type": "used_account"},
-                {"from": "case2", "to": "account", "type": "used_account"},
-                {"from": "case3", "to": "account", "type": "used_account"}
+                {"from": "case1", "to": "account", "type": "eg_used_account"},
+                {"from": "case2", "to": "account", "type": "eg_used_account"},
+                {"from": "case3", "to": "account", "type": "eg_used_account"}
             ],
             optional_nodes={
                 "transfer": {
@@ -575,15 +587,15 @@ LIMIT 10
                 "min_threshold": 0.80
             },
             cypher_query="""
-MATCH (c:vt_case)-[:used_account]->(a:vt_bacnt)
+MATCH (c:vt_case)-[:eg_used_account]->(a:vt_bacnt)
 WITH a, collect(DISTINCT c) AS cases
 WHERE size(cases) >= 3
 OPTIONAL MATCH (t:vt_transfer)-[:to_account]->(a)
 RETURN 
-  a.actno AS mule_account,
-  a.bank AS bank,
+  a.account_no AS mule_account,
+  a.bank_nm AS bank,
   size(cases) AS case_count,
-  [c IN cases | c.flnm][..5] AS sample_cases,
+  [c IN cases | c.incdnt_no][..5] AS sample_cases,
   count(t) AS transfer_count,
   '대포통장' AS pattern_name
 ORDER BY case_count DESC

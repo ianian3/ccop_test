@@ -682,7 +682,7 @@ class KICSCrimeDomainOntology:
 
     @classmethod
     def active_relationships(cls):
-        """deprecated 제외 활성 엣지만 반환 (신규 생성·Text2Cypher 대상 스키마). 현재 활성 69/71."""
+        """deprecated 제외 활성 엣지만 반환 (신규 생성·Text2Cypher 대상 스키마). V4.9: 52종 전부 활성(deprecated 0)."""
         return {e: d for e, d in cls.RELATIONSHIPS.items() if not d.get('deprecated')}
 
     @classmethod
@@ -1938,6 +1938,94 @@ class KICSCrimeDomainOntology:
         if edge not in cls.RELATIONSHIPS or edge in cls.AUTO_INFER_POLICY['deny']:
             return 'deny'
         return 'allow' if edge in cls.AUTO_INFER_POLICY['allow'] else 'suggest'
+
+    # ─── SoT 런타임 뷰 (2026-10-01 정합 1단계) ─────────────────────────────────
+    # 앱 곳곳에 손으로 복사돼 서로·SoT 와 어긋나던 방향표·스키마(langgraph _POLE_SCHEMA, ai_service
+    # _EDGE_DIRECTION_MAP, graph_service _KICS_EDGE_DIRECTIONS)를 이 뷰에서 만든다.
+
+    # V4.9 폐기·개명 엣지 — T2C 생성 후 변환·이전 적재분 조회 호환·검증기 공용.
+    #   replace: V4.9 이름(None = 대체 없음, 생성 거부) · reverse: 방향까지 뒤집어야 하는 경우
+    DEPRECATED_EDGES = {
+        'uses_email':        {'replace': 'uses_id'},
+        'eg_used_email':     {'replace': 'eg_used_id'},
+        'mentions_id':       {'replace': 'mentions'},
+        'mentions_account':  {'replace': 'mentions'},
+        'mentions_location': {'replace': 'mentions'},
+        'via_ip':            {'replace': 'accessed_from'},
+        'sent_from_ip':      {'replace': 'accessed_from'},
+        'occurred_at':       {'replace': 'located_at'},
+        'linked_id':         {'replace': 'linked_to'},
+        'hosts':             {'replace': 'resolves_to', 'reverse': True},    # IP→사이트 → 사이트→IP
+        'owns_device':       {'replace': 'uses_device'},
+        'works_at':          {'replace': 'member_of'},
+        'linked_petition':   {'replace': 'filed_as'},
+        'involves':          {'replace': 'witness_in', 'reverse': True},     # 사건→인물 → 인물→사건(role 미상)
+        'sameAs':            {'replace': 'same_as'},
+        'sameas':            {'replace': 'same_as'},
+        'impersonates':      {'replace': None, 'why': 'used_for·targets 로 분리 — 사칭 이벤트(vt_impersonation) 경유'},
+        'owns':              {'replace': None, 'why': '구체 소유 엣지(has_account·owns_phone·owns_vehicle·owns_wallet·uses_device) 사용'},
+        'verified_by':       {'replace': None, 'why': '엣지 공통 메타 속성 verified_by 로 이동'},
+        'contradicts':       {'replace': None, 'why': '추론 결과는 그래프 엣지가 아님(분석 산출물)'},
+        'clusters_with':     {'replace': None, 'why': '진정서 군집은 belongs_to_cluster(pt_cluster 허브) 사용'},
+        'accomplice_of':     {'replace': None, 'why': '공범은 탐지 후보 목록(분석 산출물) — 그래프 엣지가 아님'},
+        'related_case':      {'replace': None, 'why': '추론 결과는 그래프 엣지가 아님(분석 산출물)'},
+    }
+    # V4.9 폐기 라벨 → (V4.9 라벨, 노드 패턴에 덧붙일 속성, 속성 개명)
+    DEPRECATED_LABELS = {
+        'vt_email': {'replace': 'vt_id', 'props': {'platform': 'email'}, 'rename': {'email_addr': 'id_val'}},
+    }
+
+    @classmethod
+    def _expand_concept(cls, token):
+        """domain/range 토큰 → GDB 라벨 집합 (None = Any)."""
+        t = str(token).strip()
+        if t in ('Any', '', 'None'):
+            return None
+        if t in cls.ENTITIES:
+            return {cls.ENTITIES[t]['label']}
+        if t in cls.LAYERS:                                  # 레이어명(Object 등)
+            return {cls.ENTITIES[c]['label'] for c in cls.LAYERS[t] if c in cls.ENTITIES}
+        return {t} if t.startswith(('vt_', 'pt_', 'site_')) else set()
+
+    @classmethod
+    def edge_rules(cls):
+        """엣지 → (출발 라벨 집합|None, 도착 라벨 집합|None). None 은 Any(제약 없음)."""
+        out = {}
+        for e, d in cls.RELATIONSHIPS.items():
+            sides = []
+            for side in ('domain', 'range'):
+                acc = set()
+                for tok in str(d.get(side)).split('|'):
+                    x = cls._expand_concept(tok)
+                    if x is None:
+                        acc = None
+                        break
+                    acc |= x
+                sides.append(acc)
+            out[e] = tuple(sides)
+        return out
+
+    @classmethod
+    def renamed_props(cls, label):
+        """라벨의 구 속성명 → V4.9 속성명 (ATTRIBUTE_DICTIONARY 별칭표, 호환 이중 기록 event_id 제외)."""
+        m = cls.ATTRIBUTE_DICTIONARY.get('aliases', {}).get('node', {}).get(label, {})
+        return {old: new for new, olds in m.items() for old in olds if old != 'event_id'}
+
+    @classmethod
+    def t2c_schema(cls):
+        """T2C 프롬프트·검증용 정적 스키마 (구 langgraph _POLE_SCHEMA 대체).
+
+        node_labels: 라벨 → 속성(식별키 + 속성, 공통 메타 제외)
+        edge_types : 엣지 이름 목록
+        edge_directions: 엣지 → (출발, 도착) — 라벨 1개면 그 라벨, 여럿이면 'a|b', 제약 없으면 None
+        """
+        common = set(cls.ATTRIBUTE_DICTIONARY.get('common_attrs', {})) - {'source_id'}
+        nodes = {v['label']: [a for a in list(v.get('properties', [])) + list(v.get('attributes', []))
+                              if a not in common]
+                 for v in cls.ENTITIES.values()}
+        fmt = lambda s: None if s is None else '|'.join(sorted(s))
+        dirs = {e: (fmt(a), fmt(b)) for e, (a, b) in cls.edge_rules().items()}
+        return {'node_labels': nodes, 'edge_types': list(cls.RELATIONSHIPS), 'edge_directions': dirs}
 
     @classmethod
     def get_relationship_rules(cls):
