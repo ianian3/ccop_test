@@ -14,6 +14,11 @@ RDB(V4.0 스테이징 test_v40) → 그래프 적재기 (2026-10-01 정합 2단�
   · 사건 flnm 열(스테이징에선 사건명)을 crime 으로 넣던 것 → incdnt_nm
   · 속성명은 SoT 사전 이름(bank_nm·telco_nm·dlng_amt·call_dur_sec·occrn_dt …) — 이벤트 event_id 는 호환 이중 기록
   · 엣지는 실제 MATCH 건수로 센다 (종전: 실패해도 +1)
+
+이용 이력·출처 5종 추가 (2026-10-01) — 종전엔 어떤 적재기도 읽지 않아 그래프에 없던 데이터:
+  tb_id_use → vt_id·uses_id / tb_ip_use → used_ip(쌍 집계) / tb_loc_use → vt_loc·located_at(쌍 집계) /
+  tb_fin_extrc_bacnt → has_account(B, ATM 제외; incdnt_no 가 비어 사건-계좌는 불가) / tb_entity_source → sourced_from 다중 출처
+  로컬 test_v40: 노드 +2,494(vt_id 2,138·vt_ip 12·vt_loc 344) · 엣지 +4,812 · 감사 위반 0
 """
 import logging
 
@@ -24,7 +29,13 @@ logger = logging.getLogger(__name__)
 
 # 이 적재기가 다루는 스테이징 테이블 — 이 중 하나라도 있으면 V4.0 스테이징으로 본다
 V40_TABLES = ('tb_incdnt_mst', 'tb_prsn', 'tb_fin_bacnt', 'tb_telno_mst',
-              'tb_fin_bacnt_dlng', 'tb_telno_call_dtl', 'tb_incdnt_prsn', 'tb_telno_join')
+              'tb_fin_bacnt_dlng', 'tb_telno_call_dtl', 'tb_incdnt_prsn', 'tb_telno_join',
+              # 2026-10-01 추가 — 종전 어떤 적재기도 읽지 않던 이용 이력·출처 테이블
+              'tb_id_use', 'tb_ip_use', 'tb_loc_use', 'tb_fin_extrc_bacnt', 'tb_entity_source')
+
+# tb_entity_source.entity_table → (라벨, 키 필드)
+ENTITY_TABLE_LABEL = {'tb_prsn': ('vt_psn', 'psn_id'), 'tb_telno_mst': ('vt_telno', 'telno'),
+                      'tb_incdnt_mst': ('vt_case', 'incdnt_no'), 'tb_fin_bacnt': ('vt_bacnt', 'account_no')}
 
 ROLE_EDGE = {'SUSPECT': 'suspect_in', 'VICTIM': 'victim_in', 'WITNESS': 'witness_in'}
 
@@ -168,12 +179,103 @@ class RdbGraphLoader:
                 w.edge('has_account', ('vt_psn', {'psn_id': pid}), ('vt_bacnt', {'account_no': no}),
                        {'evid_grade': 'B', 'src_tier': 1})
 
+    # ── 이용 이력·출처 (2026-10-01 추가) ────────────────────────────
+    def _subject(self, typ, sid):
+        """이용 이력 주체(subj_type, subj_id) → 엣지 끝. 계좌번호가 ATM 이면 vt_atm."""
+        if typ == 'bacnt':
+            return ('vt_atm', {'atm_id': str(sid).strip()}) if _is_atm(sid) else ('vt_bacnt', {'account_no': sid})
+        if typ == 'telno':
+            return ('vt_telno', {'telno': sid})
+        if typ == 'id':
+            plat = self._id_platform.get(sid)
+            return ('vt_id', {'platform': plat, 'id_val': sid}) if plat else None
+        return None
+
+    def load_ids(self, w):
+        # tb_id_use: 인물 → 계정. 플랫폼이 비면 'unknown'. 같은 계정값이 플랫폼 여럿이면 IP 주체 해석에서 제외
+        plats = {}
+        for pid, idv, plat, vf, vt, sid in self._rows(
+                'SELECT prsn_id, id_val, platform, valid_from::text, valid_to::text, source_id '
+                'FROM {S}.tb_id_use WHERE id_val IS NOT NULL'):
+            plat = (plat or '').strip() or 'unknown'
+            plats.setdefault(idv, set()).add(plat)
+            w.node('vt_id', {'platform': plat, 'id_val': idv, 'source_id': sid})
+            if pid:
+                w.edge('uses_id', ('vt_psn', {'psn_id': pid}), ('vt_id', {'platform': plat, 'id_val': idv}),
+                       {'platform': plat, 'valid_from': vf, 'valid_to': vt, 'source_id': sid,
+                        'evid_grade': 'A', 'src_tier': 1})
+            self._count('ids', 1)
+        self._id_platform = {k: next(iter(v)) for k, v in plats.items() if len(v) == 1}
+
+    def load_ip_use(self, w):
+        # tb_ip_use: 주체(계정·계좌) → IP. 같은 쌍은 GraphWriter 가 집계(usage_count 합·기간 min/max·access_type 합집합)
+        if not hasattr(self, '_id_platform'):
+            self._id_platform = {}
+        for typ, sid_, ip, vf, vt, acc, src in self._rows(
+                'SELECT subj_type, subj_id, ip_addr, valid_from::text, valid_to::text, access_type, source_id '
+                'FROM {S}.tb_ip_use WHERE ip_addr IS NOT NULL AND subj_id IS NOT NULL'):
+            subj = self._subject(typ, sid_)
+            if not subj:
+                self._count('ip_use_skipped', 1)          # 주체 종류 미지원 또는 계정 플랫폼 모호
+                continue
+            w.node('vt_ip', {'ip_addr': ip, 'source_id': src})
+            w.edge('used_ip', subj, ('vt_ip', {'ip_addr': ip}),
+                   {'valid_from': vf, 'valid_to': vt, 'access_type': acc, 'usage_count': 1, 'source_id': src,
+                    'evid_grade': 'A', 'src_tier': 1})
+            self._count('ip_use', 1)
+
+    def load_loc_use(self, w):
+        # tb_loc_use: 주체(계좌·전화) → 위치. 위치 마스터가 없어 loc_id(주소 문자열)를 address 로도 싣는다
+        for typ, sid_, loc, dt, src in self._rows(
+                'SELECT subj_type, subj_id, loc_id, evt_dt::text, source_id FROM {S}.tb_loc_use '
+                'WHERE loc_id IS NOT NULL AND subj_id IS NOT NULL'):
+            subj = self._subject(typ, sid_)
+            if not subj:
+                self._count('loc_use_skipped', 1)
+                continue
+            w.node('vt_loc', {'loc_id': loc, 'address': loc, 'source_id': src})
+            w.edge('located_at', subj, ('vt_loc', {'loc_id': loc}),
+                   {'first_dt': dt, 'last_dt': dt, 'evt_count': 1, 'source_id': src})
+            self._count('loc_use', 1)
+
+    def load_extracted_accounts(self, w):
+        # tb_fin_extrc_bacnt: 인물 → 추출 계좌 (has_account). 스테이징의 incdnt_no 가 전부 비어 사건-계좌
+        #   (eg_used_account)는 만들 수 없다. ATM 출금 행은 계좌 소유가 아니라 제외. 근거 등급은 예금주명 조인과 같은 B
+        for no, pid, src in self._rows('SELECT bacnt_no, prsn_id, source_id FROM {S}.tb_fin_extrc_bacnt '
+                                       'WHERE bacnt_no IS NOT NULL AND prsn_id IS NOT NULL'):
+            if _is_atm(no):
+                continue
+            w.edge('has_account', ('vt_psn', {'psn_id': pid}), ('vt_bacnt', {'account_no': no}),
+                   {'evid_grade': 'B', 'src_tier': 1, 'source_id': src})
+            self._count('extracted_accounts', 1)
+
+    def load_entity_sources(self, w):
+        # tb_entity_source: 엔티티 → 출처(vt_src) 다중 연결. 노드 source_id 1개만 잇던 후처리(6V-5)를 보완한다.
+        #   sourced_from 허용 속성에 맞춰 first_seen → collected_at 만 싣는다(hit_count·last_seen 은 SoT 미등록)
+        for tbl, key, src, dom, first in self._rows(
+                'SELECT entity_table, entity_key, source_id, source_domain, first_seen::text '
+                'FROM {S}.tb_entity_source WHERE entity_key IS NOT NULL AND source_id IS NOT NULL'):
+            lk = ENTITY_TABLE_LABEL.get(tbl)
+            if not lk:
+                self._count('entity_sources_skipped', 1)
+                continue
+            label, field = lk
+            if label == 'vt_bacnt' and _is_atm(key):
+                label, field = 'vt_atm', 'atm_id'
+            w.node('vt_src', {'src_id': src})
+            w.edge('sourced_from', (label, {field: key}), ('vt_src', {'src_id': src}),
+                   {'source_domain': dom, 'collected_at': first})
+            self._count('entity_sources', 1)
+
     LOADERS = ('load_cases', 'load_persons', 'load_accounts', 'load_phones', 'load_transfers', 'load_calls',
-               'load_case_roles', 'load_phone_ownership', 'load_account_ownership')
+               'load_case_roles', 'load_phone_ownership', 'load_account_ownership',
+               'load_ids', 'load_ip_use', 'load_loc_use', 'load_extracted_accounts', 'load_entity_sources')
     TABLE_OF = {'load_cases': 'tb_incdnt_mst', 'load_persons': 'tb_prsn', 'load_accounts': 'tb_fin_bacnt',
                 'load_phones': 'tb_telno_mst', 'load_transfers': 'tb_fin_bacnt_dlng',
                 'load_calls': 'tb_telno_call_dtl', 'load_case_roles': 'tb_incdnt_prsn',
-                'load_phone_ownership': 'tb_telno_join', 'load_account_ownership': 'tb_fin_bacnt'}
+                'load_phone_ownership': 'tb_telno_join', 'load_account_ownership': 'tb_fin_bacnt',
+                'load_ids': 'tb_id_use', 'load_ip_use': 'tb_ip_use', 'load_loc_use': 'tb_loc_use',
+                'load_extracted_accounts': 'tb_fin_extrc_bacnt', 'load_entity_sources': 'tb_entity_source'}
 
     def run(self):
         cur = self.cur
