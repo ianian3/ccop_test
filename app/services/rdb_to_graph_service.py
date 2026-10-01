@@ -168,6 +168,27 @@ class RdbToGraphService:
         if not conn:
             return False, "DB 연결 실패"
 
+        # 2026-10-01 정합 2c: V4.0 스테이징(test_v40) 은 테이블별 적재기 + 공용 GraphWriter 로.
+        #   종전 이 함수의 37개 테이블 구간 중 스테이징에 실제로 있는 것은 8개뿐이었다(나머지는 매번 조용히 실패).
+        #   아래 레거시 본문은 그 8개 테이블이 없는 원천(V2·V3 rdb_*/TB_ 대문자 스키마)에서만 실행된다.
+        from app.services.rdb_graph_loader import RdbGraphLoader, V40_TABLES
+        try:
+            if RdbGraphLoader.staging_tables(cur, source_schema) & set(V40_TABLES):
+                stats = RdbGraphLoader(conn, graph_name, source_schema).run()
+                try:
+                    stats["v37"] = RdbToGraphService._postprocess_v37(cur, conn, graph_name)
+                except Exception as e:
+                    logger.warning(f"  ⚠ V3.7 후처리 실패: {e}")
+                    conn.rollback()
+                cur.close(); conn.close()
+                return True, stats
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            conn.rollback()
+            cur.close(); conn.close()
+            return False, f"V4.0 스테이징 적재 오류: {e}"
+
         # V4.0 격리 — RDB SELECT 가 source_schema 의 테이블을 향함
         try:
             cur.execute(f'SET search_path = "{source_schema}", public;')
@@ -1796,8 +1817,9 @@ class RdbToGraphService:
         # 6V-3: vt_psn.is_anonymous 마킹 (name이 빈 문자열 또는 NULL)
         try:
             safe_set_graph_path(cur, graph_name)
+            # 2026-10-01: 종전 조건(… OR korn_flnm IS NULL)은 korn_flnm 을 쓰지 않는 적재기에서 전원을 익명으로 표시했다
             cur.execute("MATCH (p:vt_psn) "
-                        "WHERE p.name IS NULL OR p.name = '' OR p.korn_flnm IS NULL OR p.korn_flnm = '' "
+                        "WHERE (p.name IS NULL OR p.name = '') AND (p.korn_flnm IS NULL OR p.korn_flnm = '') "
                         "SET p.is_anonymous = true "
                         "RETURN count(p) AS n")
             row = cur.fetchone()
@@ -2053,17 +2075,18 @@ class RdbToGraphService:
                 try:
                     pid, role = safe_str(r[0]), safe_str(r[1])
                     nm2, brtd, gndr = safe_str(r[2]), safe_str(r[3]), safe_str(r[4])
-                    props_p = (f"{{id: '{pid}', name: '{nm2}', birth_date: '{brtd}', "
-                               f"gender: '{gndr}', type: '인물'}}")
-                    cur.execute(f"MERGE (p:vt_psn {{id: '{pid}'}}) SET p = {props_p}")
+                    # 2026-10-01 정합 2c: 정경 키 psn_id (구 id), 생년월일은 SoT dob, SET += (다른 적재 속성 보존)
+                    props_p = (f"{{psn_id: '{pid}', name: '{nm2}', dob: '{brtd}', "
+                               f"gender: '{gndr}'}}")
+                    cur.execute(f"MERGE (p:vt_psn {{psn_id: '{pid}'}}) SET p += {props_p}")
                     stats["nodes"] += 1
                     # V4.9: involves 삭제 — 역할 미상은 witness_in {role:'unknown'}
                     role_edge = 'suspect_in' if role == 'SUSPECT' else 'victim_in' if role == 'VICTIM' else 'witness_in'
                     role_prop = '' if role in ('SUSPECT', 'VICTIM', 'WITNESS') else ", r.role = 'unknown'"
-                    cur.execute(f"MATCH (c:vt_case {{incdnt_no: '{case_s}'}}), (p:vt_psn {{id: '{pid}'}}) MERGE (p)-[r:{role_edge}]->(c) SET r.evid_grade = 'A', r.src_tier = 1{role_prop}")
+                    cur.execute(f"MATCH (c:vt_case {{incdnt_no: '{case_s}'}}), (p:vt_psn {{psn_id: '{pid}'}}) MERGE (p)-[r:{role_edge}]->(c) SET r.evid_grade = 'A', r.src_tier = 1{role_prop}")
                     stats["edges"] += 1
                     # sourced_from: 인물 → vt_src (v3.6 확정: tier 1은 엣지 생성)
-                    cur.execute(f"MATCH (s:vt_src {{src_id: 'src-kics-official'}}), (p:vt_psn {{id: '{pid}'}}) MERGE (p)-[:sourced_from {{src_tier: 1, rec_created: toString(datetime())}}]->(s)")
+                    cur.execute(f"MATCH (s:vt_src {{src_id: 'src-kics-official'}}), (p:vt_psn {{psn_id: '{pid}'}}) MERGE (p)-[:sourced_from {{src_tier: 1, rec_created: toString(datetime())}}]->(s)")
                     stats["edges"] += 1
                     prsn_ids.append(pid)
                 except Exception as _e:
