@@ -329,6 +329,8 @@ Case 관계: suspect_in, victim_in, witness_in (Actor → Case, 역할 미상은
             "phone": {"layer": "Evidence", "entity": "Phone", "role": "source"}, 
             "caller": {"layer": "Evidence", "entity": "Phone", "role": "source"},   # V4.9: 통화내역 발신·수신 번호
             "callee": {"layer": "Evidence", "entity": "Phone", "role": "target"},
+            "sender": {"layer": "Evidence", "entity": "BankAccount", "role": "source"},     # V4.9: 출금 계좌
+            "receiver": {"layer": "Evidence", "entity": "BankAccount", "role": "target"},   # V4.9: 입금 계좌
             "account": {"layer": "Evidence", "entity": "BankAccount", "role": "target"},
             "ip": {"layer": "Evidence", "entity": "NetworkTrace", "role": "source"},
             "site": {"layer": "Evidence", "entity": "WebTrace", "role": "target"},

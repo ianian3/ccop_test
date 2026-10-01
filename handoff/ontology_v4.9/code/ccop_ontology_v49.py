@@ -945,12 +945,17 @@ class KICSCrimeDomainOntology:
         'site_cluster': {'standard': 'TB_OSINT_SITE_CLSTR_M', 'public_v2': None, 'test_v40': None},
     }
 
-    # ── [부록] 원본 컬럼명 → 표준 속성 추론 규칙 (전처리 힌트)  (31종) ──
+    # ── [부록] 원본 컬럼명 → 표준 속성 추론 규칙 (전처리 힌트)  (32종) ──
     COLUMN_PATTERNS = {
-        'case': {'patterns': ['사건', 'case', '사건번호', '접수번호', 'flnm', 'incdnt_no'],
+        'case_file': {'patterns': ['flnm', '사건파일명', '사건파일번호', '파일번호'],
+                      'kics_label': 'vt_case',
+                      'kics_property': 'flnm',
+                      'is_attribute': True,
+                      'description': '사건파일번호 — vt_case 보조 속성 (V4.9: 정경 식별자 아님)'},
+        'case': {'patterns': ['사건', 'case', '사건번호', '접수번호', 'incdnt_no'],
                  'kics_label': 'vt_case',
-                 'kics_property': 'flnm',
-                 'description': '사건번호/관리번호'},
+                 'kics_property': 'incdnt_no',
+                 'description': '사건번호(경찰청 공식) — vt_case 정경 식별자'},
         'petition': {'patterns': ['진정서', 'petition', '신고번호', 'dclr_sn', 'complaint', '민원'],
                      'kics_label': 'vt_petition',
                      'kics_property': 'petition_id',
@@ -1020,14 +1025,16 @@ class KICSCrimeDomainOntology:
                        'kics_property': 'damage_amount',
                        'is_attribute': True,
                        'description': '피해 금액'},
-        'sender': {'patterns': ['출금', '송금계좌', '보낸사람', 'from', 'dsptch', 'sender'],
-                   'kics_label': 'vt_transfer',
-                   'kics_property': 'from_account',
-                   'description': '이체 출발 계좌'},
-        'receiver': {'patterns': ['입금', '수취계좌', '받는사람', 'to', 'rcptn', 'receiver'],
-                     'kics_label': 'vt_transfer',
-                     'kics_property': 'to_account',
-                     'description': '이체 도착 계좌'},
+        'sender': {'patterns': ['출금계좌', '송금계좌', '출금', 'from', 'dsptch', 'sender'],
+                   'kics_label': 'vt_bacnt',
+                   'kics_property': 'account_no',
+                   'direction': 'source',
+                   'description': '이체 출발(출금) 계좌'},
+        'receiver': {'patterns': ['입금계좌', '수취계좌', '입금', 'to', 'rcptn', 'receiver'],
+                     'kics_label': 'vt_bacnt',
+                     'kics_property': 'account_no',
+                     'direction': 'target',
+                     'description': '이체 도착(입금) 계좌'},
         'caller': {'patterns': ['발신', 'caller', '발신번호', 'dsptch_telno'], 'kics_label': 'vt_telno', 'kics_property': 'telno', 'description': '발신 번호'},
         'callee': {'patterns': ['수신', 'callee', '수신번호', 'rcptn_telno'], 'kics_label': 'vt_telno', 'kics_property': 'telno', 'description': '수신 번호'},
         'duration': {'patterns': ['통화시간', 'duration', 'call_dur_sec'],
@@ -1053,10 +1060,11 @@ class KICSCrimeDomainOntology:
                      'description': '순서 번호'},
     }
 
-    # ── [부록] 속성 타입 → RDB 타입  (28종) ──
+    # ── [부록] 속성 타입 → RDB 타입  (29종) ──
     COLUMN_TYPE_TO_RDB = {
         'case_id': 'case',
         'case': 'case',
+        'case_file': 'case_file',
         'petition': 'petition',
         'suspect': 'suspect',
         'phone': 'phone',

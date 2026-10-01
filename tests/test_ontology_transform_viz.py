@@ -473,7 +473,8 @@ class TestColumnPatterns:
         ('계좌번호',      'account',  'vt_bacnt',    'account_no'),
         ('전화번호',      'phone',    'vt_telno',    'telno'),
         ('ip주소',        'ip',       'vt_ip',       'ip_addr'),
-        ('사건번호',      'case',     'vt_case',     'flnm'),
+        ('사건번호',      'case',     'vt_case',     'incdnt_no'),   # V4.9 정경 식별자
+        ('사건파일명',    'case_file', 'vt_case',    'flnm'),        # V4.9 보조 속성 분리
         ('이메일',        'email',    'vt_id',       'id_val'),      # V4.9 vt_email 흡수
         ('차량번호',      'vehicle',  'vt_vhcl',     'vhclno'),
         ('wallet_addr',  'crypto',   'vt_crypto',   'wallet_addr'),

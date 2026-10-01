@@ -1379,7 +1379,7 @@ class KICSCrimeDomainOntology:
         'transferred_to': {
             'domain': 'BankAccount',
             'range': 'BankAccount|CryptoWallet',      # V4.4 다형화: 가상자산 세탁 경로 포함
-            'source_types': [('from_account', 'to_account'), ('sender_account', 'receiver_account'),
+            'source_types': [('from_account', 'to_account'), ('sender_account', 'receiver_account'), ('sender', 'receiver'),
                              ('account', 'account')],   # V4.9: 같은 종류 쌍은 컬럼명 방향(출금→입금)이 있을 때만
             'semantic_relation': 'transferredFundsTo',
             'label_ko': '이체',
@@ -1476,7 +1476,7 @@ class KICSCrimeDomainOntology:
         'sent_msg': {
             'domain': 'Phone|DigitalID',              # V4.4 다형화: 계정도 메시지 발신 주체
             'range': 'Message',
-            'source_types': [('sender', 'message'), ('발신번호', '문자')],
+            'source_types': [('caller', 'message'), ('발신번호', '문자')],   # V4.9: sender 는 출금계좌 — 발신번호(caller)로
             'semantic_relation': 'sentMessage',
             'label_ko': '발신',
             'meaning': '메시지 발신 번호',
@@ -1485,7 +1485,7 @@ class KICSCrimeDomainOntology:
         'received_msg': {                # E-4: ETL 사용 엣지 — 미등재 보완
             'domain': 'Message',
             'range': 'Phone|DigitalID',               # V4.4 다형화: 계정도 메시지 수신 주체
-            'source_types': [('message', 'rcptn_telno'), ('메시지', '수신번호')],
+            'source_types': [('message', 'callee'), ('메시지', '수신번호')],   # V4.9: 수신번호(callee)
             'semantic_relation': 'receivedByPhone',
             'label_ko': '수신번호',
             'meaning': '메시지 수신 전화번호 (received_by의 Phone 버전)',
@@ -1834,7 +1834,7 @@ class KICSCrimeDomainOntology:
             'filed_as',                                         # 진정서 ↔ 사건 전환 기록
             'belongs_to',                                       # 계좌 행의 은행
             'contains_file',                                    # 첨부 기록
-            'sent_msg',                                         # 발신자 컬럼(방향 명시) ↔ 메시지
+            'sent_msg', 'received_msg',                         # 발신번호 → 메시지 → 수신번호 (컬럼명 방향 명시)
             'transferred_to', 'contacted',                      # 출금→입금 · 발신→수신 (컬럼명 방향 필수)
             'suspect_in', 'victim_in',                          # 컬럼명에 역할(피의자·피해자)이 명시된 경우
         },
@@ -1911,10 +1911,16 @@ class KICSCrimeDomainOntology:
     # 컬럼 타입 추론 패턴 v3.0 완전판 (ONTOLOGY_FINAL_ARCHITECTURE_v3.6.md §8 기준)
     COLUMN_PATTERNS = {
         # ── 노드 식별 패턴 ──────────────────────────────────────────────
+        # V4.9: 사건파일번호(flnm)를 사건번호보다 먼저 검사 — '사건파일명' 이 '사건' 부분 일치로 사건번호가 되지 않게
+        'case_file': {
+            'patterns': ['flnm', '사건파일명', '사건파일번호', '파일번호'],
+            'kics_label': 'vt_case', 'kics_property': 'flnm', 'is_attribute': True,
+            'description': '사건파일번호 — vt_case 보조 속성 (V4.9: 정경 식별자 아님)'
+        },
         'case': {
-            'patterns': ['사건', 'case', '사건번호', '접수번호', 'flnm', 'incdnt_no'],
-            'kics_label': 'vt_case', 'kics_property': 'flnm',
-            'description': '사건번호/관리번호'
+            'patterns': ['사건', 'case', '사건번호', '접수번호', 'incdnt_no'],
+            'kics_label': 'vt_case', 'kics_property': 'incdnt_no',   # V4.9 정경 식별자 = 경찰청 사건번호
+            'description': '사건번호(경찰청 공식) — vt_case 정경 식별자'
         },
         'petition': {
             'patterns': ['진정서', 'petition', '신고번호', 'dclr_sn', 'complaint', '민원'],
@@ -2018,15 +2024,18 @@ class KICSCrimeDomainOntology:
             'kics_label': '', 'kics_property': 'damage_amount', 'is_attribute': True,
             'description': '피해 금액'
         },
+        # V4.9: 이체 출발·도착 '계좌' — 노드는 vt_bacnt(account_no), 방향은 direction 으로 표시
+        #   (구: kics_label vt_transfer · kics_property from_account/to_account = 이벤트 노드·엣지 이름이 섞여 있었음.
+        #    보낸사람·받는사람은 인물이라 제외 — 인물 컬럼은 person 패턴)
         'sender': {
-            'patterns': ['출금', '송금계좌', '보낸사람', 'from', 'dsptch', 'sender'],
-            'kics_label': 'vt_transfer', 'kics_property': 'from_account',
-            'description': '이체 출발 계좌'
+            'patterns': ['출금계좌', '송금계좌', '출금', 'from', 'dsptch', 'sender'],
+            'kics_label': 'vt_bacnt', 'kics_property': 'account_no', 'direction': 'source',
+            'description': '이체 출발(출금) 계좌'
         },
         'receiver': {
-            'patterns': ['입금', '수취계좌', '받는사람', 'to', 'rcptn', 'receiver'],
-            'kics_label': 'vt_transfer', 'kics_property': 'to_account',
-            'description': '이체 도착 계좌'
+            'patterns': ['입금계좌', '수취계좌', '입금', 'to', 'rcptn', 'receiver'],
+            'kics_label': 'vt_bacnt', 'kics_property': 'account_no', 'direction': 'target',
+            'description': '이체 도착(입금) 계좌'
         },
         'caller': {
             'patterns': ['발신', 'caller', '발신번호', 'dsptch_telno'],
@@ -2078,6 +2087,7 @@ class KICSCrimeDomainOntology:
     COLUMN_TYPE_TO_RDB = {
         'case_id': 'case',
         'case': 'case',
+        'case_file': 'case_file',   # V4.9 사건파일번호(보조) — 사건번호(case)와 분리
         'petition': 'petition',
         'suspect': 'suspect',
         'phone': 'phone',

@@ -430,7 +430,9 @@ class RDBService:
                     for type_name, config in sorted_patterns.items():
                         for pattern in config["patterns"]:
                             # Avoid 'se' randomly matching 'sender' by imposing a length check
-                            if len(c_lower) > 2 and (pattern.lower() in c_lower or c_lower in pattern.lower()):
+                            # V4.9: 짧은 영문 패턴(to·ip·tel 등)은 단어 단위 — customer→receiver(입금계좌) 오인 방지
+                            if len(c_lower) > 2 and (KICSCrimeDomainOntology.pattern_in_column(pattern, c_lower)
+                                                     or (len(c_lower) > 3 and c_lower in pattern.lower())):
                                 if type_to_rdb.get(type_name) not in col_map:
                                     col_map[type_to_rdb.get(type_name)] = c
                                     matched = True

@@ -1564,7 +1564,9 @@ def rdb_analyze_csv():
             matched = False
             for type_name, config in sorted_patterns.items():
                 for pattern in config["patterns"]:
-                    if pattern.lower() in c_lower or c_lower in pattern.lower():
+                    # V4.9: 짧은 영문 패턴은 단어 단위 (customer→receiver·zip→ip 오인 방지)
+                    if KICSCrimeDomainOntology.pattern_in_column(pattern, c_lower) or \
+                            (len(c_lower) > 3 and c_lower in pattern.lower()):
                         col_type = type_to_rdb.get(type_name, type_name)
                         if col_type not in col_map:
                             col_map[col_type] = c

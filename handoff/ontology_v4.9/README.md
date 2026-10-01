@@ -26,6 +26,7 @@ V4.8 로 적재기·검증기를 만드셨다면 아래 항목을 확인하시�
 | 12 | `hosts`(IP→사이트) | `resolves_to`(사이트→IP)와 별도 엣지 | **`resolves_to` 로 통합** — 근거는 `basis`: `'dns'`(DNS 조회 관측) · `'origin'`(원본 서버 확인). CDN·가상호스팅은 `dns` 만으로 서버를 단정하지 마십시오. OSINT 제출의 `hosts` 는 검증기가 경고 후 방향을 뒤집어 `basis='origin'` 으로 변환합니다 |
 
 - 집계 규칙은 정의 스펙의 `RELATIONSHIPS['used_ip'|'located_at']['aggregation']` 에 기계 판독 형태로 들어 있습니다.
+- [부록] `COLUMN_PATTERNS`(전처리 힌트): `case` → `incdnt_no`(사건번호), 신설 `case_file` → `flnm`(사건파일번호, 보조 속성). `sender`·`receiver` 는 이체 출금·입금 **계좌**(`vt_bacnt.account_no` + `direction`)로 정정(구: 이벤트 노드 `vt_transfer`).
 - CSV 적재 규격(`csv_spec_v4.8`)은 **형식 변경이 없어 V4.8 그대로**입니다 — 참조 적재기가 위 규칙대로 만듭니다.
 - 설계 이력은 `spec/CCOP_ONTOLOGY_DESIGN_HISTORY.md`, 엑셀 `변경이력` 시트 R18~R28.
 

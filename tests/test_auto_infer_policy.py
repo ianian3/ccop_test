@@ -93,6 +93,37 @@ def test_person_object_is_suggestion_and_allow_first():
     assert _edges(rels)[('이름', '계좌번호', 'has_account')] == 'suggest'
 
 
+def _types(cols):
+    ct = R._infer_column_types_by_rules(cols, [])
+    return {c: (ct[c]['type'], ct[c]['kics_label'], ct[c]['kics_property']) for c in cols if c in ct}
+
+
+def test_case_number_vs_case_file():
+    t = _types(['사건번호', '사건파일명', 'flnm'])
+    assert t['사건번호'] == ('case', 'vt_case', 'incdnt_no')     # V4.9 정경 식별자
+    assert t['사건파일명'] == ('case_file', 'vt_case', 'flnm')   # 보조 속성
+    assert t['flnm'] == ('case_file', 'vt_case', 'flnm')
+
+
+def test_sender_receiver_are_accounts():
+    t = _types(['출금', '입금', '송금계좌', '수취계좌'])
+    assert all(v[1:] == ('vt_bacnt', 'account_no') for v in t.values()), t
+    assert _edges(_infer(['송금계좌', '수취계좌'])) == {('송금계좌', '수취계좌', 'transferred_to'): 'allow'}
+    assert O.COLUMN_PATTERNS['sender']['direction'] == 'source'
+    assert O.COLUMN_PATTERNS['receiver']['direction'] == 'target'
+
+
+def test_message_record_edges():
+    e = _edges(_infer(['발신번호', '수신번호', '문자내용']))
+    assert e[('발신번호', '문자내용', 'sent_msg')] == 'allow'
+    assert e[('문자내용', '수신번호', 'received_msg')] == 'allow'
+    assert e[('발신번호', '수신번호', 'contacted')] == 'allow'
+
+
+def test_customer_column_not_receiver():
+    assert 'customer' not in R._infer_column_types_by_rules(['customer'], [])
+
+
 # ── KICSSchemaMapper fallback / LLM 후처리 ────────────────────────
 
 def _fallback(cols):
@@ -102,6 +133,10 @@ def _fallback(cols):
 def test_mapper_ip_pair_no_communicated_with():
     assert _fallback(['login_ip', 'customer_ip']) == []
     assert _fallback(['src_ip', 'dst_ip']) == []
+
+
+def test_mapper_sender_receiver_transfer():
+    assert [(r['type'], r['policy']) for r in _fallback(['출금', '입금'])] == [('transferred_to', 'allow')]
 
 
 def test_mapper_transfer_and_call():
