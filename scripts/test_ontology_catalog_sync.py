@@ -4,7 +4,7 @@
 검증 규칙:
   1. EDGE_STYLE_V40(시각) ⊆ RELATIONSHIPS(의미) — "화면엔 그려지는데 의미 정의가 없는" 엣지 금지
   2. 의미-only 엣지는 보류 허용목록(C단계 결정 대기 3종)만 허용 — 새 드리프트 발생 시 실패
-  3. 노드 카탈로그 5종 구조(ENTITIES/VISUAL_STYLE_V40/DOMAIN_USAGE/라벨맵)가 모두 25개로 일치
+  3. 노드 카탈로그 5종 구조(ENTITIES/VISUAL_STYLE_V40/DOMAIN_USAGE/라벨맵)가 모두 NODE_COUNT 개로 일치
   4. 추론 규칙 통합(V4.2) — INFERENCE_RULES 단일 dict 13종, V37은 파생 뷰(리터럴 재정의 금지)
 
 실행: python3 scripts/test_ontology_catalog_sync.py   (의존성 없음 — AST 정적 분석)
@@ -14,10 +14,11 @@ import ast
 import sys
 from pathlib import Path
 
-SOT = Path(__file__).resolve().parent.parent / 'app/middleware/services/ontology_service.py'
+SOT = Path(__file__).resolve().parent.parent / 'app/services/ontology_service.py'
 
 # C단계 완료(2026-07-31): controls·located_at 등재, owns_device는 uses_device 별칭 등재 → 보류 0
 PENDING_SEMANTIC_ONLY = set()
+NODE_COUNT = 24   # V4.9: vt_email → vt_id 흡수 (25→24)
 
 
 def dict_keys(tree, name):
@@ -46,15 +47,15 @@ def main():
     check('시각-only 엣지 없음 (의미 정의 필수)', not visual_only, f'의미 미정의: {sorted(visual_only)}')
     semantic_only = rel - sty
     unexpected = semantic_only - PENDING_SEMANTIC_ONLY
-    check(f'의미-only는 보류 3종 이내 (현재 {sorted(semantic_only)})', not unexpected,
+    check(f'의미-only 는 보류 목록만 (현재 {sorted(semantic_only)})', not unexpected,
           f'신규 드리프트: {sorted(unexpected)}')
 
     print('▶ 노드 카탈로그 (5종 구조 정합)')
     ent = dict_keys(tree, 'ENTITIES')
-    check(f'ENTITIES = 25 (현재 {len(ent)})', len(ent) == 25)
+    check(f'ENTITIES = {NODE_COUNT} (현재 {len(ent)})', len(ent) == NODE_COUNT)
     for name in ('VISUAL_STYLE_V40', 'DOMAIN_USAGE', 'NODE_ID_STANDARD', 'GDB_LABEL_MAP', 'LABEL_KO_MAP'):
         keys = dict_keys(tree, name)
-        check(f'{name} = 25 (현재 {len(keys)})', len(keys) == 25)
+        check(f'{name} = {NODE_COUNT} (현재 {len(keys)})', len(keys) == NODE_COUNT)
 
     print('▶ 추론 규칙 이원화 해소 (V4.2)')
     ir = dict_keys(tree, 'INFERENCE_RULES')   # dict 리터럴만 매칭 → list로 회귀 시 0

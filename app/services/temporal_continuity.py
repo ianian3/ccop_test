@@ -14,7 +14,7 @@ sLLM 성능이 아닌 온톨로지 분류표(SoT)에 의존시킨다.
 """
 from __future__ import annotations
 import re
-from app.middleware.services.ontology_service import KICSCrimeDomainOntology as O
+from app.services.ontology_service import KICSCrimeDomainOntology as O
 
 # Event 노드 라벨 → 발생시각 속성 (V형 기준)
 EVENT_VT = {

@@ -1460,7 +1460,7 @@ class RdbToGraphService:
                             safe_str(r[3]), safe_str(r[4]), safe_str(r[5])
                         )
                         # 엔티티 타입 → 그래프 레이블 매핑
-                        from app.middleware.services.ontology_service import KICSCrimeDomainOntology
+                        from app.services.ontology_service import KICSCrimeDomainOntology
                         label_map = KICSCrimeDomainOntology.GDB_LABEL_MAP
                         src_label = label_map.get(src_type, src_type)
                         tgt_label = label_map.get(tgt_type, tgt_type)
@@ -1871,7 +1871,7 @@ class RdbToGraphService:
         Returns: {label: count} — 라벨별 보정 노드 수
         """
         from app.database import safe_set_graph_path
-        from app.middleware.services.ontology_service import KICSCrimeDomainOntology as Onto
+        from app.services.ontology_service import KICSCrimeDomainOntology as Onto
 
         tier_map = {'investigation': 1, 'partner': 2, 'osint': 4, 'inference': 3}
         default_tier = tier_map.get(source_domain, 3)
@@ -1925,7 +1925,7 @@ class RdbToGraphService:
             )
             cur.execute(f"MERGE (n:vt_bacnt {{account_no: '{actno}'}}) SET n = {props}")
         """
-        from app.middleware.services.ontology_service import KICSCrimeDomainOntology as Onto
+        from app.services.ontology_service import KICSCrimeDomainOntology as Onto
         from datetime import datetime
 
         # V4.0 P0 — RDB 도메인 키(DA팀 표준: KICS/OSINT/DIGITAL/EXT) ↔ 코드 도메인 키 매핑

@@ -29,7 +29,7 @@ pytest tests/ --cov=app --cov-report=html
 ## 핵심 아키텍처
 
 - **Flask Factory + Blueprint**: `app/__init__.py` → routes.py(UI), routes_api.py(API), routes_admin.py(Admin)
-- **Service Layer**: `app/services/` 아래 각 서비스 모듈 (static method 패턴) — routes 가 `from app.services.*` 로 임포트하는 **활성본**. ✅ `app/middleware/services/` 의 죽은 중복본은 **제거됨** — 이제 온톨로지 SoT(`ontology_service.py`) 하나만 남음. **코드 수정은 `app/services/` 에 할 것**. 온톨로지 SoT는 `app/middleware/services/ontology_service.py` 이고 `app/services/ontology_service.py` 는 그 alias (통합 예정).
+- **Service Layer**: `app/services/` 아래 각 서비스 모듈 (static method 패턴) — routes 가 `from app.services.*` 로 임포트하는 **활성본**. **코드 수정은 `app/services/` 에 할 것** — 온톨로지 SoT 도 `app/services/ontology_service.py` (2026-10-01 복귀). `app/middleware/services/ontology_service.py` 는 이전 import 호환용 re-export 연결 파일(정의 없음).
 - **Cypher 실행**: AgensGraph 네이티브 방식 — 각 서비스가 `SET graph_path` 후 Cypher 직접 실행. (`app/core/cypher_service.py` 의 CypherService 는 현재 미사용)
 - **LLM**: AIService → OpenAI GPT-4o (기본), sLLM fallback 지원
 - **법률 RAG v2**: `app/services/legal_rag_service.py` — 자체 BM25(한글 bigram)+벡터 RRF 융합+LLM rerank. **벡터 백엔드 교체 가능**: 기본 PostgreSQL(BYTEA)+numpy 브루트포스 / 선택 **Chroma**(`LEGAL_VECTOR_BACKEND=chroma`, 어댑터 `app/services/legal_vector_store.py`). base 런타임 의존성 0 유지 — chromadb/pypdf 는 **선택 의존성**(`requirements-vector.txt`, 지연 import로 미설정 시 로드 0). 임베딩 백엔드 없으면 BM25-only 강등(폐쇄망). 설계: `docs/LEGAL_RAG_V2_DESIGN.md`.
@@ -41,7 +41,7 @@ pytest tests/ --cov=app --cov-report=html
 | `app/services/ai_service.py` | LLM 연동, 의도 분류, Cypher 생성 |
 | `app/services/graph_service.py` | 노드 검색, 확장, 경로 탐색 |
 | `app/services/etl_service.py` | CSV → 그래프 ETL 파이프라인 |
-| `app/middleware/services/ontology_service.py` | KICS 4계층 온톨로지 (**SoT**; `app/services/ontology_service.py` 는 alias) |
+| `app/services/ontology_service.py` | KICS 온톨로지 V4.9 (**SoT**; `app/middleware/services/ontology_service.py` 는 호환용 re-export) |
 | `app/services/langgraph_agent.py` | LangGraph Text2Cypher 에이전트 (라우팅→생성→실행) |
 | `app/services/legal_rag_service.py` | 법률 RAG v2 (hybrid+RRF+rerank; API `/api/v1/legal/*`, 적재 `scripts/ingest_legal_corpus.py`, 평가 `scripts/eval_legal_rag.py`) |
 | `app/services/legal_vector_store.py` | Chroma 벡터 백엔드 어댑터 (선택; `LEGAL_VECTOR_BACKEND=chroma` 일 때만 사용, 지연 import) |

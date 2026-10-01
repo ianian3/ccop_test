@@ -7,7 +7,7 @@ Text2Cypher 스키마(_POLE_SCHEMA)가 SoT를 벗어나면(오타·드리프트)
 """
 import re
 
-from app.middleware.services.ontology_service import KICSCrimeDomainOntology as O
+from app.services.ontology_service import KICSCrimeDomainOntology as O
 import app.services.rdb_to_graph_service as loader
 
 
@@ -76,7 +76,7 @@ def test_relationships_no_duplicate_keys():
     controls/located_at/owns_device 중복(구버전이 최신 정합화 정의를 가리던 문제)의 재발 방지.
     """
     import ast
-    import app.middleware.services.ontology_service as ont
+    import app.services.ontology_service as ont
     tree = ast.parse(open(ont.__file__).read())
     dups = []
     for node in ast.walk(tree):
@@ -134,5 +134,5 @@ def test_case_nodes_keyed_by_incdnt_no():
         src = (root / rel).read_text()
         bad = re.findall(r"vt_case\s*\{\{?\s*flnm\s*:", src)
         assert not bad, f"{rel}: vt_case 를 flnm 키로 조회/생성 {len(bad)}곳"
-    from app.middleware.services.ontology_service import KICSCrimeDomainOntology as O
+    from app.services.ontology_service import KICSCrimeDomainOntology as O
     assert O.ENTITIES["Case"]["properties"][0] == "incdnt_no"

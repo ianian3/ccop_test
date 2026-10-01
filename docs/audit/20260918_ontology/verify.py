@@ -3,7 +3,7 @@ import contextlib, io, json, runpy, sys, types, zipfile
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[3]
 def read(p): return runpy.run_path(str(ROOT / p))
-O = read('app/middleware/services/ontology_service.py')['KICSCrimeDomainOntology']
+O = read('app/services/ontology_service.py')['KICSCrimeDomainOntology']
 H = read('handoff/ontology_v4.8/code/ccop_ontology_v48.py')['KICSCrimeDomainOntology']
 result = {'snapshot': '39b78ec', 'counts': {'nodes': len(O.ENTITIES), 'edges': len(O.RELATIONSHIPS), 'active_edges': len(O.active_relationships()), 'layers': len(O.LAYERS)}, 'canonical_not_declared': {}, 'handoff_core_sync': {}, 'abstract_endpoints': []}
 for concept, ent in O.ENTITIES.items():

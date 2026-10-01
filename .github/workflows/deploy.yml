@@ -34,7 +34,7 @@ jobs:
 
       - name: 온톨로지 서비스 임포트 검증
         run: |
-          python -c "from app.middleware.services.ontology_service import KICSCrimeDomainOntology; \
+          python -c "from app.services.ontology_service import KICSCrimeDomainOntology; \
                      assert len(KICSCrimeDomainOntology.ENTITIES) > 0; \
                      print('✅ 온톨로지 노드:', len(KICSCrimeDomainOntology.ENTITIES), '개'); \
                      print('✅ 온톨로지 엣지:', len(KICSCrimeDomainOntology.RELATIONSHIPS), '개')"

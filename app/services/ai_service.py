@@ -115,7 +115,7 @@ class AIService:
         # 3) 한글 인명 후보 — 스키마 용어(별칭)는 제외
         alias_words = set()
         try:
-            from app.middleware.services.ontology_service import KICSCrimeDomainOntology as O
+            from app.services.ontology_service import KICSCrimeDomainOntology as O
             for al in O.LABEL_ALIASES.values():
                 alias_words.update(al)
         except Exception:
@@ -180,7 +180,7 @@ class AIService:
         q = (question or '').lower()
         labels = []
         try:
-            from app.middleware.services.ontology_service import KICSCrimeDomainOntology as O
+            from app.services.ontology_service import KICSCrimeDomainOntology as O
             labels = list(O.match_labels_by_keywords(question))
         except Exception:
             pass

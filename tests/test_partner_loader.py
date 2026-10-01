@@ -240,7 +240,7 @@ class TestTimeAggregation:
 
 def test_agg_rules_match_sot():
     """적재기 집계 규칙 == 온톨로지 SoT RELATIONSHIPS[*]['aggregation'] (used_ip·located_at)."""
-    from app.middleware.services.ontology_service import KICSCrimeDomainOntology as O
+    from app.services.ontology_service import KICSCrimeDomainOntology as O
     M = _load(PATHS["handoff"])
     for el in ("used_ip", "located_at"):
         sot = O.RELATIONSHIPS[el]

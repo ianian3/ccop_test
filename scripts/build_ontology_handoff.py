@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """온톨로지 전달본 생성기 — SoT에서 '외부에 꼭 필요한 것만' 추려 슬림 스펙 모듈을 만든다.
 
-SoT(app/middleware/services/ontology_service.py, 2,684행)에는 우리 앱 전용 정보가 섞여 있다
+SoT(app/services/ontology_service.py)에는 우리 앱 전용 정보가 섞여 있다
 (UI 색·아이콘, 수사 워크플로 프리셋, T2C 어휘 별칭, 미구현 추론 로드맵). 이를 그대로 넘기면
 받는 쪽이 '구현해야 할 목록'으로 오해하고, 스펙의 신호대잡음비가 떨어진다.
 
@@ -16,7 +16,7 @@ import pprint
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from app.middleware.services.ontology_service import KICSCrimeDomainOntology as O  # noqa: E402
+from app.services.ontology_service import KICSCrimeDomainOntology as O  # noqa: E402
 
 OUT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                    'handoff', 'ontology_v4.9', 'code', 'ccop_ontology_v49.py')

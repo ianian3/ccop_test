@@ -9,7 +9,7 @@ os.chdir('/Users/iankwon/test/coop_v1.0')
 from dotenv import load_dotenv
 load_dotenv()
 import psycopg2
-from app.middleware.services.ontology_service import KICSCrimeDomainOntology as O
+from app.services.ontology_service import KICSCrimeDomainOntology as O
 
 CANON_LABELS = set(O.GDB_LABEL_MAP.values())
 REL = O.RELATIONSHIPS

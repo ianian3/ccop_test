@@ -29,7 +29,7 @@ from typing import List, Tuple
 import psycopg2
 from dotenv import load_dotenv
 
-from app.middleware.services.ontology_service import KICSCrimeDomainOntology as Onto
+from app.services.ontology_service import KICSCrimeDomainOntology as Onto
 
 load_dotenv()
 logger = logging.getLogger(__name__)

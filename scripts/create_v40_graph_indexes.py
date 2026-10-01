@@ -17,7 +17,7 @@ sys.path.insert(0, '/Users/iankwon/test/coop_v1.0')
 from app import create_app
 from app.services.rdb_to_graph_service import RdbToGraphService
 from app.database import safe_set_graph_path
-from app.middleware.services.ontology_service import KICSCrimeDomainOntology as Ont
+from app.services.ontology_service import KICSCrimeDomainOntology as Ont
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
 log = logging.getLogger('v40_index')

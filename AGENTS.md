@@ -29,7 +29,7 @@ pytest tests/ --cov=app --cov-report=html
 ## 핵심 아키텍처
 
 - **Flask Factory + Blueprint**: `app/__init__.py` → routes.py(UI), routes_api.py(API), routes_admin.py(Admin)
-- **Service Layer**: `app/services/` 아래 각 서비스 모듈 (static method 패턴) — routes 가 `from app.services.*` 로 임포트하는 **활성본**. ⚠️ `app/middleware/services/` 에 옛 중복본이 남아있으나 대부분 미사용(죽은 코드)이니 **코드 수정은 `app/services/` 에 할 것**. 단 예외 — 온톨로지 SoT는 아직 `app/middleware/services/ontology_service.py` 이고 `app/services/ontology_service.py` 는 그 alias (통합 예정).
+- **Service Layer**: `app/services/` 아래 각 서비스 모듈 (static method 패턴) — routes 가 `from app.services.*` 로 임포트하는 **활성본**. **코드 수정은 `app/services/` 에 할 것** — 온톨로지 SoT 도 `app/services/ontology_service.py` (2026-10-01 복귀). `app/middleware/services/ontology_service.py` 는 이전 import 호환용 re-export 연결 파일(정의 없음).
 - **Cypher 실행**: CypherService가 Cypher → AGE SQL 래핑 (`SELECT * FROM cypher('graph', $$ ... $$)`)
 - **LLM**: AIService → OpenAI GPT-4o (기본), sLLM fallback 지원
 - **Vector RAG**: ChromaDB + sentence-transformers (법률 문서 RAG)
@@ -41,7 +41,7 @@ pytest tests/ --cov=app --cov-report=html
 | `app/services/ai_service.py` | LLM 연동, 의도 분류, Cypher 생성 |
 | `app/services/graph_service.py` | 노드 검색, 확장, 경로 탐색 |
 | `app/services/etl_service.py` | CSV → 그래프 ETL 파이프라인 |
-| `app/middleware/services/ontology_service.py` | KICS 4계층 온톨로지 (**SoT**; `app/services/ontology_service.py` 는 alias) |
+| `app/services/ontology_service.py` | KICS 온톨로지 V4.9 (**SoT**; `app/middleware/services/ontology_service.py` 는 호환용 re-export) |
 | `app/services/legal_rag_service.py` | ChromaDB 법률 RAG |
 | `app/core/cypher_service.py` | Cypher → AGE SQL 변환 엔진 |
 

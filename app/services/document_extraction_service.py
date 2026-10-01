@@ -83,7 +83,7 @@ def parse_document(path: str) -> str:
 
 def ontology_schema_text() -> str:
     """온톨로지 노드 타입을 간결 리스트로 (작은 특화모델 v46 친화 — 66엣지 전체 주입은 과부하)."""
-    from app.middleware.services.ontology_service import KICSCrimeDomainOntology as O
+    from app.services.ontology_service import KICSCrimeDomainOntology as O
     return ' '.join(f'{k}({v})' for k, v in O.LABEL_KO_MAP.items())
 
 

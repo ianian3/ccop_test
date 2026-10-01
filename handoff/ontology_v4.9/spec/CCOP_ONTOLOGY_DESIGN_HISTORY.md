@@ -3,7 +3,7 @@
 **작성일**: 2026-07-31 (V4.0 2026-05-21 → V4.1 정합화)
 **상태**: 기준 설계 명세 (**현행 SSOT 버전은 V4.9** — §15 변경 이력·코드 docstring 참조, 2026-09-30)
 **대체 대상**: V4.0 (→ V4.1로 정합화·승격), V3.5 / V3.6 / V3.7 (deprecated)
-**SSOT 코드**: `app/middleware/services/ontology_service.py:KICSCrimeDomainOntology`
+**SSOT 코드**: `app/services/ontology_service.py:KICSCrimeDomainOntology` (2026-10-01 이전: `app/middleware/services/`)
 
 > **V3.7 (수사 풀스택) + OSINT V3.6 (공개정보)** 통합 표준
 > 단일 SSOT 카탈로그 + 도메인 사용 매트릭스 + 추론 규칙 + 표준 메타

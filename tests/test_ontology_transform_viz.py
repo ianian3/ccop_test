@@ -14,7 +14,7 @@ import json
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.middleware.services.ontology_service import (
+from app.services.ontology_service import (
     KICSCrimeDomainOntology as Onto,
     OntologyEnricher,
 )
