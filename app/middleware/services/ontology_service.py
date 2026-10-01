@@ -1558,7 +1558,7 @@ class KICSCrimeDomainOntology:
             'label_ko': 'DNS조회·호스팅',
             'meaning': "사이트가 IP 로 연결됨 — basis 로 근거 구분: 'dns'(DNS A/AAAA 조회 관측) · "
                        "'origin'(원본 서버 확인 — 호스팅사 회신·압수 등). CDN·가상호스팅은 dns 만으로 서버 단정 금지",
-            'source_types': [('site', 'ip'), ('domain', 'ip'), ('ip', 'site'), ('server_ip', 'domain')],
+            'source_types': [('site', 'ip'), ('domain', 'ip')],   # 사이트→IP 방향만 — (ip, site) 를 넣으면 추론기가 역방향 resolves_to 를 만든다
             'legal_significance': '네트워크 추적',
             'properties': ['basis', 'resolved_dt', 'port', 'source_id', 'rec_created'],   # resolved_dt=관측·확인 시각
             # V4.9: hosts(IP→사이트) 통합 — OSINT 적재분은 DNS 결과를 양방향으로 복사한 동일 사실(13,769쌍 전부 짝)이었다.
