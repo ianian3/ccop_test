@@ -167,7 +167,7 @@ class KICSCrimeDomainOntology:
             # 2026-10-01 정합 2단계(A안): 원천에 인물 ID 가 없으면(2차년도 비식별본) 출처 범위 안의 결정적 ID 를 만든다.
             #   psn_id = 'psn:{scope}:{name}'. 종전엔 이름이 키라 서로 다른 EP 의 다른 사람(가림 이름 '김**' 포함)이
             #   한 노드로 합쳐졌다(통합 그래프 75명). 출처 간 동일인은 same_as 후보(review_status=pending)로 잇는다.
-            'synthesize':       {'from': 'name', 'prefix': 'psn'},
+            'synthesize':       {'from': 'name', 'prefix': 'psn', 'scope': 'source'},   # 인물은 출처 범위 — EP 간 이름 일치는 same_as 후보
         },
         'pt_cluster': {  # V3.7 신규
             'canonical_field':  'cluster_id',
@@ -189,16 +189,16 @@ class KICSCrimeDomainOntology:
         },
         # V4.0 P2 — 나머지 16노드 id_format 표준 (감사 리포트 §6 보강)
         'vt_src':          {'canonical_field': 'src_id',        'id_formats': ['plain'],         'default_format': 'plain',
-                            'synthesize': {'from': 'src_name', 'prefix': 'src'}},  # 2026-10-01 A안: ID 없으면 출처 범위 결정적 ID
+                            'synthesize': {'from': 'src_name', 'prefix': 'src', 'scope': 'global'}},  # 2026-10-01: ID 없으면 명칭 기반 결정적 ID — 실재 기관·장비라 EP 간 공유(global)
         'vt_case':         {'canonical_field': 'incdnt_no',      'id_formats': ['plain'],         'default_format': 'plain'},  # [V4.9, 2026-09-18 정공법] 수사관 인지 식별자=경찰청 공식 사건번호(incdnt_no). flnm(사건파일명)은 보조 속성
         'vt_petition':     {'canonical_field': 'petition_id',   'id_formats': ['plain'],         'default_format': 'plain'},
         'vt_org':          {'canonical_field': 'org_id',        'id_formats': ['plain'],         'default_format': 'plain',
-                            'synthesize': {'from': 'org_name', 'prefix': 'org'}},  # 2026-10-01 A안: ID 없으면 출처 범위 결정적 ID
+                            'synthesize': {'from': 'org_name', 'prefix': 'org', 'scope': 'global'}},  # 2026-10-01: ID 없으면 명칭 기반 결정적 ID — 실재 기관·장비라 EP 간 공유(global)
         'vt_crypto':       {'canonical_field': 'wallet_addr',   'id_formats': ['base58check'],   'default_format': 'base58check'},  # [정합화] 실 MERGE 키=wallet_addr
         'vt_vhcl':         {'canonical_field': 'vhclno',        'id_formats': ['plain'],         'default_format': 'plain'},  # [정합화] 실 MERGE 키=vhclno
         'vt_dev':          {'canonical_field': 'dev_id',        'id_formats': ['plain', 'imei'], 'default_format': 'plain'},
         'vt_atm':          {'canonical_field': 'atm_id',        'id_formats': ['plain'],         'default_format': 'plain',
-                            'synthesize': {'from': 'atm_nm', 'prefix': 'atm'}},  # 2026-10-01 A안: ID 없으면 출처 범위 결정적 ID
+                            'synthesize': {'from': 'atm_nm', 'prefix': 'atm', 'scope': 'global'}},  # 2026-10-01: ID 없으면 명칭 기반 결정적 ID — 실재 기관·장비라 EP 간 공유(global)
         'vt_loc':          {'canonical_field': 'loc_id',        'id_formats': ['plain', 'geohash'], 'default_format': 'plain'},
         'vt_transfer':     {'canonical_field': 'transfer_id',   'id_formats': ['uuid'],          'default_format': 'uuid'},
         'vt_call':         {'canonical_field': 'call_id',       'id_formats': ['uuid'],          'default_format': 'uuid'},

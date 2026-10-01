@@ -87,9 +87,12 @@ class GraphWriter:
     def _violation(self, msg):
         if self.mode == 'strict':
             raise GraphWriteError(msg)
-        if self.mode == 'warn':
-            self.stats['warnings'].append(msg)
-            logger.warning('[GraphWriter] %s', msg)
+        if self.mode == 'warn':                        # 같은 경고는 한 번만 기록하고 횟수만 센다
+            cnt = self.stats.setdefault('warning_counts', {})
+            if msg not in cnt:
+                self.stats['warnings'].append(msg)
+                logger.warning('[GraphWriter] %s', msg)
+            cnt[msg] = cnt.get(msg, 0) + 1
 
     def _check_label(self, label):
         safe_ident(label, '라벨')
@@ -112,7 +115,7 @@ class GraphWriter:
         if missing:
             syn = (O.NODE_ID_STANDARD.get(label) or {}).get('synthesize')
             src = props.get(syn['from']) if syn else None
-            sc = scope or self.scope
+            sc = 'g' if (syn or {}).get('scope') == 'global' else (scope or self.scope)   # global = EP 간 공유
             if syn and len(fields) == 1 and src not in (None, '') and sc:
                 props[fields[0]] = f"{syn['prefix']}:{sc}:{str(src).strip()}"
             else:
@@ -126,6 +129,11 @@ class GraphWriter:
             key[f] = v
             props[f] = v
         return key, props
+
+    def key_for(self, label, props, scope=None):
+        """버퍼에 넣지 않고 정규화된 키만 계산 — 호출자가 같은 노드를 모아 메타(ep_origin 등)를 붙일 때."""
+        self._check_label(label)
+        return self._resolve_key(label, self._clean(props), scope)[0]
 
     # ── 노드 ────────────────────────────────────────────────────────
     def node(self, label, props, scope=None):

@@ -23,7 +23,7 @@ import os
 import argparse
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from app import create_app
-from app.database import safe_set_graph_path
+from app.database import safe_set_graph_path, safe_elem_id
 import psycopg2
 import networkx as nx
 from collections import Counter, defaultdict
@@ -249,7 +249,7 @@ def main():
             conn.autocommit = False
             cnt = 0
             for nid, (lbl, key) in id2.items():
-                if lbl not in KP or not key:
+                if lbl not in KP:
                     continue
                 parts = []
                 for m in metrics:
@@ -259,7 +259,11 @@ def main():
                     # 숫자로 저장(따옴표 없음) — 문자열이면 kcore '14'<'7' 정렬 오류·
                     # WHERE 비교 깨짐 (P1-B, docs/T2C_INTEGRATED_PERF_REVIEW.md)
                     parts.append(f"n.{m}={int(v)}" if m in INT_METRICS else f"n.{m}={float(v):.6f}")
-                cur.execute(f"MATCH (n:{lbl} {{{KP[lbl]}:'{esc(key)}'}}) SET " + ", ".join(parts))
+                if not parts:
+                    continue
+                # 2026-10-01 정합 2b: 노드 id 로 되쓴다 — 종전 이름 키(vt_psn name·vt_id id_val)는 같은 이름의 다른 노드
+                #   (EP 범위 인물 psn:{ep}:{name}·플랫폼만 다른 계정)에 지표를 퍼뜨렸다
+                cur.execute(f"MATCH (n:{lbl}) WHERE id(n) = '{safe_elem_id(nid)}' SET " + ", ".join(parts))
                 cnt += 1
                 if cnt % 3000 == 0:
                     conn.commit()

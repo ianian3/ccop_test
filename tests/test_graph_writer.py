@@ -151,3 +151,29 @@ def test_roundtrip_local_agensgraph():
     finally:
         cur.execute(f'DROP GRAPH {g} CASCADE')
         conn.close()
+
+
+# ── 통합 빌더 (2b) ─────────────────────────────────────────────────
+
+def _builder():
+    import importlib.util
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    spec = importlib.util.spec_from_file_location('big', os.path.join(root, 'scripts', 'build_integrated_graph.py'))
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    return m
+
+
+def test_builder_has_no_hand_key_table():
+    m = _builder()
+    assert not hasattr(m, 'KP') and not hasattr(m, 'esc')          # 키·이스케이프는 GraphWriter/SoT
+    assert m._canon('vt_email', {'email_addr': 'A@B.c'}) == ('vt_id', {'id_val': 'a@b.c', 'platform': 'email'})
+    assert m._canon('vt_ip', {'ip_addr': '1', 'country': 'KR'}) == ('vt_ip', {'ip_addr': '1', 'ctry_cd': 'KR'})
+    assert m._case_fallback('vt_case', {'flnm': 'EP1-01'})['incdnt_no'] == 'EP1-01'
+    assert m._num({'txn_count': '3', 'confidence': '0.7', 'channel': 'call'}) == {'txn_count': 3, 'confidence': 0.7, 'channel': 'call'}
+
+
+def test_org_atm_src_keys_global_person_scoped():
+    w, _ = _w()
+    assert w.key_for('vt_org', {'org_name': 'IBK기업은행'}, scope='ep3') == w.key_for('vt_org', {'org_name': 'IBK기업은행'}, scope='ep5')
+    assert w.key_for('vt_psn', {'name': '이우성'}, scope='ep3') != w.key_for('vt_psn', {'name': '이우성'}, scope='ep5')
