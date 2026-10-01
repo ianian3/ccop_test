@@ -374,7 +374,10 @@ def _ungrounded_literals(cypher: str, question: str, graph_path: str) -> list:
 def _system_prompt_for(graph_path: str) -> str:
     """그래프별 system 프롬프트 선택 (미지 그래프는 기존 프롬프트 유지)."""
     # 테스트 그래프는 통합 그래프와 같은 V4.8 스키마로 시드되므로 같은 프롬프트를 쓴다.
-    if graph_path in ('ccop_ep_integrated', 'ccop_test_graph') and T2C_INTEGRATED_SYSTEM_PROMPT:
+    #   재구축본(정합 2e, 예: ccop_ep_integrated_v49)도 같은 통합 그래프 — 이름이 다르다고 일반 프롬프트로 떨어지면
+    #   v48 이 학습 때 못 본 프롬프트를 받아 정확도가 크게 떨어진다(2026-10-01 실측 94.8% → 79.2%)
+    if (graph_path == 'ccop_test_graph' or re.match(r'^ccop_ep_integrated(_v\d+)?$', graph_path or '')) \
+            and T2C_INTEGRATED_SYSTEM_PROMPT:
         return T2C_INTEGRATED_SYSTEM_PROMPT
     return T2C_V37_SYSTEM_PROMPT
 

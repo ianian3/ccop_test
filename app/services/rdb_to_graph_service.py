@@ -144,7 +144,7 @@ class RdbToGraphService:
             conn.close()
 
     @staticmethod
-    def transfer_data(graph_name="test_ai01", source_schema=None):
+    def transfer_data(graph_name="test_ai01", source_schema=None, source_ids=None):
         """
         RDB V3(49개 테이블) 데이터를 POLE 6계층 온톨로지 기반으로 GDB(AgensGraph)에 변환 적재
         """
@@ -174,7 +174,7 @@ class RdbToGraphService:
         from app.services.rdb_graph_loader import RdbGraphLoader, V40_TABLES
         try:
             if RdbGraphLoader.staging_tables(cur, source_schema) & set(V40_TABLES):
-                stats = RdbGraphLoader(conn, graph_name, source_schema).run()
+                stats = RdbGraphLoader(conn, graph_name, source_schema, source_ids=source_ids).run()
                 try:
                     stats["v37"] = RdbToGraphService._postprocess_v37(cur, conn, graph_name)
                 except Exception as e:

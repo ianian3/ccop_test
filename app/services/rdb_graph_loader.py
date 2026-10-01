@@ -65,12 +65,19 @@ def _num(v, cast=float):
 class RdbGraphLoader:
     """test_v40 스테이징 → 그래프. 사용: RdbGraphLoader(conn, graph, 'test_v40').run()"""
 
-    def __init__(self, conn, graph, source_schema, source_domain='investigation'):
+    def __init__(self, conn, graph, source_schema, source_domain='investigation', source_ids=None):
+        """source_ids: 적재 배치(source_id) 목록 — 주면 그 배치 행만 읽는다(운영 v40_* 배치 그래프 재현용, 2e)."""
         if not validate_graph_path(graph):
             raise GraphWriteError(f'허용되지 않는 그래프명: {graph!r}')
         if not validate_graph_path(source_schema):
             raise GraphWriteError(f'허용되지 않는 스키마명: {source_schema!r}')
+        import re
+        bad = [x for x in (source_ids or []) if not re.match(r'^[A-Za-z0-9_.-]+$', str(x))]
+        if bad:
+            raise GraphWriteError(f'허용되지 않는 source_id: {bad!r}')
         self.conn, self.graph, self.schema, self.domain = conn, graph, source_schema, source_domain
+        self.source_ids = list(source_ids or [])
+        self._read_schema = source_schema               # 배치 필터 시 pg_temp 의 필터 뷰를 읽는다
         self.cur = conn.cursor()
         self.counts = {}
 
@@ -81,7 +88,7 @@ class RdbGraphLoader:
 
     def _rows(self, sql):
         """원천 SELECT — 스키마를 명시해 읽는다(그래프 쓰기 graph_path 와 섞이지 않게)."""
-        self.cur.execute(sql.replace('{S}', f'"{self.schema}"'))
+        self.cur.execute(sql.replace('{S}', f'"{self._read_schema}"'))
         return self.cur.fetchall()
 
     def _count(self, name, n):
@@ -283,6 +290,14 @@ class RdbGraphLoader:
         if not cur.fetchone():
             cur.execute(f'CREATE GRAPH {self.graph}')
         present = self.staging_tables(cur, self.schema)
+        if self.source_ids:
+            # 배치 필터: 세션 임시 뷰(pg_temp.<테이블>) — 각 적재 함수의 SQL 은 그대로 두고 읽는 스키마만 바꾼다
+            from psycopg2 import sql as _sql
+            for t in sorted(present & set(V40_TABLES)):
+                cur.execute(_sql.SQL('CREATE OR REPLACE TEMP VIEW {v} AS SELECT * FROM {s}.{t} WHERE source_id = ANY({ids})')
+                            .format(v=_sql.Identifier(t), s=_sql.Identifier(self.schema), t=_sql.Identifier(t),
+                                    ids=_sql.Literal(self.source_ids)))
+            self._read_schema = 'pg_temp'
         w = GraphWriter(cur, self.graph, mode='strict', batch_size=500)
         # SoT 라벨·엣지를 미리 만든다 — AgensGraph MERGE 는 없는 라벨을 만들지 못해, 후처리(출처 연결 sourced_from 등)가
         #   조용히 0건이 된다(2026-10-01 실측). GraphWriter.flush 도 쓰는 라벨은 만들지만 후처리 라벨까지는 모른다.

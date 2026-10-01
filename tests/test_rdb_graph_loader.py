@@ -131,7 +131,7 @@ def test_transfer_data_routes_staging_to_new_loader():
     import inspect
     from app.services.rdb_to_graph_service import RdbToGraphService
     src = inspect.getsource(RdbToGraphService.transfer_data)
-    assert 'RdbGraphLoader(conn, graph_name, source_schema).run()' in src
+    assert 'RdbGraphLoader(conn, graph_name, source_schema, source_ids=source_ids).run()' in src
 
 
 # ── 이용 이력·출처 테이블 (2026-10-01 추가) ───────────────────────
@@ -173,3 +173,13 @@ def test_entity_sources_link_multiple_sources(loaded):
     assert (('P-1',), ('S2',)) in sf[('sourced_from', 'vt_psn', 'vt_src')]
     assert ('sourced_from', 'vt_atm', 'vt_src') in sf
     assert ldr.counts['entity_sources_skipped'] == 1
+
+
+def test_source_id_filter_reads_temp_views():
+    ldr = RdbGraphLoader(FakeConn(), 'zz_g', 'test_v40', source_ids=['v40_20260922_01'])
+    ldr.run()
+    q = ldr.cur.sql
+    assert any('CREATE OR REPLACE TEMP VIEW' in str(x) for x in q)
+    assert any('"pg_temp".tb_prsn' in str(x) for x in q) and not any('"test_v40".tb_prsn' in str(x) for x in q)
+    with pytest.raises(GraphWriteError):
+        RdbGraphLoader(FakeConn(), 'zz_g', 'test_v40', source_ids=["x'; DROP"])
