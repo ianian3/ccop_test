@@ -1961,9 +1961,20 @@ def modeler_load_data():
         rdb_conn.autocommit = True
         rdb_cur = rdb_conn.cursor()
 
-        # AgensGraph 네이티브 방식: graph_path 먼저 설정
-        from app.database import safe_set_graph_path
-        safe_set_graph_path(ag_cur, graph_path)
+        # 정합 2단계 2d: GraphWriter warn 모드 — 모델러는 자유 설계 도구라 SoT 를 강제하지 않는다.
+        #   사용자가 고른 라벨·키·엣지를 그대로 쓰고, SoT 와 다른 점(라벨·키·방향·속성)은 warnings 로 돌려준다.
+        #   공통 처리: 키 정규화(SoT 정경 키일 때)·이스케이프·UNWIND 일괄·SET += (종전엔 최초 생성 때만 속성을 넣어 재적재해도 갱신되지 않았다)
+        from app.services.graph_writer import GraphWriter, GraphWriteError
+        _ident = r'^[a-zA-Z_][a-zA-Z0-9_]*$'
+        _ko = {}
+        for nd in mappable:
+            _l, _k = (nd.get('label') or '').strip(), (nd.get('key_property') or '').strip()
+            if not _k:
+                _k = next((p['name'] for p in nd.get('properties', []) if p.get('rdb_column')), '')
+            if _re.match(_ident, _l) and _re.match(_ident, _k):
+                nd['key_property'] = _k
+                _ko[_l] = [_k]
+        writer = GraphWriter(ag_cur, graph_path, mode='warn', scope=f'modeler:{graph_path}', key_override=_ko)
 
         for node_def in mappable:
             label = node_def.get('label', '').strip()
@@ -1988,7 +1999,6 @@ def modeler_load_data():
                 key_prop = col_map[0][1]
 
             # 2026-10-01 핫픽스: 속성 키·RDB 컬럼도 식별자 검증 — 쿼리에 그대로 끼워 넣는 값이라 주입 경로였다
-            _ident = r'^[a-zA-Z_][a-zA-Z0-9_]*$'
             if not _re.match(_ident, key_prop) or any(
                     not _re.match(_ident, str(c)) or not _re.match(_ident, str(n)) for c, n, _ in col_map):
                 continue
@@ -2010,7 +2020,7 @@ def modeler_load_data():
                     val = row[idx]
                     if val is None:
                         continue
-                    val_str = str(val).replace("\\", "\\\\").replace("'", "''")   # 2026-10-01 핫픽스: AgensGraph 이스케이프는 ''
+                    val_str = str(val)                              # 이스케이프는 GraphWriter(cypher_str)
 
                     # StandardCodeMapper 정규화
                     if prop_name in ('bank_cd', 'bank_code', 'bcode'):
@@ -2030,19 +2040,17 @@ def modeler_load_data():
 
                 if not prop_kv or key_prop not in prop_kv:
                     continue
-
-                props_str = ", ".join(f"{k}: '{v}'" for k, v in prop_kv.items())
-                key_val = prop_kv[key_prop]
-                cypher = (
-                    f"MERGE (n:{label} {{{key_prop}: '{key_val}'}})"
-                    f" ON CREATE SET n = {{{props_str}}}"
-                    f" RETURN n"
-                )
                 try:
-                    ag_cur.execute(cypher)
+                    writer.node(label, prop_kv)
                     loaded += 1
-                except Exception:
+                except (GraphWriteError, ValueError):
                     pass
+            try:
+                loaded = writer.flush()['nodes'] - total_nodes      # 키가 같은 행은 한 노드로 접힌다(실제 MERGE 건수)
+            except Exception as e:
+                node_stats.append({"label": label, "table": table, "loaded": 0, "error": str(e)})
+                total_errors += 1
+                continue
 
             total_nodes += loaded
             node_stats.append({"label": label, "table": table, "loaded": loaded, "error": None})
@@ -2111,22 +2119,19 @@ def modeler_load_data():
                 edge_stats.append({"type": edge_type, "loaded": 0, "error": str(e)})
                 continue
 
-            loaded_edges = 0
+            before = writer.stats['edges']
             for src_val, tgt_val in key_pairs:
                 if src_val is None or tgt_val is None:
                     continue
-                sv = str(src_val).replace("\\", "\\\\").replace("'", "''")   # 2026-10-01 핫픽스: '' 이스케이프
-                tv = str(tgt_val).replace("\\", "\\\\").replace("'", "''")
-                cypher = (
-                    f"MATCH (s:{src_label} {{{src_key}: '{sv}'}}), (t:{tgt_label} {{{tgt_key}: '{tv}'}})"
-                    f" MERGE (s)-[r:{edge_type}]->(t)"
-                    f" RETURN r"
-                )
                 try:
-                    ag_cur.execute(cypher)
-                    loaded_edges += 1
-                except Exception:
+                    writer.edge(edge_type, (src_label, {src_key: str(src_val)}), (tgt_label, {tgt_key: str(tgt_val)}))
+                except (GraphWriteError, ValueError):
                     pass
+            try:
+                loaded_edges = writer.flush()['edges'] - before        # 양끝이 실제로 MATCH 된 건수
+            except Exception as e:
+                edge_stats.append({"type": edge_type, "loaded": 0, "error": str(e)})
+                continue
 
             total_edges += loaded_edges
             edge_stats.append({"type": edge_type, "src": src_label, "tgt": tgt_label, "loaded": loaded_edges, "error": None})
@@ -2147,4 +2152,5 @@ def modeler_load_data():
         "stats": {"nodes": total_nodes, "edges": total_edges, "errors": total_errors},
         "node_stats": node_stats,
         "edge_stats": edge_stats,
+        "warnings": writer.stats.get('warnings', []) if 'writer' in locals() else [],
     })

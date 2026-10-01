@@ -1473,25 +1473,19 @@ class GraphService:
         if not conn: return False, "DB 연결 실패"
         try:
             conn.autocommit = True
-            safe_set_graph_path(cur, graph_name)
-            
-            # Cypher CREATE로 노드 생성
-            props_str = "{}"
-            if properties:
-                prop_list = []
-                for k, v in properties.items():
-                    k_str = safe_ident(k, '속성 키')                     # 2026-10-01 핫픽스: 키 검증
-                    if isinstance(v, bool):
-                        prop_list.append(f"{k_str}: {'true' if v else 'false'}")
-                    elif isinstance(v, (int, float)):
-                        prop_list.append(f"{k_str}: {v}")
-                    else:
-                        prop_list.append(f"{k_str}: '{cypher_str(v)}'")
-                props_str = "{" + ", ".join(prop_list) + "}"
-                
-            cur.execute(f"CREATE (n:{safe_ident(label, '라벨')} {props_str}) RETURN id(n)")
+            # 정합 2단계 2d: GraphWriter 정책 — 라벨·키 strict(SoT 밖 라벨·삭제 라벨 거부), 속성 warn
+            #   같은 정경 키(정규화 후)가 이미 있으면 새로 만들지 않고 그 노드에 속성을 더한다(MERGE … SET +=)
+            from app.services.graph_writer import GraphWriter
+            label = safe_ident(label, '라벨')
+            w = GraphWriter(cur, graph_name, mode='strict', prop_mode='warn', scope='manual')
+            props = GraphService._manual_key(label, dict(properties or {}))
+            key, props = w.node_props(label, props)
+            cur.execute(f'CREATE VLABEL IF NOT EXISTS {label}')
+            cur.execute(f"MERGE (n:{label} {w.literal_map(key)}) SET n += {w.literal_map(props)} RETURN id(n)")
             new_id = cur.fetchone()[0]
-            logger.info(f"▶ [CreateNode] Cypher CREATE → {graph_name}.{label}, ID: {new_id}")
+            if w.stats['warnings']:
+                logger.warning(f"▶ [CreateNode] 사전 밖 속성: {w.stats['warnings']}")
+            logger.info(f"▶ [CreateNode] MERGE → {graph_name}.{label} {key}, ID: {new_id}")
             return True, str(new_id)
         except Exception as e:
             import traceback
@@ -1501,28 +1495,40 @@ class GraphService:
             conn.close()
 
     @staticmethod
+    def _manual_key(label, props):
+        """수동 입력에 정경 키가 없을 때: 인물은 새 사람(psn:manual:<uuid> — 이름이 같다고 기존 인물에 합치지 않음),
+        사건형(uuid 키) 노드는 uuid 를 만든다. 자연 키(계좌·전화·IP 등)는 입력이 있어야 한다(없으면 GraphWriter 가 거부)."""
+        import uuid
+        std = KICSCrimeDomainOntology.NODE_ID_STANDARD.get(label) or {}
+        f = std.get('canonical_field') or ''
+        if f and not f.startswith('(') and props.get(f) in (None, ''):
+            if label == 'vt_psn':
+                props[f] = f'psn:manual:{uuid.uuid4().hex[:12]}'
+            elif std.get('default_format') == 'uuid':
+                props[f] = str(uuid.uuid4())
+        props.setdefault('creation_method', 'manual')
+        return props
+
+    @staticmethod
     def create_manual_edge(graph_name, src_id, tgt_id, label, properties):
         """수동으로 엣지를 생성하는 함수 (i2 기능)"""
         conn, cur = GraphService.get_db_connection()
         if not conn: return False, "DB 연결 실패"
         try:
-            safe_set_graph_path(cur, graph_name)
-            
-            props_str = "{}"
-            if properties:
-                prop_list = []
-                for k, v in properties.items():
-                    k_str = safe_ident(k, '속성 키')                     # 2026-10-01 핫픽스: 키 검증
-                    if isinstance(v, bool):
-                        prop_list.append(f"{k_str}: {'true' if v else 'false'}")
-                    elif isinstance(v, (int, float)):
-                        prop_list.append(f"{k_str}: {v}")
-                    else:
-                        prop_list.append(f"{k_str}: '{cypher_str(v)}'")
-                props_str = "{" + ", ".join(prop_list) + "}"
-                
-            q = (f"MATCH (a), (b) WHERE id(a) = '{safe_elem_id(src_id)}' AND id(b) = '{safe_elem_id(tgt_id)}' "
-                 f"CREATE (a)-[r:{safe_ident(label, '엣지 타입')} {props_str}]->(b) RETURN id(r)")
+            # 정합 2단계 2d: 엣지 타입·방향은 SoT strict(양끝 라벨을 조회해 edge_rules 검사), 속성 warn.
+            #   같은 두 노드 사이 같은 타입이 이미 있으면 새로 만들지 않고 속성을 더한다(MERGE)
+            from app.services.graph_writer import GraphWriter
+            w = GraphWriter(cur, graph_name, mode='strict', prop_mode='warn')
+            sid, tid = safe_elem_id(src_id), safe_elem_id(tgt_id)
+            cur.execute(f"MATCH (a), (b) WHERE id(a) = '{sid}' AND id(b) = '{tid}' RETURN label(a), label(b)")
+            row = cur.fetchone()
+            if not row:
+                return False, "양끝 노드를 찾을 수 없음"
+            etype = safe_ident(label, '엣지 타입')
+            props = w.check_edge(etype, row[0], row[1], dict(properties or {}))
+            cur.execute(f'CREATE ELABEL IF NOT EXISTS {etype}')
+            q = (f"MATCH (a), (b) WHERE id(a) = '{sid}' AND id(b) = '{tid}' "
+                 f"MERGE (a)-[r:{etype}]->(b) SET r += {w.literal_map(props)} RETURN id(r)")
             cur.execute(q)
             new_id = cur.fetchone()[0]
             conn.commit()
@@ -1548,6 +1554,7 @@ class GraphService:
         try:
             conn.autocommit = True
             safe_set_graph_path(cur, graph_name)
+            element_id = safe_elem_id(element_id)                  # 2d: id 문자열 주입 차단
             if is_edge:
                 cur.execute(f"MATCH ()-[r]-() WHERE id(r) = '{element_id}' DELETE r")
             else:

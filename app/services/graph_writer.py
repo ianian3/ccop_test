@@ -62,11 +62,16 @@ def _key_fields(label):
 class GraphWriter:
     MODES = ('strict', 'warn', 'off')
 
-    def __init__(self, cur, graph, mode='strict', scope=None, batch_size=500):
+    def __init__(self, cur, graph, mode='strict', scope=None, batch_size=500, prop_mode=None, key_override=None):
+        """mode: 라벨·엣지·방향·키 정책 / prop_mode: 사전 밖 속성 정책(기본 mode 와 같음).
+        예) CSV ETL 은 구조 strict + 속성 warn — 사용자가 고른 임의 열을 속성으로 싣는 도구라서.
+        key_override: {라벨: [키 필드]} — 사용자가 키를 직접 고르는 자유 설계(모델러)용. strict 에선 SoT 와 다르면 거부."""
         if not validate_graph_path(graph):
             raise GraphWriteError(f'허용되지 않는 그래프명: {graph!r}')
-        if mode not in self.MODES:
-            raise GraphWriteError(f'mode 는 {self.MODES} 중 하나: {mode!r}')
+        if mode not in self.MODES or (prop_mode or mode) not in self.MODES:
+            raise GraphWriteError(f'mode 는 {self.MODES} 중 하나: {mode!r}/{prop_mode!r}')
+        self.prop_mode = prop_mode or mode
+        self._key_override = {}
         self.cur, self.graph, self.mode, self.scope, self.batch_size = cur, graph, mode, scope, batch_size
         self._labels = {v['label'] for v in O.ENTITIES.values()}
         self._rules = O.edge_rules()
@@ -77,17 +82,23 @@ class GraphWriter:
                 derived.setdefault(l.strip(), set()).add(a)
         self._node_props = {v['label']: set(v.get('properties', [])) | set(v.get('attributes', []))
                             | derived.get(v['label'], set()) | common for v in O.ENTITIES.values()}
-        self._edge_meta = set(O.EDGE_META_SCHEMA)
+        self._edge_meta = set(O.EDGE_META_SCHEMA) | {a for g in getattr(O, 'EDGE_COMMON_GROUPS', {}).values() for a in g}
         self._nodes = {}        # label → {key_tuple: props}
         self._edges = {}        # (etype, src_label, dst_label) → {(skey, dkey): props}
         self.stats = {'nodes': 0, 'edges': 0, 'edges_unmatched': 0, 'rejected': [], 'warnings': []}
+        for label, fields in (key_override or {}).items():
+            fields = [safe_ident(f, '키 필드') for f in fields]
+            if _key_fields(label) and sorted(fields) != sorted(_key_fields(label)):
+                self._violation(f'{label}: 키 {fields} ≠ SoT 정경 키 {_key_fields(label)}')
+            self._key_override[label] = fields
         safe_set_graph_path(cur, graph)
 
     # ── 정책 ────────────────────────────────────────────────────────
-    def _violation(self, msg):
-        if self.mode == 'strict':
+    def _violation(self, msg, prop=False):
+        mode = self.prop_mode if prop else self.mode
+        if mode == 'strict':
             raise GraphWriteError(msg)
-        if self.mode == 'warn':                        # 같은 경고는 한 번만 기록하고 횟수만 센다
+        if mode == 'warn':                             # 같은 경고는 한 번만 기록하고 횟수만 센다
             cnt = self.stats.setdefault('warning_counts', {})
             if msg not in cnt:
                 self.stats['warnings'].append(msg)
@@ -106,7 +117,7 @@ class GraphWriter:
     def _resolve_key(self, label, props, scope=None):
         """props 에서 정경 키를 찾고(없으면 synthesize) 정규화해 (key_dict, props) 반환."""
         props = dict(props)
-        fields = _key_fields(label)
+        fields = self._key_override.get(label) or _key_fields(label)
         if not fields:                                   # SoT 밖 라벨(warn/off 모드) — 첫 속성을 키로
             if not props:
                 raise GraphWriteError(f'{label}: 키로 쓸 속성이 없음')
@@ -116,7 +127,7 @@ class GraphWriter:
             syn = (O.NODE_ID_STANDARD.get(label) or {}).get('synthesize')
             src = props.get(syn['from']) if syn else None
             sc = 'g' if (syn or {}).get('scope') == 'global' else (scope or self.scope)   # global = EP 간 공유
-            if syn and len(fields) == 1 and src not in (None, '') and sc:
+            if syn and fields == _key_fields(label) and len(fields) == 1 and src not in (None, '') and sc:
                 props[fields[0]] = f"{syn['prefix']}:{sc}:{str(src).strip()}"
             else:
                 hint = f" (또는 {syn['from']} + scope)" if syn else ''
@@ -138,14 +149,7 @@ class GraphWriter:
     # ── 노드 ────────────────────────────────────────────────────────
     def node(self, label, props, scope=None):
         """노드 1건을 버퍼에 쌓는다. 반환: 정규화된 키 dict (엣지 지정에 그대로 사용 가능)."""
-        self._check_label(label)
-        props = self._clean(props)
-        key, props = self._resolve_key(label, props, scope)
-        allowed = self._node_props.get(label)
-        for k in props:
-            safe_ident(k, '속성 키')
-            if allowed is not None and k not in allowed:
-                self._violation(f'{label}.{k}: 사전에 없는 속성')
+        key, props = self.node_props(label, props, scope)
         bucket = self._nodes.setdefault(label, {})
         kt = tuple(key[f] for f in sorted(key))
         bucket.setdefault(kt, {}).update(props)
@@ -175,12 +179,44 @@ class GraphWriter:
         for k in props:
             safe_ident(k, '속성 키')
             if rule is not None and k not in allowed:
-                self._violation(f'{etype}.{k}: 사전에 없는 속성')
+                self._violation(f'{etype}.{k}: 사전에 없는 속성', prop=True)
         bucket = self._edges.setdefault((etype, sl, dl), {})
         pair = (tuple(sk[f] for f in sorted(sk)), tuple(dk[f] for f in sorted(dk)))
         if pair not in bucket:
             bucket[pair] = {'_sk': sk, '_dk': dk, 'p': {}}
         self._merge_edge_props(etype, bucket[pair]['p'], props)
+
+    def check_edge(self, etype, src_label, dst_label, props=None):
+        """키 없이(요소 id 로) 잇는 경우의 정책 검사 — 엣지 타입·방향·속성. 정리된 props 반환."""
+        safe_ident(etype, '엣지 타입')
+        rule = self._rules.get(etype)
+        if rule is None:
+            self._violation(f'SoT 밖 엣지: {etype}')
+        elif not ((rule[0] is None or src_label in rule[0]) and (rule[1] is None or dst_label in rule[1])):
+            self._violation(f'{etype}: 방향·라벨 위반 ({src_label})->({dst_label})')
+        props = self._clean(props)
+        allowed = set((O.RELATIONSHIPS.get(etype) or {}).get('properties') or []) | self._edge_meta
+        for k in props:
+            safe_ident(k, '속성 키')
+            if rule is not None and k not in allowed:
+                self._violation(f'{etype}.{k}: 사전에 없는 속성', prop=True)
+        return props
+
+    def node_props(self, label, props, scope=None):
+        """버퍼 없이 노드 정책 검사 + 키 정규화 — 단건 MERGE 후 id 가 필요한 호출자(수동 생성)용."""
+        self._check_label(label)
+        props = self._clean(props)
+        key, props = self._resolve_key(label, props, scope)
+        allowed = self._node_props.get(label)
+        for k in props:
+            safe_ident(k, '속성 키')
+            if allowed is not None and k not in allowed:
+                self._violation(f'{label}.{k}: 사전에 없는 속성', prop=True)
+        return key, props
+
+    @staticmethod
+    def literal_map(d):
+        return _map(d)
 
     @staticmethod
     def _merge_edge_props(etype, cur, new):
@@ -221,7 +257,7 @@ class GraphWriter:
         """버퍼를 DB 에 쓴다. 라벨이 없으면 만든다. 반환: 통계 dict."""
         for label, rows in self._nodes.items():
             self.cur.execute(f'CREATE VLABEL IF NOT EXISTS {safe_ident(label, "라벨")}')
-            fields = sorted(_key_fields(label)) or None
+            fields = sorted(self._key_override.get(label) or _key_fields(label)) or None
             for chunk in self._chunks(rows.values()):
                 flds = fields or [next(iter(chunk[0]))]
                 recs = ', '.join('{' + ', '.join(f'k{i}: {_lit(p[f])}' for i, f in enumerate(flds))

@@ -186,6 +186,37 @@ class ETLService:
             logger.warning(f"   ⚠️ 인덱스 생성 중 경고 (무시 가능): {e}")
 
     @staticmethod
+    def _csv_scope(file, mapping):
+        """vt_psn 합성 키 범위(A안: 출처가 다르면 다른 사람) — 지정값 > CSV 파일명 > 'csv'."""
+        import os
+        import re
+        sc = mapping.get('scope') or os.path.splitext(os.path.basename(getattr(file, 'filename', '') or ''))[0]
+        sc = re.sub(r'[^0-9A-Za-z가-힣_.-]', '_', sc or '')[:60]
+        return f'csv:{sc}' if sc else 'csv'
+
+    @staticmethod
+    def _to_canonical_key(label, props, key_col):
+        """사용자가 고른 키 열을 SoT 정경 키로 옮긴다 (SoT 라벨만).
+        vt_psn 은 이름 열이면 합성 키(psn:{scope}:{name})에 맡기고, vt_id 는 platform 이 없으면 'unknown'."""
+        from app.services.ontology_service import KICSCrimeDomainOntology as O
+        std = O.NODE_ID_STANDARD.get(label) or {}
+        canon = std.get('canonical_field')
+        if not canon:
+            return dict(props)
+        fields = [f.strip() for f in canon.strip('()').split(',')]
+        out = dict(props)
+        if key_col in fields:
+            pass
+        elif (std.get('synthesize') or {}).get('from') == key_col:
+            pass
+        else:
+            target = 'id_val' if label == 'vt_id' else fields[0]
+            out[target] = out.pop(key_col)
+        if label == 'vt_id':
+            out.setdefault('platform', 'unknown')
+        return out
+
+    @staticmethod
     def import_csv(file, mapping, target_graph):
         logger.info("▶ [ETL] 고속 적재(Batch) + 인덱싱 모드 시작...")
 
@@ -269,234 +300,80 @@ class ETLService:
                     elif p['target'] == 'edge': edge_props[sanitized_key] = val
 
                 # Source 노드 처리 (중복 제거 - 속성 병합)
-                src_node_key = f"{src_key}_{src_val}"
+                src_node_key = f"{src_label}|{src_key}_{src_val}"
                 if src_node_key not in node_data_map:
                     # 새 노드 생성 시만 기본 속성 초기화 (created_at 포함)
                     node_data_map[src_node_key] = {
                         "props": {src_key: src_val, "updated": "true", "created_at": current_time},
-                        "manual_label": src_label
+                        "manual_label": src_label, "key_col": src_key
                     }
                 # 이번 row의 추가 속성 병합
                 node_data_map[src_node_key]["props"].update(row_src_props)
                 
                 # Target 노드 처리 (중복 제거 - 속성 병합)
-                tgt_node_key = f"{tgt_key}_{tgt_val}"
+                tgt_node_key = f"{tgt_label}|{tgt_key}_{tgt_val}"
                 if tgt_node_key not in node_data_map:
                     # 새 노드 생성 시만 기본 속성 초기화 (created_at 포함)
                     node_data_map[tgt_node_key] = {
                         "props": {tgt_key: tgt_val, "updated": "true", "created_at": current_time},
-                        "manual_label": tgt_label
+                        "manual_label": tgt_label, "key_col": tgt_key
                     }
                 # 이번 row의 추가 속성 병합
                 node_data_map[tgt_node_key]["props"].update(row_tgt_props)
                 
                 # 엣지는 실제 값 기반으로 연결
-                edge_data_list.append({
-                    "src": src_val, 
-                    "tgt": tgt_val, 
-                    "src_key": src_key,  # 엣지에도 키 정보 저장
-                    "tgt_key": tgt_key,
-                    "props": edge_props
-                })
+                edge_data_list.append({"src_nk": src_node_key, "tgt_nk": tgt_node_key, "props": edge_props})
 
             # ============================
-            # 3. 중복 제거 (메모리 레벨)
+            # 3~4. 노드·엣지 적재 — GraphWriter (정합 2단계 2d, 2026-10-01)
+            #   구조(라벨·엣지 타입·방향·키) strict: SoT 밖 라벨/삭제 엣지/역방향은 행 단위로 거부하고 보고
+            #   속성 warn: 사용자가 고른 열은 사전 밖이어도 싣되 경고로 남긴다
+            #   키: 사용자가 고른 키 열 값을 SoT 정경 키로 싣는다(예: actno → account_no, 정규화 포함).
+            #       종전엔 엣지 양끝을 라벨 무관 ag_vertex 속성 검색 LIMIT 1 로 찾아 다른 노드에 붙을 수 있었다
             # ============================
-            logger.info(f"▶ [ETL] 중복 제거 중... (총 {len(node_data_map)}개 노드)")
-            unique_nodes = list(node_data_map.values())
-            
-            # ============================
-            # 3.5 인덱스 생성 (성능 최적화)
-            # ============================
-            logger.info("▶ [ETL] 데이터베이스 인덱스 생성 중...")
-            # KICS 전체 노드 타입에 대한 인덱스 생성
-            kics_labels = ['vt_flnm', 'vt_bacnt', 'vt_telno', 'vt_site', 
-                          'vt_ip', 'vt_file', 'vt_atm', 'vt_id', 'vt_psn']
-            for label in kics_labels:
-                ETLService._create_gin_index(cur, target_graph, label)
-            
-            logger.info(f"  [ETL] 인덱스 생성 완료 ({len(kics_labels)}개 라벨)")
-            
-            # ============================
-            # 4. 노드 처리 (MERGE 로직)
-            # ============================
-            total_nodes = len(unique_nodes)
-            total_edges = len(edge_data_list)
-
-            if total_nodes == 0: return True, 0, 0, "유효 데이터 0건"
-
-            logger.info(f"▶ [ETL] 적재 시작 (Node: {total_nodes}, Edge: {total_edges})")
-
-            # 6. DB 적재 실행 (Batch Processing)
-            
-            # [Step A] 노드 적재 - AgensGraph CREATE 사용 (동적 라벨 결정)
-            logger.info(f"  [ETL] 노드 {total_nodes}개 CREATE 시작...")
-            
-            # GraphService import (동적 라벨 결정용)
             from app.services.graph_service import GraphService
-            
-            # (1) SET graph_path
-            safe_set_graph_path(cur, target_graph)
-            
-            nodes_created_count = 0
-            nodes_updated_count = 0
-            label_stats = {}  # 라벨별 통계
-            
-            for node_data in unique_nodes:
+            from app.services.graph_writer import GraphWriter, GraphWriteError
+            from app.services.ontology_service import OntologyEnricher
+            from app.services.rdb_to_graph_service import RdbToGraphService
+
+            if not node_data_map:
+                return True, 0, 0, "유효 데이터 0건"
+            scope = ETLService._csv_scope(file, mapping)
+            w = GraphWriter(cur, target_graph, mode='strict', prop_mode='warn', scope=scope)
+            rejected, label_stats, ends = [], {}, {}
+            for nk, node_data in node_data_map.items():
+                manual = node_data['manual_label']
+                label = manual if manual and manual != 'auto' else GraphService.determine_node_label(node_data['props'])
                 try:
-                    node_props = node_data['props']
-                    manual_label = node_data['manual_label']
-                    
-                    # 라벨 결정: 수동 지정 우선, 아니면 자동 결정
-                    if manual_label and manual_label != 'auto':
-                        dynamic_label = manual_label  # 사용자 지정 라벨 사용
-                    else:
-                        dynamic_label = GraphService.determine_node_label(node_props)  # 자동 결정
-                    
-                    # 온톨로지 메타데이터 추가
-                    from app.services.ontology_service import OntologyEnricher
-                    enriched_props = OntologyEnricher.enrich_node(dynamic_label, node_props)
-
-                    # 표준 코드 자동 매핑 (StandardCodeMapper)
-                    enriched_props = StandardCodeMapper.auto_enrich(dynamic_label, enriched_props)
-
-                    # V4.0 메타 6 컬럼 주입 (Phase 2.1)
-                    # source_domain 우선순위: node_data 명시 > ETL 컨텍스트 > 기본 'KICS'(investigation)
-                    from app.services.rdb_to_graph_service import RdbToGraphService
-                    enriched_props = RdbToGraphService.make_node_props_v40(
-                        dynamic_label,
-                        enriched_props,
-                        source_domain=node_data.get('source_domain', 'KICS'),
-                        source_id=node_data.get('source_id'),
-                    )
-
-                    label_stats[dynamic_label] = label_stats.get(dynamic_label, 0) + 1
-                    
-                    # MERGE 로직: 노드 존재 확인 후 CREATE 또는 UPDATE
-                    # 1. 식별 키 찾기 (첫 번째 속성)
-                    id_key = list(enriched_props.keys())[0] if enriched_props else None
-                    if not id_key:
-                        continue
-                    
-                    # 2026-10-01 핫픽스: 라벨·키는 식별자 검증, 값은 Cypher 리터럴 이스케이프(cypher_str)
-                    dynamic_label = safe_ident(dynamic_label, '라벨')
-                    id_key = safe_ident(id_key, '속성 키')
-                    id_value = cypher_str(enriched_props[id_key])
-                    
-                    # 2. 노드 존재 확인
-                    check_query = f"""
-                    MATCH (n:{dynamic_label} {{{id_key}: '{id_value}'}})
-                    RETURN id(n)
-                    """
-                    cur.execute(check_query)
-                    existing = cur.fetchone()
-                    
-                    if existing:
-                        # 3-A. 기존 노드 업데이트
-                        set_clauses = [f"n.{safe_ident(k, '속성 키')} = '{cypher_str(v)}'"
-                                      for k, v in enriched_props.items()]
-                        set_str = ", ".join(set_clauses)
-                        
-                        update_query = f"""
-                        MATCH (n:{dynamic_label} {{{id_key}: '{id_value}'}})
-                        SET {set_str}
-                        """
-                        cur.execute(update_query)
-                        nodes_updated_count += 1
-                    else:
-                        # 3-B. 새 노드 생성
-                        props_list = [f"{k}: '{str(v).replace(chr(39), chr(39)+chr(39))}'" 
-                                     for k, v in enriched_props.items()]
-                        props_str = ", ".join(props_list)
-                        
-                        create_query = f"CREATE (n:{dynamic_label} {{{props_str}}})"
-                        cur.execute(create_query)
-                        nodes_created_count += 1
-                        
-                except Exception as e:
-                    logger.error(f"    노드 처리 실패: {e}")
-                    continue
-
+                    props = ETLService._to_canonical_key(label, node_data['props'], node_data['key_col'])
+                    props = OntologyEnricher.enrich_node(label, props)
+                    props = StandardCodeMapper.auto_enrich(label, props)
+                    props = RdbToGraphService.make_node_props_v40(label, props, source_domain=mapping.get('source_domain', 'KICS'))
+                    ends[nk] = (label, w.node(label, props))
+                    label_stats[label] = label_stats.get(label, 0) + 1
+                except (GraphWriteError, ValueError) as e:
+                    rejected.append(f'노드 {nk}: {e}')
+            for ed in edge_data_list:
+                s_end, t_end = ends.get(ed['src_nk']), ends.get(ed['tgt_nk'])
+                if not s_end or not t_end:
+                    continue                                   # 끝 노드가 거부됨 — 노드 쪽에서 이미 보고
+                try:
+                    ep = OntologyEnricher.enrich_edge(edge_type, ed['props'])
+                    ep = RdbToGraphService.make_edge_props_v40(edge_type, ep, source_domain=mapping.get('source_domain', 'KICS'))
+                    w.edge(edge_type, s_end, t_end, ep)
+                except (GraphWriteError, ValueError) as e:
+                    rejected.append(f'엣지 {edge_type} {s_end[0]}->{t_end[0]}: {e}')
+                    if len(rejected) > 1000:
+                        break
+            stats = w.flush()
+            for label in label_stats:                         # MERGE 키 검색용 GIN 인덱스 (실제 쓴 라벨만)
+                ETLService._create_gin_index(cur, target_graph, label)
             conn.commit()
-            logger.info(f"  [ETL] 노드 처리 완료: 생성 {nodes_created_count}개, 업데이트 {nodes_updated_count}개")
+            nodes_created_count, edges_created_count = stats['nodes'], stats['edges']
+            logger.info(f"  [ETL] 노드 {nodes_created_count} · 엣지 {edges_created_count} (양끝 미매칭 {stats['edges_unmatched']})")
             logger.info(f"  [ETL] 라벨별 분포: {label_stats}")
-
-            # [Step B] 엣지 적재 - MATCH + CREATE 패턴 (동적 라벨 매칭)
-            logger.info(f"  [ETL] 엣지 {total_edges}개 CREATE 시작...")
-            
-            edges_created_count = 0
-            for edge_data in edge_data_list:
-                src_val = edge_data['src']
-                tgt_val = edge_data['tgt']
-                src_prop_key = edge_data['src_key']  # Source 노드의 속성 키
-                tgt_prop_key = edge_data['tgt_key']  # Target 노드의 속성 키
-                edge_props = edge_data['props']
-                
-                try:
-                    # 2026-10-01 핫픽스: 노드 조회는 SQL 파라미터 바인딩(jsonb 포함 연산), 키는 식별자 검증
-                    src_match = json.dumps({safe_ident(src_prop_key, '속성 키'): str(src_val)}, ensure_ascii=False)
-                    tgt_match = json.dumps({safe_ident(tgt_prop_key, '속성 키'): str(tgt_val)}, ensure_ascii=False)
-                    
-                    # 온톨로지 메타데이터 추가 (엣지)
-                    from app.services.ontology_service import OntologyEnricher
-                    enriched_edge_props = OntologyEnricher.enrich_edge(edge_type, edge_props)
-
-                    # V4.0 엣지 메타 4 컬럼 주입 (Phase 2.1.D)
-                    from app.services.rdb_to_graph_service import RdbToGraphService
-                    enriched_edge_props = RdbToGraphService.make_edge_props_v40(
-                        edge_type,
-                        enriched_edge_props,
-                        source_domain=edge_data.get('source_domain', 'KICS'),
-                        source_id=edge_data.get('source_id'),
-                    )
-
-                    # 엣지 속성 문자열 생성
-                    props_list = [f"{safe_ident(k, '속성 키')}: '{cypher_str(v)}'" for k, v in enriched_edge_props.items()]
-                    edge_props_str = ", ".join(props_list) if props_list else ""
-                    
-                    # 1. Source 노드 찾기 (ag_vertex 사용 - 모든 라벨 검색)
-                    find_src_query = f"""
-                    SELECT id FROM "{target_graph}"."ag_vertex"
-                    WHERE properties @> %s::jsonb
-                    LIMIT 1
-                    """
-                    cur.execute(find_src_query, (src_match,))
-                    src_result = cur.fetchone()
-                    if not src_result:
-                        continue
-                    
-                    # 2. Target 노드 찾기
-                    find_tgt_query = f"""
-                    SELECT id FROM "{target_graph}"."ag_vertex"
-                    WHERE properties @> %s::jsonb
-                    LIMIT 1
-                    """
-                    cur.execute(find_tgt_query, (tgt_match,))
-                    tgt_result = cur.fetchone()
-                    if not tgt_result:
-                        continue
-                    
-                    src_id = str(src_result[0])
-                    tgt_id = str(tgt_result[0])
-                    
-                    # 3. Cypher로 엣지 생성 (ID 사용)
-                    # MERGE로 멱등성 확보 (재실행 시 엣지 중복 방지) + 속성은 SET으로 갱신
-                    edge_create_query = f"""
-                    MATCH (v1), (v2)
-                    WHERE id(v1) = '{src_id}' AND id(v2) = '{tgt_id}'
-                    MERGE (v1)-[r:{edge_type}]->(v2)
-                    """
-                    if edge_props_str:
-                        edge_create_query += f"                    SET r += {{{edge_props_str}}}\n"
-                    cur.execute(edge_create_query)
-                    edges_created_count += 1
-                except Exception as e:
-                    # 노드가 없거나 에러 발생 시 스킵
-                    logger.error(f"    엣지 생성 실패: {e}")
-                    continue
-            
-            conn.commit()
-            logger.info(f"  [ETL] 기본 엣지 {edges_created_count}개 CREATE 완료")
+            if rejected:
+                logger.warning(f"  [ETL] SoT 정책 거부 {len(rejected)}건 — 예: {list(dict.fromkeys(rejected))[:3]}")
 
             # ============================
             # [Step C] 추가 관계 처리 (additionalRelations)
@@ -527,7 +404,9 @@ class ETLService:
                         try:
                             # 기존 노드 ID 조회 + 엣지 생성
                             edge_create_query = f"""
-                            SELECT v1.id, v2.id 
+                            SELECT v1.id, v2.id,
+                                   (SELECT relname FROM pg_class WHERE oid = v1.tableoid),
+                                   (SELECT relname FROM pg_class WHERE oid = v2.tableoid)
                             FROM "{target_graph}"."ag_vertex" v1,
                                  "{target_graph}"."ag_vertex" v2
                             WHERE v1.properties ->> %s = %s
@@ -539,7 +418,7 @@ class ETLService:
                             result = cur.fetchone()
                             
                             if result:
-                                src_id, tgt_id = result
+                                src_id, tgt_id, s_lbl, t_lbl = result
                                 # V4.0 provenance 메타 주입 (source_domain/source_id/collected_at) — 엣지 출처 추적
                                 from app.services.rdb_to_graph_service import RdbToGraphService
                                 add_edge_props = RdbToGraphService.make_edge_props_v40(
@@ -547,9 +426,13 @@ class ETLService:
                                     source_domain=add_rel.get('source_domain', 'KICS'),
                                     source_id=add_rel.get('source_id'),
                                 )
-                                add_props_list = [f"{k}: '{str(v).replace(chr(39), chr(39)+chr(39))}'"
-                                                  for k, v in add_edge_props.items()]
-                                add_props_str = ", ".join(add_props_list)
+                                # 2d: 엣지 타입·방향·속성은 SoT 검사(strict) — 위반은 이 행만 건너뛰고 보고
+                                try:
+                                    add_edge_props = w.check_edge(add_edge_type, s_lbl, t_lbl, add_edge_props)
+                                except GraphWriteError as e:
+                                    rejected.append(f'추가 관계 {add_edge_type} {s_lbl}->{t_lbl}: {e}')
+                                    continue
+                                add_props_str = GraphWriter.literal_map(add_edge_props)[1:-1]
                                 # MERGE로 멱등성 확보 (재실행 시 중복 방지) + provenance는 SET으로 갱신
                                 create_edge_q = f"""
                                 MATCH (v1), (v2)
@@ -561,7 +444,7 @@ class ETLService:
                                 cur.execute(create_edge_q)
                                 additional_edges_count += 1
                         except Exception as e:
-                            # 엣지 생성 실패 시 스킵
+                            logger.error(f"    추가 엣지 생성 실패: {e}")
                             continue
                     
                     logger.info(f"    [{add_edge_type}] 엣지 처리 완료")
@@ -572,7 +455,12 @@ class ETLService:
             conn.commit()
             logger.info(f"▶ [ETL] 모든 작업 완료! (Node: {nodes_created_count}, Edge: {edges_created_count})")
             
-            return True, nodes_created_count, edges_created_count, "적재 완료"
+            msg = "적재 완료"
+            if rejected:
+                msg += f" (SoT 정책 거부 {len(rejected)}건: {'; '.join(list(dict.fromkeys(rejected))[:3])})"
+            if stats.get('warnings'):
+                msg += f" (사전 밖 속성 경고 {len(stats['warnings'])}종)"
+            return True, nodes_created_count, edges_created_count, msg
 
         except Exception as e:
             logger.error(f"!!! [ETL Error] {e}")

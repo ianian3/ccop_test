@@ -89,6 +89,8 @@ class KICSCrimeDomainOntology:
     #   integration : 통합 그래프 메타(scripts/build_integrated_graph.py — 어느 EP 에서 왔나)
     #   load        : 적재 메타(수동 시드·정제 스크립트가 남기는 생성 경위)
     #   provenance  : 적재 출처 메타(V4.0 make_node_props_v40·화면 수동 입력이 기록)
+    #   annotation  : OntologyEnricher.enrich_node 가 라벨에서 파생해 붙이는 주석(키워드 검색이 사용) — 라벨로 결정되는 값
+    #   etl         : CSV ETL 적재 메타
     #   설명은 ATTRIBUTE_DICTIONARY['common_groups']
     NODE_COMMON_GROUPS = {
         'analysis':    ['pagerank', 'betweenness', 'degree_cent', 'eigenvector', 'clustering', 'kcore',
@@ -96,6 +98,15 @@ class KICSCrimeDomainOntology:
         'integration': ['ep_origin', 'ep_count'],
         'load':        ['creation_method', 'evid_grade', 'note'],
         'provenance':  ['source_domain', 'reliability_tier', 'id_format', 'collected_at', 'evidence_added_at'],
+        'annotation':  ['ontology_type', 'domain_concept', 'entity_subtype', 'kics_compliant', 'layer', 'legal_category'],
+        'etl':         ['created_at', 'updated'],
+    }
+    # 엣지 공통 그룹 (EDGE_META_SCHEMA 밖에서 적재기가 붙이는 키) — 2026-10-01
+    #   annotation: OntologyEnricher.enrich_edge 가 엣지 타입에서 파생해 붙이는 주석(화면 엣지 표시·검색이 사용)
+    #   etl       : CSV ETL 이 붙이는 적재 순번·시각
+    EDGE_COMMON_GROUPS = {
+        'annotation':  ['semantic_relation', 'domain_meaning', 'legal_significance', 'kics_compliant'],
+        'etl':         ['source', 'timestamp', 'seq', 'created_at'],
     }
 
     # 엣지 공통 메타속성 스키마 (EDGE_META_SCHEMA)

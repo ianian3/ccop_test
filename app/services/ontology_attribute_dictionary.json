@@ -2578,6 +2578,24 @@
     "collected_at": "원천 수집 일시",
     "evidence_added_at": "화면에서 증거로 추가한 일시"
    }
+  ],
+  "annotation": [
+   "온톨로지 주석 — OntologyEnricher 가 라벨에서 파생해 붙임(라벨로 결정되는 값, 키워드 검색이 사용)",
+   {
+    "ontology_type": "POLE 레이어 개념",
+    "domain_concept": "도메인 개념(한글)",
+    "entity_subtype": "개념 세부 유형",
+    "kics_compliant": "KICS 표준 준수 표시",
+    "layer": "레이어명",
+    "legal_category": "법적 분류"
+   }
+  ],
+  "etl": [
+   "CSV ETL 적재 메타",
+   {
+    "created_at": "ETL 최초 적재 시각",
+    "updated": "ETL 갱신 표시"
+   }
   ]
  },
  "aliases": {

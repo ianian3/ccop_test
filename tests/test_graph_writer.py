@@ -177,3 +177,39 @@ def test_org_atm_src_keys_global_person_scoped():
     w, _ = _w()
     assert w.key_for('vt_org', {'org_name': 'IBK기업은행'}, scope='ep3') == w.key_for('vt_org', {'org_name': 'IBK기업은행'}, scope='ep5')
     assert w.key_for('vt_psn', {'name': '이우성'}, scope='ep3') != w.key_for('vt_psn', {'name': '이우성'}, scope='ep5')
+
+
+# ── 2d: 구조/속성 정책 분리 · 키 지정 · id 연결 검사 ─────────────────
+
+def test_prop_mode_warn_keeps_structure_strict():
+    w, _ = _w(mode='strict', prop_mode='warn', scope='csv')
+    w.node('vt_bacnt', {'account_no': '1', 'memo': 'x'})                   # 사전 밖 속성 → 경고만
+    assert w.stats['warnings'] == ['vt_bacnt.memo: 사전에 없는 속성']
+    with pytest.raises(GraphWriteError):
+        w.node('vt_email', {'email_addr': 'x'})                            # 구조는 여전히 strict
+    with pytest.raises(GraphWriteError):
+        w.edge('has_account', ('vt_bacnt', {'account_no': '1'}), ('vt_psn', {'psn_id': 'p'}))
+
+
+def test_enricher_annotations_are_common_attrs():
+    w, _ = _w(mode='strict')
+    w.node('vt_bacnt', {'account_no': '1', 'ontology_type': 'Object', 'domain_concept': '계좌', 'created_at': 't'})
+    w.edge('has_account', ('vt_psn', {'psn_id': 'p'}), ('vt_bacnt', {'account_no': '1'}),
+           {'semantic_relation': 'x', 'domain_meaning': 'y', 'seq': 1})
+
+
+def test_key_override_for_free_design():
+    w, _ = _w(mode='warn', key_override={'vt_bacnt': ['actno'], 'my_box': ['bid']})
+    assert w.stats['warnings'] == ["vt_bacnt: 키 ['actno'] ≠ SoT 정경 키 ['account_no']"]
+    assert w.node('vt_bacnt', {'actno': '1-2', 'bank_nm': 'x'}) == {'actno': '1-2'}
+    assert w.node('my_box', {'z': 1, 'bid': 'B'}) == {'bid': 'B'}
+    with pytest.raises(GraphWriteError):
+        GraphWriter(FakeCursor(), 'g', mode='strict', key_override={'vt_bacnt': ['actno']})
+
+
+def test_check_edge_by_labels():
+    w, _ = _w(prop_mode='warn')
+    assert w.check_edge('has_account', 'vt_psn', 'vt_bacnt', {'note': 'n', 'x': ''}) == {'note': 'n'}
+    for args in (('has_account', 'vt_bacnt', 'vt_psn'), ('hosts', 'vt_ip', 'vt_site')):
+        with pytest.raises(GraphWriteError):
+            w.check_edge(*args)
