@@ -17,7 +17,7 @@ V4.8 로 적재기·검증기를 만드셨다면 아래 항목을 확인하시�
 | 3 | `located_at`·`contacted` 속성 | 시각 속성 미정의 | `located_at` **`first_dt`·`last_dt`·`evt_count`**, `contacted` `first_dt`·`last_dt`·`call_count`·`msg_count`·`total_dur_sec` 명시 |
 | 4 | 추론 결과 엣지 | `contradicts`·`clusters_with`·`accomplice_of`·`related_case` 정의 | **삭제**(적재 실적 0건). 추론 결과는 원천 온톨로지가 아니라 분석 산출물 — 탐지 규칙은 엣지 대신 후보 목록을 낸다 |
 | 5 | `transferred_to` | "다단계 추론 엣지 — 직접 생성 금지" | **직접(원천 사실) 쌍 집계 엣지** — `txn_count`·`total_amount`·`first_dlng_dt`·`last_dlng_dt`·`channel`. 다단계 흐름은 경로 조회로 |
-| 6 | `same_as` 속성 | `match_score`·`match_basis`(구현마다 `conf`·`method`) | **`confidence`(숫자)·`match_basis`·`review_status`(confirmed·candidate)·`traversal_policy`**, 양끝 같은 라벨 |
+| 6 | `same_as` 속성 | `match_score`·`match_basis`(구현마다 `conf`·`method`) | **`confidence`(숫자)·`match_basis`·`review_status`(pending·confirmed·rejected ↔ `traversal_policy` candidate_only·follow·block)·`traversal_policy`**, 양끝 같은 라벨 |
 | 7 | `belongs_to_cluster`·`belongs_to_campaign` | 추론 엣지 | **유지** · 파생 엣지(군집 결과, `derived_by` 규칙 명시) — 원천 사실 엣지와 구분 |
 | 8 | 중복·폐기 엣지 7종 | `owns_device`·`impersonates`·`involves`·`owns`·`verified_by`·`linked_petition`·`works_at` | **삭제** — `uses_device`·`used_for`/`targets`·`witness_in`(role=unknown)·구체 소유 엣지·엣지 메타 `verified_by`·`filed_as`(status)·`member_of`(role)로 흡수 |
 | 9 | `vt_email` 노드 | 별도 노드(`email_addr`) + `uses_email`·`eg_used_email` | **`vt_id` 로 흡수** — `platform='email'`, `id_val`=소문자 정규화 주소. `uses_id`·`eg_used_id` 사용. 법적 분류(통신자료)는 `legal_category_by_platform`, 표준 테이블(TB_EML_ADDR_M)은 `STANDARD_TABLE_MAP['vt_id']['by_platform']` 에 보존 |
@@ -28,7 +28,7 @@ V4.8 로 적재기·검증기를 만드셨다면 아래 항목을 확인하시�
 - 집계 규칙은 정의 스펙의 `RELATIONSHIPS['used_ip'|'located_at']['aggregation']` 에 기계 판독 형태로 들어 있습니다.
 - [부록] `COLUMN_PATTERNS`(전처리 힌트): `case` → `incdnt_no`(사건번호), 신설 `case_file` → `flnm`(사건파일번호, 보조 속성). `sender`·`receiver` 는 이체 출금·입금 **계좌**(`vt_bacnt.account_no` + `direction`)로 정정(구: 이벤트 노드 `vt_transfer`).
 - CSV 적재 규격(`csv_spec_v4.8`)은 **형식 변경이 없어 V4.8 그대로**입니다 — 참조 적재기가 위 규칙대로 만듭니다.
-- 설계 이력은 `spec/CCOP_ONTOLOGY_DESIGN_HISTORY.md`, 엑셀 `변경이력` 시트 R18~R28.
+- 설계 이력은 `spec/CCOP_ONTOLOGY_DESIGN_HISTORY.md`, 엑셀 `변경이력` 시트 R18~R29.
 
 ---
 

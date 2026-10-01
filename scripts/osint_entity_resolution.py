@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-CCOP 배치 엔티티해소(EntityResolution) — OSINT ↔ 수사 그래프 sameAs 브릿지 (초안 / 착수용)
+CCOP 배치 엔티티해소(EntityResolution) — OSINT ↔ 수사 그래프 same_as 브릿지 (초안 / 착수용)
 
-정규화 식별자가 일치하는 교차도메인 노드 쌍을 찾아 sameAs 엣지를 idempotent 하게 생성한다.
+정규화 식별자가 일치하는 교차도메인 노드 쌍을 찾아 same_as 엣지를 idempotent 하게 생성한다.
 - blocking: 공통 객체 노드(계좌·전화·IP·URL·해시·계정)의 표준 식별자 정확일치 (같은 자연키=같은 실체)
 - 정확일치(exact)  → 자동 confirmed(정책에 따라) / 사람·조직 fuzzy → 항상 pending(검토)
-- 전건 자동 sameAs 금지: 교차도메인(osint ↔ 비-osint) 후보만, MERGE로 중복 방지
+- 전건 자동 same_as 금지: 교차도메인(osint ↔ 비-osint) 후보만, MERGE로 중복 방지
 
 전제(중요): OSINT·수사 노드가 **같은 그래프**에 source_domain 태그로 공존.
   (별도 그래프면 relational 브릿지 테이블로 조인 — 하단 [SEP] 주석 참조)
@@ -38,7 +38,7 @@ FUZZY_TYPES = [
 
 
 def exact_match_cypher(label, idprop, ts, status, dry):
-    """정확일치 sameAs. osint 노드(a) → 비-osint 노드(b), 동일 식별자."""
+    """정확일치 same_as. osint 노드(a) → 비-osint 노드(b), 동일 식별자."""
     where = (f"a.{idprop} IS NOT NULL AND a.{idprop} = b.{idprop} "
              f"AND a.source_domain = 'osint' "
              f"AND (b.source_domain IS NULL OR b.source_domain <> 'osint')")
@@ -47,20 +47,23 @@ def exact_match_cypher(label, idprop, ts, status, dry):
                 f"RETURN count(*) AS cnt")
     # MERGE idempotent + review_status
     return (f"MATCH (a:{label}), (b:{label}) WHERE {where} "
-            f"MERGE (a)-[r:sameAs]->(b) "
-            f"ON CREATE SET r.match_score = 1.0, r.match_basis = 'exact:{idprop}', "
-            f"r.review_status = '{status}', r.rec_created = '{ts}', r.source_domain='inference' "
+            f"MERGE (a)-[r:same_as]->(b) "
+            f"ON CREATE SET r.confidence = 1.0, r.match_basis = 'exact:{idprop}', "
+            f"r.review_status = '{status}', "
+            f"r.traversal_policy = '{'follow' if status == 'confirmed' else 'candidate_only'}', "
+            f"r.rec_created = '{ts}', r.source_domain='inference' "
             f"RETURN count(r) AS cnt")
 
 
 def fuzzy_stub_cypher(label, idprop):
     """[스텁] 사람/조직 fuzzy — 이름 정확일치만 예시(실구현: dob·유사도·임계). 항상 pending."""
-    return (f"// TODO fuzzy: {label}.{idprop} 유사도(예: dob 조합, 편집거리/자모유사) + 임계 후 pending sameAs\n"
+    return (f"// TODO fuzzy: {label}.{idprop} 유사도(예: dob 조합, 편집거리/자모유사) + 임계 후 pending same_as\n"
             f"MATCH (a:{label}),(b:{label}) "
             f"WHERE a.{idprop} IS NOT NULL AND a.{idprop}=b.{idprop} "
             f"AND a.source_domain='osint' AND coalesce(b.source_domain,'x')<>'osint' "
-            f"MERGE (a)-[r:sameAs]->(b) "
-            f"ON CREATE SET r.match_score=0.6, r.match_basis='name:{idprop}', r.review_status='pending'")
+            f"MERGE (a)-[r:same_as]->(b) "
+            f"ON CREATE SET r.confidence=0.6, r.match_basis='name:{idprop}', r.review_status='pending', "
+            f"r.traversal_policy='candidate_only'")
 
 
 def connect():
@@ -88,7 +91,7 @@ def run(cur, q):
 
 
 def main():
-    ap = argparse.ArgumentParser(description="CCOP OSINT↔수사 sameAs 배치 엔티티해소")
+    ap = argparse.ArgumentParser(description="CCOP OSINT↔수사 same_as 배치 엔티티해소")
     ap.add_argument("--graph", default="tccop_graph_v6", help="OSINT·수사가 공존하는 그래프")
     ap.add_argument("--confirm-exact", action="store_true", help="정확일치를 confirmed 로(기본 pending)")
     ap.add_argument("--dry-run", action="store_true", help="후보 건수만(MERGE 안 함)")
@@ -100,7 +103,7 @@ def main():
     status = "confirmed" if args.confirm_exact else "pending"
 
     if args.print_cypher:
-        print("=== 정확일치(exact) sameAs — 실행 예정 Cypher ===")
+        print("=== 정확일치(exact) same_as — 실행 예정 Cypher ===")
         for label, idp in EXACT_TYPES:
             print(f"\n# {label}.{idp}")
             print(exact_match_cypher(label, idp, ts, status, dry=False))
@@ -117,7 +120,7 @@ def main():
                      matched int, status text, dry boolean, ran_at timestamptz DEFAULT now());""")
     set_graph(cur, args.graph)
     if not args.dry_run:
-        cur.execute("CREATE ELABEL IF NOT EXISTS sameAs")
+        cur.execute("CREATE ELABEL IF NOT EXISTS same_as")
     total = 0
     try:
         for label, idp in EXACT_TYPES:
@@ -136,16 +139,16 @@ def main():
         if not args.dry_run:
             conn.commit()
         print(f"\n{'[dry-run] 후보' if args.dry_run else '생성/확인'} 합계: {total}건 "
-              f"({'MERGE 안 함' if args.dry_run else 'sameAs MERGE 완료'})")
+              f"({'MERGE 안 함' if args.dry_run else 'same_as MERGE 완료'})")
         if not args.dry_run:
-            print("  검토: graph_meta.sameas_run · sameAs.review_status='pending' 항목을 수사관이 confirm/reject")
+            print("  검토: graph_meta.sameas_run · same_as.review_status='pending' 항목을 수사관이 confirm/reject")
     except Exception as e:
         conn.rollback(); print(f"❌ 실패(롤백): {e}"); sys.exit(1)
     finally:
         cur.close(); conn.close()
 
 # [SEP] OSINT가 별도 그래프면: 각 그래프에서 (label,idprop,node_key)를 graph_meta.identity_block 로 추출→
-#       SQL JOIN(동일 idprop, 도메인 상이)으로 후보 산출→ 각 그래프에 sameAs 대신 관계형 bridge 테이블 기록.
+#       SQL JOIN(동일 idprop, 도메인 상이)으로 후보 산출→ 각 그래프에 same_as 대신 관계형 bridge 테이블 기록.
 
 
 if __name__ == "__main__":

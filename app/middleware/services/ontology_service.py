@@ -1231,7 +1231,7 @@ class KICSCrimeDomainOntology:
             'resolution': True,          # V4.9: 추론 엣지가 아니라 엔티티 해소 결과(검토 상태로 관리)
             'same_label_only': True,     # 양끝은 같은 라벨(인물↔인물·계정↔계정·전화↔전화) — 인물↔식별자는 registered_to·uses_id·owns_phone
             # V4.9 속성명 통일: 신뢰도 confidence(구 match_score·conf) · 근거 match_basis(구 method·match_basis_type)
-            #   · 검토 review_status(confirmed|candidate) · 탐색 정책 traversal_policy
+            #   · 검토 review_status(pending|confirmed|rejected) ↔ 탐색 정책 traversal_policy(candidate_only|follow|block) 1:1
         },
         # ═══════════════════════════════════════════════════════════
         # [V4.3] 시나리오 기반 직접 엣지 (속성적 연결) — 2026-08-03

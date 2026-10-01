@@ -73,7 +73,7 @@ def main():
                             f"MERGE (p1)-[e:same_as]->(p2) "
                             # V4.9 속성명 통일: match_basis(구 method)·confidence(구 conf)·review_status
                             f"SET e.source_id='REFINE-shared-key', e.match_basis='{method}', e.confidence={conf}, "
-                            f"e.review_status='candidate', e.verified=false, e.traversal_policy='candidate_only'")
+                            f"e.review_status='pending', e.verified=false, e.traversal_policy='candidate_only'")
                 made[method] += 1
         sa = q("MATCH ()-[e:same_as]->() RETURN count(*)")[0][0]
         print(f"② same_as 후보: {sa} (candidate_only·verified=false) · 방법별 {dict(made)}")
