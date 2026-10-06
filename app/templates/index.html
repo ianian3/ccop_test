@@ -896,12 +896,16 @@ function showTruncateBanner(metas){
                 </div>
                 <div style="display:flex; gap:8px; align-items:center;">
                     <input type="text" id="rdbConvGraphName" placeholder="그래프 이름 (예: tccop_graph_v2)" value="tccop_graph_v2"
+                        list="rdbConvGraphList" autocomplete="off" oninput="updateRdbConvGraphHint()"
                         style="flex:1; padding:10px; background:#e7ecf5; color:#374151; border:1px solid rgba(255,255,255,0.12); border-radius:4px; box-sizing:border-box;">
+                    <datalist id="rdbConvGraphList"></datalist>
                     <button onclick="convertExistingRdbToGraph()" id="rdbConvBtn"
                         style="background:#6c5ce7; color:#fff; padding:10px 20px; border:none; border-radius:4px; cursor:pointer; font-weight:bold; white-space:nowrap;">
                         <i class="fas fa-sitemap"></i> 그래프 변환
                     </button>
                 </div>
+                <!-- 입력한 이름이 새 그래프인지 기존 그래프인지 — 기존이면 그 그래프에 데이터가 합쳐진다 -->
+                <div id="rdbConvGraphHint" style="font-size:11px; margin-top:6px; min-height:14px;"></div>
                 <div id="rdbConvConsole"
                     style="display:none; background:#ffffff; color:#a29bfe; padding:10px; border-radius:4px; font-size:11px; font-family:monospace; margin-top:10px; white-space:pre-wrap; line-height:1.4; max-height:160px; overflow-y:auto;"></div>
             </div>
@@ -980,22 +984,33 @@ function showTruncateBanner(metas){
 
             <!-- ═══ GDB 패널 ═══ -->
             <div id="dash-panel-gdb" style="padding: 20px 24px; display: none;">
+                <!-- 조회 그래프 선택 — 대시보드 안에서만 바뀌고 메인 화면 그래프·캔버스는 그대로 둔다 -->
+                <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:14px;">
+                    <label for="gdbStatsGraph" style="font-size:12px; color:#1e4276; font-weight:bold;">
+                        <i class="fas fa-project-diagram"></i> 조회 그래프
+                    </label>
+                    <select id="gdbStatsGraph" onchange="selectGraphFromDashboard(this.value)"
+                        style="background:#f4f6f9; color:#1e4276; border:1px solid rgba(30,66,118,0.3); padding:4px 10px; border-radius:8px; font-size:12px; cursor:pointer; min-width:180px; outline:none;">
+                        <option>로딩중...</option>
+                    </select>
+                    <span style="font-size:11px; color:#888;">선택한 그래프의 노드·엣지 분포를 보여줍니다. 메인 화면의 그래프는 바뀌지 않습니다.</span>
+                </div>
                 <!-- GDB 요약 카드 -->
                 <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px;">
                     <div
                         style="background: #ffffff; padding: 14px; border-radius: 8px; border-left: 3px solid #6c5ce7; text-align: center;">
                         <div style="font-size: 24px; font-weight: bold; color: #a29bfe;" id="stat-gdb-nodes">-</div>
-                        <div style="font-size: 11px; color: #888;"><i class="fas fa-circle"></i> 총 노드</div>
+                        <div style="font-size: 11px; color: #888;"><i class="fas fa-circle"></i> 노드 수 (선택 그래프)</div>
                     </div>
                     <div
                         style="background: #ffffff; padding: 14px; border-radius: 8px; border-left: 3px solid #1e4276; text-align: center;">
                         <div style="font-size: 24px; font-weight: bold; color: #1e4276;" id="stat-gdb-edges">-</div>
-                        <div style="font-size: 11px; color: #888;"><i class="fas fa-link"></i> 총 엣지</div>
+                        <div style="font-size: 11px; color: #888;"><i class="fas fa-link"></i> 엣지 수 (선택 그래프)</div>
                     </div>
                     <div
                         style="background: #ffffff; padding: 14px; border-radius: 8px; border-left: 3px solid #fdcb6e; text-align: center;">
                         <div style="font-size: 24px; font-weight: bold; color: #fdcb6e;" id="stat-gdb-graphs">-</div>
-                        <div style="font-size: 11px; color: #888;"><i class="fas fa-project-diagram"></i> 그래프 수</div>
+                        <div style="font-size: 11px; color: #888;"><i class="fas fa-project-diagram"></i> 그래프 수 (DB 전체)</div>
                     </div>
                 </div>
 
@@ -4701,7 +4716,7 @@ ${snap?sect('7. 그래프 스냅샷 (현재 탐색 화면)')+`<img class="snap" 
         const modal = document.getElementById('csv-modal');
         let csvHeaders = [];
 
-        function openCsvModal() { modal.style.display = 'flex'; }
+        function openCsvModal() { modal.style.display = 'flex'; loadGdbTargetList(); }
         function closeCsvModal() { modal.style.display = 'none'; }
 
         // 기존 RDB → 온톨로지 그래프 변환 (구 '온톨로지 변환' 탭 기능을 데이터 적재 탭에 통합)
@@ -5502,36 +5517,43 @@ ${snap?sect('7. 그래프 스냅샷 (현재 탐색 화면)')+`<img class="snap" 
             }
         }
 
-        // GDB 대상 그래프 목록 로드
+        // 'RDB → 온톨로지 그래프 변환' 입력칸의 기존 그래프 목록(datalist) 로드
+        // API 는 {status, graphs:[{name, node_count}]} 를 준다. (종전 코드는 응답을 배열로 보고, 화면에 없는
+        // 선택 상자 gdbTargetExisting 을 채우려 해 아무것도 표시되지 않았다)
+        let _rdbConvGraphNames = [];
         function loadGdbTargetList() {
             fetch('/api/graph/list')
                 .then(r => r.json())
                 .then(data => {
-                    const sel = document.getElementById('gdbTargetExisting');
-                    if (!sel) return;
-                    sel.innerHTML = '';
-
-                    // 현재 선택된 그래프를 기본값으로
-                    const currentGraph = document.getElementById('targetGraphInfo');
-                    const currentValue = currentGraph ? currentGraph.value : '';
-
-                    if (data && data.length > 0) {
-                        data.forEach(g => {
-                            const name = g.graph_name || g;
-                            const opt = document.createElement('option');
-                            opt.value = name;
-                            opt.textContent = `${name} (${g.node_count || 0} nodes)`;
-                            if (name === currentValue) opt.selected = true;
-                            sel.appendChild(opt);
-                        });
-                    } else {
-                        sel.innerHTML = '<option value="">그래프 없음</option>';
-                    }
+                    _rdbConvGraphNames = (data.graphs || []).map(g => (typeof g === 'string' ? g : g.name)).filter(Boolean);
+                    const dl = document.getElementById('rdbConvGraphList');
+                    if (dl) dl.innerHTML = _rdbConvGraphNames.map(n => `<option value="${n}"></option>`).join('');
+                    updateRdbConvGraphHint();
                 })
                 .catch(() => {
-                    const sel = document.getElementById('gdbTargetExisting');
-                    if (sel) sel.innerHTML = '<option value="">로드 실패</option>';
+                    _rdbConvGraphNames = [];
+                    const hint = document.getElementById('rdbConvGraphHint');
+                    if (hint) { hint.style.color = '#d63031'; hint.textContent = '그래프 목록을 불러오지 못했습니다.'; }
                 });
+        }
+
+        // 입력한 이름이 새 그래프인지, 데이터가 합쳐질 기존 그래프인지 알려 준다
+        function updateRdbConvGraphHint() {
+            const input = document.getElementById('rdbConvGraphName');
+            const hint = document.getElementById('rdbConvGraphHint');
+            if (!input || !hint) return;
+            const name = (input.value || '').trim();
+            if (!name) { hint.textContent = ''; return; }
+            if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name)) {          // 서버 graph_path 검증과 같은 규칙
+                hint.style.color = '#d63031';
+                hint.textContent = '그래프 이름은 영문자·숫자·밑줄(_)만 쓸 수 있고, 숫자로 시작할 수 없습니다.';
+            } else if (_rdbConvGraphNames.includes(name)) {
+                hint.style.color = '#e17055';
+                hint.textContent = `⚠ 기존 그래프 '${name}'에 데이터를 덧붙입니다. 같은 키의 노드·엣지는 합쳐지고, 새 데이터가 추가됩니다.`;
+            } else {
+                hint.style.color = '#00b894';
+                hint.textContent = `새 그래프 '${name}'를 만듭니다.`;
+            }
         }
 
         // 새 그래프 / 기존 그래프 입력 전환
@@ -5851,6 +5873,7 @@ ${snap?sect('7. 그래프 스냅샷 (현재 탐색 화면)')+`<img class="snap" 
             document.getElementById('dashboard-modal').style.display = 'flex';
             loadDashboardStats();
             loadDbInfo();
+            resetGdbDashboard();
         }
 
         // DB 목록 로드 및 드롭다운 채우기
@@ -5922,6 +5945,7 @@ ${snap?sect('7. 그래프 스냅샷 (현재 탐색 화면)')+`<img class="snap" 
 
                         // 대시보드 통계 새로고침
                         loadDashboardStats();
+                        resetGdbDashboard();
 
                         // 토스트 알림
                         showToast(`✅ DB 전환 완료: ${data.db_name} `, 'success');
@@ -6012,32 +6036,10 @@ ${snap?sect('7. 그래프 스냅샷 (현재 탐색 화면)')+`<img class="snap" 
 
 
 
-                        // 2. GDB 통계
-                        let totalNodes = 0;
-                        let totalEdges = 0;
-                        if (gdb.graphs) {
-                            gdb.graphs.forEach(g => {
-                                totalNodes += (g.vertex_labels || 0);
-                                totalEdges += (g.edge_labels || 0);
-                            });
-                        }
-                        document.getElementById('stat-gdb-nodes').textContent = totalNodes.toLocaleString();
-                        document.getElementById('stat-gdb-edges').textContent = totalEdges.toLocaleString();
+                        // 2. GDB 통계 — 그래프 수만. 노드·엣지 수와 그래프 목록은 GDB 탭(loadGdbDetailStats)이
+                        //    선택 그래프 기준으로 채운다. (종전엔 여기서 라벨 '종류 수'(vertex_labels·edge_labels)를
+                        //    합쳐 '총 노드/총 엣지'로 보여 줬고, 그래프 목록도 두 곳에서 덮어써 순서에 따라 바뀌었다)
                         document.getElementById('stat-gdb-graphs').textContent = gdb.total_graphs || 0;
-
-                        // 그래프 목록 표시
-                        const gList = document.getElementById('gdb-graph-list');
-                        if (gList && gdb.graphs) {
-                            gList.innerHTML = gdb.graphs.map(g => `
-                                <div style="display:flex; justify-content:space-between; padding:8px; border-bottom:1px solid #333; align-items:center;">
-                                    <div>
-                                        <span style="color:#4a5568; font-weight:bold;">${g.name}</span>
-                                        <span style="color:${g.status === 'active' ? '#00b894' : '#d63031'}; font-size:10px; margin-left:6px;">● ${g.status}</span>
-                                    </div>
-                                    <span style="color:#4a5568; font-size:11px;">V: ${g.vertex_labels}, E: ${g.edge_labels}</span>
-                                </div>
-                            `).join('');
-                        }
 
                         // 3. System 통계
                         const sysCpu = document.getElementById('sys-cpu');
@@ -6154,119 +6156,124 @@ ${snap?sect('7. 그래프 스냅샷 (현재 탐색 화면)')+`<img class="snap" 
             }
         }
 
-        function loadGdbDetailStats() {
-            const graphName = document.getElementById('targetGraphInfo').value;
+        // 대시보드 GDB 탭에서 조회 중인 그래프 — 메인 화면 그래프(targetGraphInfo)와 별개.
+        // (종전엔 그래프 선택이 switchGraph() 를 불러 메인 캔버스를 비웠다)
+        let _dashGdbGraph = null;
+        let _dashGdbReq = 0;      // 빠르게 바꿔 고를 때 늦게 온 이전 응답이 최신 결과를 덮지 않게
+
+        function _gdbStatBars(items, keyName, colorOffset, unit, total) {
+            // 흰 배경·연회색 트랙에서 보이는 색만 (종전 #ffeaa7·#e6e9ef 는 막대·숫자가 거의 안 보였다)
+            const labelColors = ['#a29bfe', '#0984e3', '#00b894', '#f6b93b', '#fd79a8', '#e17055', '#1e4276', '#6c5ce7', '#4a5568', '#95a5a6'];
+            const max = items[0].count || 1;     // API 가 건수 내림차순으로 준다
+            let html = '';
+            items.forEach((it, i) => {
+                const pct = Math.max((it.count / max) * 100, 3);
+                const color = labelColors[(i + colorOffset) % labelColors.length];
+                const name = it[keyName];
+                html += `
+                <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+                    <div style="width:110px; color:#4a5568; font-size:11px; text-align:right; flex-shrink:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${name}">${name}</div>
+                    <div style="flex:1; background:#e7ecf5; border-radius:4px; overflow:hidden; height:20px;">
+                        <div style="width:${pct}%; background:${color}; height:100%; border-radius:4px; transition: width 0.6s ease;"></div>
+                    </div>
+                    <div style="width:64px; color:#1e4276; font-size:12px; font-weight:bold; text-align:right; font-variant-numeric:tabular-nums;">${Number(it.count).toLocaleString()}</div>
+                </div>`;
+            });
+            html += `<div style="margin-top:10px; padding-top:8px; border-top:1px solid #333; color:#4a5568; font-size:11px; text-align:right;">총 ${Number(total).toLocaleString()}개 ${unit} · ${items.length}종</div>`;
+            return html;
+        }
+
+        function loadGdbDetailStats(graphName) {
+            const req = ++_dashGdbReq;
             const nodeDiv = document.getElementById('gdb-node-labels');
             const edgeDiv = document.getElementById('gdb-edge-types');
             const graphListDiv = document.getElementById('gdb-graph-list');
+            const nodesCard = document.getElementById('stat-gdb-nodes');
+            const edgesCard = document.getElementById('stat-gdb-edges');
+            const sel = document.getElementById('gdbStatsGraph');
+            const loading = '<p style="color:#1e4276; text-align:center; font-size:12px;"><i class="fas fa-spinner fa-spin"></i> 로딩 중...</p>';
+            const fail = msg => `<p style="color:#d63031; font-size:12px;">${msg}</p>`;
+            const hint = msg => `<p style="color:#4a5568; text-align:center; font-size:12px;">${msg}</p>`;
 
-            nodeDiv.innerHTML = '<p style="color:#1e4276; text-align:center; font-size:12px;"><i class="fas fa-spinner fa-spin"></i> 로딩 중...</p>';
-            edgeDiv.innerHTML = '<p style="color:#1e4276; text-align:center; font-size:12px;"><i class="fas fa-spinner fa-spin"></i> 로딩 중...</p>';
+            nodesCard.textContent = '-';
+            edgesCard.textContent = '-';
+            nodeDiv.innerHTML = loading;
+            edgeDiv.innerHTML = loading;
 
-            fetch(`/api/v1/gdb/detail-stats?graph_name=${graphName}`)
+            // 1) 그래프 목록 먼저 — 고른 그래프가 지금 DB 에 있는지 확인한 뒤 분포를 조회한다(DB 전환 직후 옛 이름 방지).
+            //    API 는 [{name, node_count}] 객체 배열을 준다 (종전 코드는 문자열로 보고 칩에 [object Object] 를 찍었다)
+            fetch('/api/graph/list')
                 .then(r => r.json())
                 .then(data => {
-                    if (data.status === 'success') {
-                        const d = data.data;
-                        const labelColors = ['#a29bfe', '#0984e3', '#55efc4', '#ffeaa7', '#fd79a8', '#fdcb6e', '#1e4276', '#e17055', '#4a5568', '#e6e9ef'];
+                    if (req !== _dashGdbReq) return null;
+                    const names = (data.graphs || []).map(g => (typeof g === 'string' ? g : g.name)).filter(Boolean);
+                    const mainGraph = document.getElementById('targetGraphInfo').value;
+                    const pick = [graphName, _dashGdbGraph, mainGraph].find(n => n && names.includes(n)) || '';
+                    _dashGdbGraph = pick || null;
 
-                        // 노드 라벨별 바 차트
-                        if (d.nodes.length > 0) {
-                            const maxNode = d.nodes[0].count || 1;
-                            let html = '';
-                            d.nodes.forEach((n, i) => {
-                                const pct = Math.max((n.count / maxNode) * 100, 3);
-                                const color = labelColors[i % labelColors.length];
-                                html += `
-                                <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
-                                    <div style="width:90px; color:#4a5568; font-size:11px; text-align:right; flex-shrink:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${n.label}">${n.label}</div>
-                                    <div style="flex:1; background:#e7ecf5; border-radius:4px; overflow:hidden; height:20px;">
-                                        <div style="width:${pct}%; background:${color}; height:100%; border-radius:4px; transition: width 0.6s ease;"></div>
-                                    </div>
-                                    <div style="width:40px; color:${color}; font-size:12px; font-weight:bold; text-align:right;">${n.count}</div>
-                                </div>`;
-                            });
-                            html += `<div style="margin-top:10px; padding-top:8px; border-top:1px solid #333; color:#4a5568; font-size:11px; text-align:right;">총 ${d.total_nodes.toLocaleString()}개 노드</div>`;
-                            nodeDiv.innerHTML = html;
-                        } else {
-                            nodeDiv.innerHTML = '<p style="color:#4a5568; text-align:center; font-size:12px;">노드가 없습니다.</p>';
-                        }
-
-                        // 엣지 타입별 바 차트
-                        if (d.edges.length > 0) {
-                            const maxEdge = d.edges[0].count || 1;
-                            let html = '';
-                            d.edges.forEach((e, i) => {
-                                const pct = Math.max((e.count / maxEdge) * 100, 3);
-                                const color = labelColors[(i + 3) % labelColors.length];
-                                html += `
-                                <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
-                                    <div style="width:110px; color:#4a5568; font-size:11px; text-align:right; flex-shrink:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${e.type}">${e.type}</div>
-                                    <div style="flex:1; background:#e7ecf5; border-radius:4px; overflow:hidden; height:20px;">
-                                        <div style="width:${pct}%; background:${color}; height:100%; border-radius:4px; transition: width 0.6s ease;"></div>
-                                    </div>
-                                    <div style="width:40px; color:${color}; font-size:12px; font-weight:bold; text-align:right;">${e.count}</div>
-                                </div>`;
-                            });
-                            html += `<div style="margin-top:10px; padding-top:8px; border-top:1px solid #333; color:#4a5568; font-size:11px; text-align:right;">총 ${d.total_edges.toLocaleString()}개 엣지</div>`;
-                            edgeDiv.innerHTML = html;
-                        } else {
-                            edgeDiv.innerHTML = '<p style="color:#4a5568; text-align:center; font-size:12px;">엣지가 없습니다.</p>';
-                        }
-
-                        if (d.error) {
-                            nodeDiv.innerHTML = `<p style="color:#d63031; font-size:12px;">오류: ${d.error}</p>`;
-                            edgeDiv.innerHTML = `<p style="color:#d63031; font-size:12px;">오류: ${d.error}</p>`;
-                        }
+                    if (sel) {
+                        sel.innerHTML = names.length === 0 ? '<option value="">그래프 없음</option>'
+                            : (pick ? '' : '<option value="">그래프 선택</option>')
+                              + names.map(n => `<option value="${n}" ${n === pick ? 'selected' : ''}>${n}</option>`).join('');
                     }
-                })
-                .catch(e => {
-                    nodeDiv.innerHTML = `<p style="color:#d63031; font-size:12px;">조회 실패: ${e}</p>`;
-                    edgeDiv.innerHTML = '';
-                });
-
-            // 그래프 목록
-            fetch(`/api/graph/list`)
-                .then(r => r.json())
-                .then(data => {
-                    if (data.status === 'success' && data.graphs && data.graphs.length > 0) {
-                        const graphs = data.graphs;
+                    if (names.length === 0) {
+                        graphListDiv.innerHTML = hint('등록된 그래프가 없습니다.');
+                    } else {
                         let html = '<div style="display:flex; flex-wrap:wrap; gap:8px;">';
-                        graphs.forEach(g => {
-                            const isActive = (g === graphName);
-                            html += `<div onclick="selectGraphFromDashboard('${g}')" style="padding:8px 14px; border-radius:6px; font-size:12px; font-weight:bold; background:${isActive ? 'linear-gradient(135deg,#6c5ce7,#a29bfe)' : '#e7ecf5'}; color:${isActive ? 'white' : '#e8edf8'}; border:1px solid ${isActive ? '#a29bfe' : 'rgba(255,255,255,0.12)'}; cursor:pointer; transition:all 0.3s;" title="${isActive ? '현재 선택된 그래프' : '클릭하여 전환'}" onmouseover="this.style.transform='scale(1.03)'" onmouseout="this.style.transform='scale(1)'">
-                                <i class="fas fa-project-diagram" style="margin-right:5px; color:${isActive ? '#ffeaa7' : '#888'};"></i>${g}
-                                ${isActive ? '<span style="margin-left:6px; font-size:10px; color:#ffeaa7;">● 활성</span>' : ''}
+                        names.forEach(n => {
+                            const isActive = (n === pick);
+                            html += `<div onclick="selectGraphFromDashboard('${n}')" style="padding:8px 14px; border-radius:6px; font-size:12px; font-weight:bold; background:${isActive ? 'linear-gradient(135deg,#6c5ce7,#a29bfe)' : '#e7ecf5'}; color:${isActive ? 'white' : '#1e4276'}; border:1px solid ${isActive ? '#a29bfe' : 'rgba(30,66,118,0.15)'}; cursor:pointer; transition:all 0.3s;" title="${isActive ? '지금 조회 중인 그래프' : '클릭하면 이 그래프의 분포를 봅니다'}" onmouseover="this.style.transform='scale(1.03)'" onmouseout="this.style.transform='scale(1)'">
+                                <i class="fas fa-project-diagram" style="margin-right:5px; color:${isActive ? '#ffeaa7' : '#888'};"></i>${n}
+                                ${isActive ? '<span style="margin-left:6px; font-size:10px; color:#ffeaa7;">● 조회 중</span>' : ''}
                             </div>`;
                         });
-                        html += '</div>';
-                        graphListDiv.innerHTML = html;
-                    } else {
-                        graphListDiv.innerHTML = '<p style="color:#4a5568; text-align:center; font-size:12px;">등록된 그래프가 없습니다.</p>';
+                        graphListDiv.innerHTML = html + '</div>';
                     }
+                    if (!pick) {
+                        nodeDiv.innerHTML = hint(names.length ? '위에서 조회할 그래프를 고르세요.' : '그래프가 없습니다.');
+                        edgeDiv.innerHTML = '';
+                        return null;
+                    }
+                    // 2) 고른 그래프의 노드 라벨·엣지 타입별 건수
+                    return fetch(`/api/v1/gdb/detail-stats?graph_name=${encodeURIComponent(pick)}`).then(r => r.json());
+                })
+                .then(data => {
+                    if (!data || req !== _dashGdbReq) return;
+                    if (data.status !== 'success') throw new Error(data.message || data.error || '응답 오류');
+                    const d = data.data;
+                    if (d.error) {                    // 그래프 이름 오류 등은 status=success + data.error 로 온다
+                        nodeDiv.innerHTML = fail(`오류: ${d.error}`);
+                        edgeDiv.innerHTML = fail(`오류: ${d.error}`);
+                        return;
+                    }
+                    nodesCard.textContent = Number(d.total_nodes).toLocaleString();
+                    edgesCard.textContent = Number(d.total_edges).toLocaleString();
+                    nodeDiv.innerHTML = d.nodes.length > 0 ? _gdbStatBars(d.nodes, 'label', 0, '노드', d.total_nodes) : hint('노드가 없습니다.');
+                    edgeDiv.innerHTML = d.edges.length > 0 ? _gdbStatBars(d.edges, 'type', 3, '엣지', d.total_edges) : hint('엣지가 없습니다.');
                 })
                 .catch(e => {
-                    graphListDiv.innerHTML = `<p style="color:#d63031; font-size:12px;">조회 실패: ${e}</p>`;
+                    if (req !== _dashGdbReq) return;
+                    nodeDiv.innerHTML = fail(`조회 실패: ${e.message || e}`);
+                    edgeDiv.innerHTML = '';
                 });
+        }
+
+        // 대시보드를 열거나 DB 를 바꾸면 메인 화면 그래프에서 다시 시작
+        function resetGdbDashboard() {
+            _dashGdbGraph = null;
+            const panel = document.getElementById('dash-panel-gdb');
+            if (panel && panel.style.display !== 'none') loadGdbDetailStats();
+        }
+
+        // 대시보드에서 그래프 선택 — 분포만 바꾸고 메인 화면 그래프·캔버스는 건드리지 않는다
+        function selectGraphFromDashboard(graphName) {
+            if (!graphName) return;
+            loadGdbDetailStats(graphName);
         }
 
         // ======================================================
         // 노드 액션 기능
         // ======================================================
-        function selectGraphFromDashboard(graphName) {
-            // 헤더 드롭다운 업데이트
-            const select = document.getElementById('targetGraphInfo');
-            select.value = graphName;
-
-            // 그래프 데이터 로드
-            switchGraph();
-
-            // GDB 통계 새로고침
-            setTimeout(() => loadGdbDetailStats(), 500);
-
-            showToast(`'${graphName}' 그래프로 전환됨`, "success");
-        }
-
         function expandNode() {
             if (!selectedNode) return showToast("노드를 선택해주세요", "warning");
 
