@@ -3,7 +3,8 @@ CCOP 파트너 API v1 엔드포인트
 외부 파트너가 CCOP 기능에 접근할 수 있는 REST API
 """
 from flask import Blueprint, request, jsonify, current_app
-from app.middleware.api_auth import require_api_key, require_endpoint_permission, require_api_or_ui
+from app.middleware.api_auth import (require_api_key, require_endpoint_permission, require_api_or_ui,
+                                     default_graph_for_key, graph_denied_response)
 from app.services.graph_service import GraphService
 from app.services.rdb_to_graph_service import RdbToGraphService
 from app.services.langgraph_agent import LangGraphAgent
@@ -51,9 +52,12 @@ def text_to_cypher():
         if not question:
             return jsonify({"error": "question field is required"}), 400
 
-        graph_path = current_app.config.get('DEFAULT_GRAPH_PATH', 'tccop_graph_v6')
+        graph_path = default_graph_for_key(current_app.config.get('DEFAULT_GRAPH_PATH', 'tccop_graph_v6'))
         if data.get("schema") and "graph_path" in data.get("schema"):
             graph_path = data["schema"]["graph_path"]
+        denied = graph_denied_response(graph_path)
+        if denied:
+            return denied
 
         # 시간순 연속성 flag (Q3 — 푸터 [시간순 연속성 적용] 체크박스)
         temporal_continuity = bool(data.get('temporal_continuity', False))
@@ -119,10 +123,13 @@ def graph_query():
             return jsonify({"error": "Request body required"}), 400
 
         cypher = data.get('cypher')
-        graph_path = data.get('graph_path', current_app.config.get('DEFAULT_GRAPH_PATH', 'tccop_graph_v6'))
+        graph_path = data.get('graph_path', default_graph_for_key(current_app.config.get('DEFAULT_GRAPH_PATH', 'tccop_graph_v6')))
 
         if not cypher:
             return jsonify({"error": "cypher field is required"}), 400
+        denied = graph_denied_response(graph_path)
+        if denied:
+            return denied
 
         # 읽기 전용 보안 검증 (공용 가드 — SQL 쓰기·위험 함수·다중 문장 포함, 감사 F02)
         from app.core.query_guard import check_read_only

@@ -164,6 +164,51 @@ def validate_api_key(api_key: str) -> dict:
 
     return partner_data
 
+
+def _endpoint_perm_name() -> str:
+    """요청 경로의 권한 이름 — URL 규칙에서 '/api/v1/' 뒤, 첫 '<변수>' 앞.
+
+    예: '/api/v1/text-to-cypher' → 'text-to-cypher',
+        '/api/v1/evidence-completeness/<case_id>' → 'evidence-completeness',
+        '/api/v1/graph/create' → 'graph/create'
+    """
+    rule = request.url_rule.rule if request.url_rule is not None else request.path
+    return rule.split('/api/v1/', 1)[-1].split('/<', 1)[0].strip('/')
+
+
+def _endpoint_denied_response(partner_data: dict):
+    """키의 allowed_endpoints 에 없는 경로면 403 응답, 허용이면 None (기본 거부).
+
+    종전에는 require_endpoint_permission 을 붙인 일부 경로만 검사해, text-to-cypher 용으로
+    발급한 키로도 rdb/to-graph(그래프 쓰기)·rdb/query(원본 테이블 조회) 등을 호출할 수 있었다.
+    """
+    allowed = partner_data.get('allowed_endpoints') or []
+    name = _endpoint_perm_name()
+    if '*' in allowed or name in allowed:
+        return None
+    current_app.logger.warning(f"Endpoint not allowed: {partner_data.get('partner_name')} → {name}")
+    return jsonify({
+        "error": "Insufficient permissions",
+        "message": f"이 API 키로는 '{name}' 을(를) 호출할 수 없습니다."
+    }), 403
+
+
+def default_graph_for_key(fallback: str) -> str:
+    """그래프 미지정 요청의 기본 그래프 — 키에 allowed_graphs 가 있으면 그 첫 번째."""
+    allowed = (getattr(request, 'partner_data', None) or {}).get('allowed_graphs')
+    return allowed[0] if allowed else fallback
+
+
+def graph_denied_response(graph_path: str):
+    """키에 allowed_graphs 가 있으면 그 밖의 그래프는 403 (UI 세션·미지정 키는 제한 없음)."""
+    allowed = (getattr(request, 'partner_data', None) or {}).get('allowed_graphs')
+    if allowed and graph_path not in allowed:
+        return jsonify({
+            "error": "Graph not allowed",
+            "message": f"이 API 키로는 '{graph_path}' 그래프를 조회할 수 없습니다."
+        }), 403
+    return None
+
 def require_api_key(f):
     """
     API 키 인증 데코레이터
@@ -201,6 +246,10 @@ def require_api_key(f):
         # 요청 객체에 파트너 정보 추가
         request.partner = partner_data['partner_name']
         request.partner_data = partner_data
+
+        denied = _endpoint_denied_response(partner_data)
+        if denied:
+            return denied
 
         # Rate Limit 검사
         rate_limit = partner_data.get('rate_limit', 60)
@@ -248,6 +297,9 @@ def require_api_or_ui(f):
             if partner_data:
                 request.partner = partner_data['partner_name']
                 request.partner_data = partner_data
+                denied = _endpoint_denied_response(partner_data)
+                if denied:
+                    return denied
                 rate_limit = partner_data.get('rate_limit', 60)
                 if not _check_rate_limit(request.partner, rate_limit):
                     current_app.logger.warning(f"Rate limit exceeded: {request.partner}")

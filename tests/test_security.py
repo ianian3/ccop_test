@@ -483,3 +483,68 @@ class TestBasicAuthIsAuthenticatedCaller:
         """Basic 미설정 배포에서 임의 Basic 헤더로 우회 불가."""
         r = client.get("/api/graph/list", headers=self._hdr(b"x:y"))
         assert r.status_code == 401
+
+
+class TestPartnerKeyScope:
+    """text-to-cypher 용으로 발급한 키는 다른 v1 경로·다른 그래프를 열지 못한다 (기본 거부)."""
+
+    KEY = "pytest-scope-t2c"
+
+    @pytest.fixture
+    def scoped_key(self, app):
+        from app.middleware import api_auth
+        h = api_auth.generate_api_key_hash(self.KEY)
+        api_auth.API_KEYS_STORE[h] = {
+            "partner_name": "pytest-scope", "tier": "free", "rate_limit": 100000,
+            "allowed_endpoints": ["text-to-cypher", "usage"],
+            "allowed_graphs": ["ccop_test_graph"], "is_active": True,
+        }
+        yield {"Authorization": f"Bearer {self.KEY}"}
+        api_auth.API_KEYS_STORE.pop(h, None)
+
+    def test_other_endpoints_forbidden(self, client, scoped_key):
+        from unittest.mock import patch
+        cases = [
+            ("post", "/api/v1/rdb/to-graph", {"graph_name": "x"}),       # 그래프 쓰기
+            ("get", "/api/v1/rdb/query/TB_PRSN", None),                 # 원본 테이블 (require_api_or_ui)
+            ("get", "/api/v1/graph/list", None),
+            ("post", "/api/v1/agentic-query", {"question": "x"}),
+            ("get", "/api/v1/evidence-completeness/CASE-1", None),
+        ]
+        with patch("app.routes_api.RdbToGraphService.transfer_data") as transfer:
+            for method, path, body in cases:
+                kw = {"headers": scoped_key}
+                if body is not None:
+                    kw["json"] = body
+                r = getattr(client, method)(path, **kw)
+                assert r.status_code == 403, f"{path} 는 403 이어야 함 (got {r.status_code})"
+            transfer.assert_not_called()
+
+    def test_text_to_cypher_other_graph_forbidden(self, client, scoped_key):
+        from unittest.mock import patch
+        with patch("app.routes_api.LangGraphAgent") as agent:
+            r = client.post("/api/v1/text-to-cypher", headers=scoped_key,
+                            json={"question": "주범의 전화번호", "schema": {"graph_path": "tccop_graph_v6"}})
+            assert r.status_code == 403
+            assert r.get_json()["error"] == "Graph not allowed"
+            agent.assert_not_called()
+
+    def test_text_to_cypher_allowed_graph_and_default(self, client, scoped_key):
+        from unittest.mock import patch
+        with patch("app.routes_api.LangGraphAgent") as agent:
+            agent.return_value.run.return_value = {
+                "status": "success", "cypher": "SELECT 1", "intent": "QUERY",
+                "elements": [], "results_count": 0, "warnings": []}
+            r = client.post("/api/v1/text-to-cypher", headers=scoped_key, json={"question": "주범의 전화번호"})
+            assert r.status_code == 200
+            assert agent.return_value.run.call_args[0][1] == "ccop_test_graph"   # 미지정 → 허용 그래프
+            r = client.post("/api/v1/text-to-cypher", headers=scoped_key,
+                            json={"question": "주범의 전화번호", "schema": {"graph_path": "ccop_test_graph"}})
+            assert r.status_code == 200
+
+    def test_perm_name_strips_path_params(self, app):
+        from app.middleware.api_auth import _endpoint_perm_name
+        with app.test_request_context("/api/v1/evidence-completeness/CASE-1"):
+            assert _endpoint_perm_name() == "evidence-completeness"
+        with app.test_request_context("/api/v1/graph/create", method="POST"):
+            assert _endpoint_perm_name() == "graph/create"
