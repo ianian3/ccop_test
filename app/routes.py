@@ -329,7 +329,9 @@ def load_graph_data():
             """
             truncated_meta = None
             logger.info(f"▶ [GraphLoad] graph={graph_path} focus_ip={focus_ip}")
-        elif request.args.get('account', '').strip() and re.match(r'^[0-9\-]{6,25}$', request.args.get('account', '').strip()):
+        # 계좌 키는 숫자·하이픈만이 아니다 — 계좌번호 없이 '농협-김은희'(은행-예금주)로 식별된 계좌도 있다.
+        # (종전 정규식은 이를 거부해 아래 '전체 샘플' 분기로 빠졌다) 따옴표·역슬래시는 받지 않아 Cypher 리터럴에 안전.
+        elif request.args.get('account', '').strip() and re.match(r'^[0-9A-Za-z가-힣\-_.()* ]{2,40}$', request.args.get('account', '').strip()):
             # 딥링크 focus: 특정 계좌의 자금흐름 서브그래프(자금흐름·명의·집금) — 브리핑 자금흐름 클릭 진입용
             focus_acct = request.args.get('account', '').strip()
             cypher_query = f"""
@@ -450,13 +452,19 @@ def graph_briefing():
     import re
     import psycopg2 as _pg2
     from app.database import safe_set_graph_path
-    graph_path = request.args.get('graph_path', current_app.config.get('DEFAULT_GRAPH_PATH', 'tccop_graph_v6'))
+    # 화면의 그래프 선택값이 비어 오면(목록 로드 전 등) 기본 그래프로 — 종전엔 ''로 400 오류
+    graph_path = request.args.get('graph_path') or current_app.config.get('DEFAULT_GRAPH_PATH', 'tccop_graph_v6')
     if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', graph_path):
         return jsonify({"error": "invalid graph_path"}), 400
     try:
         conn = _pg2.connect(**current_app.config['DB_CONFIG']); conn.autocommit = True; cur = conn.cursor()
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+    # 없는 그래프면 알린다 — 아래 질의는 실패를 빈 결과로 흡수하므로, 그대로 두면 전부 0인 브리핑이 나온다
+    cur.execute("SELECT 1 FROM ag_graph WHERE graphname = %s", (graph_path,))
+    if not cur.fetchone():
+        conn.close()
+        return jsonify({"error": f"그래프 '{graph_path}' 가 없습니다. 상단에서 그래프를 고른 뒤 다시 여세요."}), 404
 
     def q(c):
         # 그래프마다 없는 라벨/엣지(예: 카톡만 있는 EP는 transferred_to 없음)는 예외 → 빈 리스트로 흡수
@@ -489,16 +497,20 @@ def graph_briefing():
         D['pierce'] = q1("MATCH (b:vt_bacnt)-[:belongs_to]->(o:vt_org {org_name:'피어스미디어'}) RETURN count(b)")
         D['total_nodes'] = q1("MATCH (n) RETURN count(*)")
         D['total_edges'] = q1("MATCH ()-[r]->() RETURN count(*)")
+        # 핵심 거점 IP = 3개 이상 EP 에 걸친 IP. ep_count 는 2026-09-04 운영 DB 정수화 이후 숫자다 —
+        # 종전 조건(문자열 IN ['3'..'6'])은 숫자와 맞지 않아 거점이 늘 0개였다. 문자열로 남은 그래프도 함께 잡는다.
         hubs = []
         try:
-            for row in q("MATCH (i:vt_ip) WHERE i.ep_count IN ['3','4','5','6'] RETURN i.ip_addr, i.ep_origin, i.ep_count"):
+            for row in q("MATCH (i:vt_ip) WHERE i.ep_count >= 3 OR i.ep_count IN ['3','4','5','6','7','8','9','10'] "
+                         "RETURN i.ip_addr, i.ep_origin, i.ep_count"):
                 ip, o, c = row[0], row[1], row[2]
                 tn = q1(f"MATCH (t:vt_telno)-[:used_ip]->(:vt_ip {{ip_addr:'{ip}'}}) RETURN count(t)")
                 ac = q1(f"MATCH (d:vt_id)-[:used_ip]->(:vt_ip {{ip_addr:'{ip}'}}) RETURN count(d)")
                 hubs.append({'ip': ip, 'eps': o or '', 'ep_count': int(c) if c else 0, 'telno': tn, 'accounts': ac})
         except Exception:
             pass
-        D['hubs'] = sorted(hubs, key=lambda x: -x['ep_count'])[:8]
+        D['n_hubs'] = len(hubs)                                   # KPI 는 전체 수, 표는 상위 8개
+        D['hubs'] = sorted(hubs, key=lambda x: (-x['ep_count'], -(x['telno'] + x['accounts'])))[:8]
         ft = []
         for row in q("MATCH (x:vt_bacnt)-[e:transferred_to]->(y:vt_bacnt) WHERE e.total_amount IS NOT NULL "
                      "RETURN x.dpstr, y.dpstr, e.total_amount, x.account_no, y.account_no"):
@@ -543,6 +555,76 @@ def graph_briefing():
     except Exception as e:
         conn.close(); return jsonify({"error": str(e)}), 500
     conn.close()
+    return jsonify(D)
+
+
+_SCHEMA_MAP_CACHE = {}          # graph_path → (시각, 결과) — 대형 그래프에서 같은 집계를 반복하지 않게
+
+
+@bp.route('/api/graph/schema-map', methods=['GET'])
+def graph_schema_map():
+    """노드 관계도 — 라벨별 노드 수 + (시작 라벨, 엣지, 끝 라벨)별 엣지 수. 수사 브리핑의 관계도용.
+
+    엣지 테이블의 start/end graphid 에서 라벨을 바로 읽어(graphid_labid) 정점 조인 없이 센다
+    (통합 그래프 14ms, Cypher MATCH 집계와 결과 동일 확인). 100만 행 넘는 노드 라벨은 통계 추정치를 쓰고
+    approx 로 표시한다. 엣지 라벨 하나가 시간 제한을 넘으면 그 라벨만 skipped 로 남긴다.
+    """
+    import re
+    import time
+    import psycopg2 as _pg2
+    from psycopg2 import sql as _sql
+    graph_path = request.args.get('graph_path') or current_app.config.get('DEFAULT_GRAPH_PATH', 'tccop_graph_v6')
+    if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', graph_path):
+        return jsonify({"error": "invalid graph_path"}), 400
+    hit = _SCHEMA_MAP_CACHE.get(graph_path)
+    if hit and time.time() - hit[0] < 600:
+        return jsonify({**hit[1], "cached": True})
+    try:
+        conn = _pg2.connect(**current_app.config['DB_CONFIG']); conn.autocommit = True; cur = conn.cursor()
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    try:
+        cur.execute("SELECT 1 FROM ag_graph WHERE graphname = %s", (graph_path,))
+        if not cur.fetchone():
+            conn.close()
+            return jsonify({"error": f"그래프 '{graph_path}' 가 없습니다."}), 404
+        cur.execute("SET statement_timeout = '30s'")
+        cur.execute("""SELECT l.labid, l.labname, l.labkind, COALESCE(c.reltuples, 0)::bigint
+                       FROM ag_label l JOIN ag_graph g ON g.oid = l.graphid
+                       LEFT JOIN pg_namespace n ON n.nspname = g.graphname
+                       LEFT JOIN pg_class c ON c.relnamespace = n.oid AND c.relname = l.labname
+                       WHERE g.graphname = %s AND l.labname NOT IN ('ag_vertex', 'ag_edge')""", (graph_path,))
+        labels = cur.fetchall()
+        names = {lid: name for lid, name, _, _ in labels}
+        nodes, approx, edges, skipped = {}, [], [], []
+        for _, name, kind, est in labels:
+            if kind != 'v':
+                continue
+            if est > 1_000_000:
+                n = int(est); approx.append(name)
+            else:
+                cur.execute(_sql.SQL('SELECT count(*) FROM ONLY {}.{}').format(
+                    _sql.Identifier(graph_path), _sql.Identifier(name)))
+                n = cur.fetchone()[0]
+            if n:
+                nodes[name] = n
+        for _, name, kind, _ in labels:
+            if kind != 'e':
+                continue
+            try:
+                cur.execute(_sql.SQL('SELECT graphid_labid(start), graphid_labid("end"), count(*) '
+                                     'FROM ONLY {}.{} GROUP BY 1, 2').format(
+                    _sql.Identifier(graph_path), _sql.Identifier(name)))
+                for s, e, n in cur.fetchall():
+                    edges.append({'from': names.get(s, str(s)), 'rel': name, 'to': names.get(e, str(e)), 'count': n})
+            except Exception:
+                skipped.append(name)
+    except Exception as e:
+        conn.close()
+        return jsonify({"error": f"관계도 집계 실패: {e}"}), 500
+    conn.close()
+    D = {"graph_path": graph_path, "nodes": nodes, "edges": edges, "approx": approx, "skipped": skipped}
+    _SCHEMA_MAP_CACHE[graph_path] = (time.time(), D)
     return jsonify(D)
 
 

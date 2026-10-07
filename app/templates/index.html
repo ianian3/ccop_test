@@ -3485,7 +3485,7 @@ function showTruncateBanner(metas){
             m.innerHTML='<div style="color:#3a4453;margin:auto;font-size:15px">🔍 브리핑 생성 중…</div>';
             fetch(`/api/graph/briefing?graph_path=${encodeURIComponent(g)}`).then(r=>r.json()).then(D=>{
                 if(D.error){m.innerHTML=`<div style="color:#f87171;margin:auto">브리핑 오류: ${D.error}</div>`;return;}
-                renderBriefing(m,D,g);
+                renderBriefing(m,D,D.graph_path||g);   // 선택값이 비면 서버가 기본 그래프로 조회 — 실제 조회한 이름을 표시
             }).catch(e=>{m.innerHTML=`<div style="color:#f87171;margin:auto">${e}</div>`;});
         }
         // ── 수사 브리핑 보고서 내보내기 (A4 인쇄 → 브라우저 'PDF로 저장') ──
@@ -3530,7 +3530,7 @@ function showTruncateBanner(metas){
   <div class="kpi"><b>${eok(D.damage_total||0)}</b>억<div>신고 피해액</div></div>
   <div class="kpi"><b>${eok(D.fund_total||0)}</b>억<div>자금흐름</div></div>
   <div class="kpi"><b>${D.n_bacnt||0}</b>개<div>계좌</div></div>
-  <div class="kpi"><b>${(D.hubs||[]).length}</b>개<div>거점 IP</div></div>
+  <div class="kpi"><b>${D.n_hubs ?? (D.hubs||[]).length}</b>개<div>거점 IP</div></div>
   <div class="kpi"><b>${D.n_realname||0}</b>명<div>실명 특정(대상IP)</div></div>
 </div>
 ${suspects?sect('1. 피의자 특정 현황 — 체포영장 신청(문서 검증)')+`<table><tr><th>성명</th><th>역할</th><th>생년(부분)</th><th>등록기준지</th><th>출국</th></tr>${suspects}</table>`:''}
@@ -3539,7 +3539,8 @@ ${sect('3. 집금 조직')}<div>피어스미디어 집금망 — 귀속 계좌 <
 ${sect('4. 자금흐름 Top')}<table><tr><th>흐름(명의)</th><th>계좌</th><th>금액</th></tr>${funds||'<tr><td colspan=3>없음</td></tr>'}</table>
 ${sect('5. 동일인 검토 큐 (same_as 후보 — 수사관 확인 필요)')}<div>${same||'후보 없음'}</div>
 ${(inf.bacnt||inf.psn||inf.org)?sect('6. 영향력 Top (PageRank 자동 랭킹)')+`<table><tr>${infCol('계좌',inf.bacnt,'key')}${infCol('인물',inf.psn,'key')}${infCol('조직',inf.org,'key')}</tr></table>`:''}
-${snap?sect('7. 그래프 스냅샷 (현재 탐색 화면)')+`<img class="snap" src="${snap}">`:''}
+${window._briefSchemaSvg?sect('7. 노드 관계도 (이 그래프의 노드·관계 건수)')+`<div class="snap" style="padding:6px">${window._briefSchemaSvg}</div>`:''}
+${snap?sect('8. 그래프 스냅샷 (현재 탐색 화면)')+`<img class="snap" src="${snap}">`:''}
 <footer>결정론 적재(source_id 원본 대조 가능) · 비식별 시나리오 데이터 · same_as는 미확정 후보 · 본 보고서는 CYBER C.O.P 자동 생성(${ts})</footer>
 <div class="noprint" style="position:fixed;top:8px;right:10px"><button onclick="window.print()" style="padding:8px 16px;background:#1e4276;color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:700">인쇄 / PDF 저장</button></div>
 <script>setTimeout(()=>window.print(), 400);<\/script>
@@ -3552,6 +3553,121 @@ ${snap?sect('7. 그래프 스냅샷 (현재 탐색 화면)')+`<img class="snap" 
 
         function closeBriefing(){const m=document.getElementById('briefing-modal');if(m)m.style.display='none';}
         function _eok(n){return (n/100000000).toFixed(2);}
+        // ── 수사 브리핑: 노드 관계도 — 온톨로지 V4.9 노드 관계도(덱 14쪽) 배치에 이 그래프의 실제 노드·엣지 건수를 그린다 ──
+        const _SM_LAYER = {case:['#c0392b','#fbeae8'], person:['#2563eb','#e6eefd'], object:['#0f8b8d','#e2f3f3'],
+                           loc:['#d97706','#fcf0de'], event:['#6b7280','#eef0f2'], source:['#9ca3af','#f4f6f9']};
+        const _SM_META = {   // 라벨: [이름, 계층, x, y] — 좌표는 덱 14쪽 노드 위치(인치×90). 이벤트는 맨 아래 줄
+            vt_petition:['진정서','case',117,72], vt_case:['사건','case',324,72], pt_cluster:['진정서 군집','case',117,234],
+            vt_bacnt:['계좌','object',558,54], vt_org:['조직·기관','person',846,54], vt_crypto:['가상자산 지갑','object',1044,126],
+            vt_ip:['IP','object',207,198], vt_psn:['인물','person',594,261], vt_loc:['위치','loc',1044,324],
+            vt_site:['사이트(URL)','object',117,378], vt_telno:['전화번호','object',324,324], vt_file:['파일','object',270,414],
+            vt_id:['디지털 ID','object',432,468], vt_dev:['기기','object',594,486], vt_vhcl:['차량','object',846,477],
+            vt_atm:['ATM','object',1044,477], site_cluster:['사이트 군집','object',117,481],
+            vt_email:['이메일','object',530,600], vt_src:['출처','source',1140,40],
+            vt_transfer:['이체','event',200,610], vt_call:['통화','event',340,610], vt_msg:['메시지','event',480,610],
+            vt_access:['접속','event',620,610], vt_movement:['이동·출입국','event',760,610], vt_impersonation:['사칭','event',900,610]
+        };
+        const _SM_ICON = {   // 24×24 아이콘 (없는 라벨은 이름 첫 글자)
+            vt_case:'<path d="M3 7.5A1.5 1.5 0 0 1 4.5 6h4.2l1.8 2h9A1.5 1.5 0 0 1 21 9.5v8A1.5 1.5 0 0 1 19.5 19h-15A1.5 1.5 0 0 1 3 17.5z" fill="currentColor"/>',
+            vt_psn:'<circle cx="12" cy="8" r="4" fill="currentColor"/><path d="M4 20.5c0-4.6 3.6-7.3 8-7.3s8 2.7 8 7.3z" fill="currentColor"/>',
+            vt_org:'<rect x="5" y="2.5" width="14" height="19" rx="1" fill="currentColor"/><g fill="#fff"><rect x="8" y="6" width="2.6" height="2.6"/><rect x="13.4" y="6" width="2.6" height="2.6"/><rect x="8" y="11" width="2.6" height="2.6"/><rect x="13.4" y="11" width="2.6" height="2.6"/></g>',
+            vt_bacnt:'<rect x="2.5" y="5" width="19" height="14" rx="2.2" fill="currentColor"/><text x="12" y="16" text-anchor="middle" font-size="9.5" font-weight="800" fill="#fff">₩</text>',
+            vt_telno:'<rect x="7" y="2.5" width="10" height="19" rx="2.2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="18" r="1.2" fill="currentColor"/>',
+            vt_ip:'<rect x="9" y="2.5" width="6" height="5" rx="1" fill="currentColor"/><rect x="2.5" y="16.5" width="6" height="5" rx="1" fill="currentColor"/><rect x="15.5" y="16.5" width="6" height="5" rx="1" fill="currentColor"/><path d="M12 7.5v4.5M5.5 16.5V12h13v4.5" fill="none" stroke="currentColor" stroke-width="2"/>',
+            vt_id:'<rect x="2.5" y="5" width="19" height="14" rx="2.2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="8.3" cy="10.6" r="2" fill="currentColor"/><path d="M5.2 16c.5-1.8 1.7-2.6 3.1-2.6s2.6.8 3.1 2.6z" fill="currentColor"/><path d="M13.5 10h5M13.5 14h5" stroke="currentColor" stroke-width="1.8"/>',
+            vt_loc:'<path d="M12 2.5a7 7 0 0 0-7 7c0 5.2 7 12 7 12s7-6.8 7-12a7 7 0 0 0-7-7z" fill="currentColor"/><circle cx="12" cy="9.5" r="2.6" fill="#fff"/>',
+            vt_atm:'<rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M6.5 8h11" stroke="currentColor" stroke-width="2"/><text x="12" y="17.2" text-anchor="middle" font-size="7.5" font-weight="800" fill="currentColor">₩</text>'
+        };
+        function renderSchemaMapSvg(S){
+            const R=26, approx=new Set(S.approx||[]), fmt=n=>Number(n).toLocaleString();
+            // 출처(vt_src·sourced_from)는 '어느 자료에서 왔나' 메타데이터라 그림에서 빼고 건수만 아래에 적는다(14쪽 그림에도 없음)
+            const META_LABELS=new Set(['vt_src']), META_RELS=new Set(['sourced_from']);
+            const nodes=Object.fromEntries(Object.entries(S.nodes||{}).filter(([l])=>!META_LABELS.has(l)));
+            const metaN=(S.edges||[]).filter(e=>META_RELS.has(e.rel)).reduce((s,e)=>s+e.count,0);
+            const present=Object.keys(nodes);
+            if(!present.length) return '<div style="color:#4a5568;font-size:12px;padding:16px;text-align:center">노드가 없습니다.</div>';
+            const pos={}; let extraY=150;
+            present.forEach(l=>{ const mt=_SM_META[l];
+                if(mt) pos[l]={x:mt[2],y:mt[3],name:mt[0],layer:mt[1]};
+                else { pos[l]={x:1150,y:extraY,name:l.replace(/^vt_/,''),layer:'object'}; extraY+=90; } });   // 배치 없는 라벨은 오른쪽 열
+            // 같은 두 라벨 사이 엣지는 방향과 무관하게 한 선으로, 관계 이름별로 합산
+            const pairs={}, loops={};
+            (S.edges||[]).forEach(e=>{
+                if(!pos[e.from]||!pos[e.to]||META_RELS.has(e.rel)) return;
+                if(e.from===e.to){ const lp=loops[e.from]=loops[e.from]||{}; lp[e.rel]=(lp[e.rel]||0)+e.count; return; }
+                const k=[e.from,e.to].sort().join('|'), p=pairs[k]=pairs[k]||{a:e.from,b:e.to,rels:{}};
+                p.rels[e.rel]=(p.rels[e.rel]||0)+e.count; });
+            const sw=c=>(1+1.2*Math.log10(Math.max(c,1))).toFixed(2), sc=c=>c>=1000?'#3f5f82':'#a7afb8';
+            let lines='', labels='', nodeSvg='', maxY=0, minY=1e9, minX=1e9, maxX=0; const placed=[];
+            Object.values(pairs).forEach(p=>{
+                const A=pos[p.a], B=pos[p.b], total=Object.values(p.rels).reduce((s,v)=>s+v,0);
+                const dx=B.x-A.x, dy=B.y-A.y, len=Math.hypot(dx,dy)||1; let ctrl=null;
+                for(const [l,q] of Object.entries(pos)){            // 다른 노드를 지나가면 그 반대쪽으로 휘어 비켜 간다
+                    if(l===p.a||l===p.b) continue;
+                    const t=Math.max(0,Math.min(1,((q.x-A.x)*dx+(q.y-A.y)*dy)/(len*len)));
+                    if(Math.hypot(q.x-(A.x+t*dx),q.y-(A.y+t*dy))<R+14){
+                        const nx=-dy/len, ny=dx/len, side=((q.x-A.x)*nx+(q.y-A.y)*ny)>0?-1:1;
+                        ctrl={x:(A.x+B.x)/2+side*nx*120, y:(A.y+B.y)/2+side*ny*120}; break; } }
+                const d=ctrl?`M${A.x},${A.y} Q${ctrl.x.toFixed(0)},${ctrl.y.toFixed(0)} ${B.x},${B.y}`:`M${A.x},${A.y} L${B.x},${B.y}`;
+                const rel=Object.entries(p.rels).sort((x,y)=>y[1]-x[1]);
+                const at=t=>ctrl?{x:(1-t)*(1-t)*A.x+2*t*(1-t)*ctrl.x+t*t*B.x, y:(1-t)*(1-t)*A.y+2*t*(1-t)*ctrl.y+t*t*B.y}
+                                :{x:A.x+(B.x-A.x)*t, y:A.y+(B.y-A.y)*t};
+                const lw=Math.max(...rel.map(([r,c])=>(r.length+fmt(c).length+1)*7.4))+6, lh=rel.length*15+4;
+                // 선을 따라(t) 그리고 선에서 옆으로(off) 비켜 가며 빈자리를 찾고, 없으면 가장 덜 겹치는 자리
+                const nx=-(B.y-A.y)/len, ny=(B.x-A.x)/len; let best=null, bestScore=1e9;
+                search: for(const off of [0,18,-18,34,-34,52,-52]) for(const t of [0.5,0.4,0.6,0.3,0.7,0.2,0.8]){
+                    const c0=at(t), c={x:c0.x+nx*off, y:c0.y+ny*off}, box={x1:c.x-lw/2,x2:c.x+lw/2,y1:c.y-lh/2,y2:c.y+lh/2};
+                    const nBox=placed.filter(b=>!(box.x2<b.x1||box.x1>b.x2||box.y2<b.y1||box.y1>b.y2)).length;
+                    // 노드 원·이름·건수와, 그 아래 '↻ 같은 종류끼리' 줄까지 피한다
+                    const nNode=Object.entries(pos).filter(([l,q])=>q.x+R+40>box.x1&&q.x-R-40<box.x2&&q.y-R-22<box.y2&&q.y+R+38+(loops[l]?Object.keys(loops[l]).length*14:0)>box.y1).length;
+                    const score=(nBox+nNode)*100+Math.abs(off)+Math.abs(t-0.5)*40;
+                    if(score<bestScore){bestScore=score; best={c,box};}
+                    if(nBox+nNode===0) break search;
+                }
+                placed.push(best.box); best=best.c;
+                const mx=best.x, my=best.y;
+                lines+=`<path d="${d}" fill="none" stroke="${sc(total)}" stroke-width="${sw(total)}" stroke-linecap="round"><title>${A.name} – ${B.name}: ${rel.map(([r,c])=>r+' '+fmt(c)).join(' · ')}</title></path>`;
+                const y0=my-(rel.length-1)*7.5+4;
+                rel.forEach(([r,c],i)=>{ labels+=`<text class="sm-el" x="${mx.toFixed(0)}" y="${(y0+i*15).toFixed(0)}" text-anchor="middle">${r} <tspan class="sm-n">${fmt(c)}</tspan></text>`; });
+            });
+            present.forEach(l=>{
+                const q=pos[l], [ring,fill]=_SM_LAYER[q.layer]||_SM_LAYER.object, loop=loops[l];
+                const icon=_SM_ICON[l]?`<g transform="translate(${q.x-12},${q.y-12})" color="${ring}">${_SM_ICON[l]}</g>`
+                                      :`<text x="${q.x}" y="${q.y+5}" text-anchor="middle" font-size="14" font-weight="800" fill="${ring}">${q.name[0]}</text>`;
+                let loopSvg='', loopTxt='', loopN=0;
+                if(loop){ const lc=Object.values(loop).reduce((s,v)=>s+v,0); loopN=Object.keys(loop).length;
+                    loopSvg=`<circle cx="${q.x}" cy="${q.y-R-10}" r="11" fill="none" stroke="${sc(lc)}" stroke-width="${sw(lc)}"><title>${q.name} ↔ ${q.name}</title></circle>`;
+                    loopTxt=Object.entries(loop).map(([r,c],i)=>`<text class="sm-el" x="${q.x}" y="${q.y+R+44+i*14}" text-anchor="middle">↻ ${r} <tspan class="sm-n">${fmt(c)}</tspan></text>`).join(''); }
+                nodeSvg+=`${loopSvg}<circle cx="${q.x}" cy="${q.y}" r="${R}" fill="${fill}" stroke="${ring}" stroke-width="2.2"><title>${q.name} (${l}) ${fmt(nodes[l])}개${approx.has(l)?' (통계 추정)':''}</title></circle>${icon}
+                    <text class="sm-nm" x="${q.x}" y="${q.y+R+16}" text-anchor="middle">${q.name}</text>
+                    <text class="sm-ct" x="${q.x}" y="${q.y+R+30}" text-anchor="middle">${approx.has(l)?'약 ':''}${fmt(nodes[l])}개</text>${loopTxt}`;
+                minY=Math.min(minY,q.y-R-(loop?24:8)); maxY=Math.max(maxY,q.y+R+34+loopN*14);
+                minX=Math.min(minX,q.x-95); maxX=Math.max(maxX,q.x+95);
+            });
+            if(maxX-minX<700){ const cxm=(minX+maxX)/2; minX=cxm-350; maxX=cxm+350; }
+            const vb=`${Math.floor(minX)} ${Math.floor(minY-8)} ${Math.ceil(maxX-minX)} ${Math.ceil(maxY-minY+16)}`;
+            const legend=[['사건','case'],['인물','person'],['객체','object'],['위치','loc'],['이벤트','event']].map(([t,k])=>
+                `<span style="display:inline-flex;align-items:center;gap:4px;margin-right:12px"><i style="width:11px;height:11px;border-radius:50%;border:2px solid ${_SM_LAYER[k][0]};background:${_SM_LAYER[k][1]};display:inline-block"></i>${t}</span>`).join('');
+            const skipped=((S.skipped||[]).length?` · 시간 제한으로 빠진 엣지: ${S.skipped.join(', ')}`:'')
+                         +(metaN?` · 출처 연결(sourced_from) ${fmt(metaN)}건은 그림에서 생략`:'');
+            return `<svg viewBox="${vb}" style="width:100%;min-width:760px;height:auto;display:block" role="img" aria-label="노드 관계도">
+                <style>.sm-el{font:12px ui-monospace,Menlo,monospace;fill:#4b5562;paint-order:stroke;stroke:#fff;stroke-width:4px;stroke-linejoin:round}
+                .sm-n{font-weight:700;fill:#1f2937}.sm-nm{font:700 14px 'Pretendard',sans-serif;fill:#1f2937;paint-order:stroke;stroke:#fff;stroke-width:4px;stroke-linejoin:round}
+                .sm-ct{font:12px 'Pretendard',sans-serif;fill:#6b7280;paint-order:stroke;stroke:#fff;stroke-width:4px;stroke-linejoin:round}</style>
+                ${lines}${nodeSvg}${labels}</svg>
+                <div style="font-size:11px;color:#4a5568;margin-top:6px;display:flex;flex-wrap:wrap;gap:4px 0;align-items:center">${legend}
+                <span>선 굵기 = 엣지 수(로그) · 진한 선 = 1,000건 이상 · ↻ = 같은 종류끼리 연결${skipped}</span></div>`;
+        }
+        function loadBriefingSchemaMap(g){
+            const box=document.getElementById('briefing-schema-map'); if(!box) return;
+            window._briefSchemaSvg='';
+            fetch(`/api/graph/schema-map?graph_path=${encodeURIComponent(g)}`).then(r=>r.json()).then(S=>{
+                if(S.error){ box.innerHTML=`<div style="color:#d63031;font-size:12px;padding:12px">관계도 오류: ${S.error}</div>`; return; }
+                const html=renderSchemaMapSvg(S);
+                box.innerHTML=html; window._briefSchemaSvg=html;      // 보고서(PDF)에 같은 그림을 넣는다
+            }).catch(e=>{ box.innerHTML=`<div style="color:#d63031;font-size:12px;padding:12px">관계도를 불러오지 못했습니다: ${e}</div>`; });
+        }
+
         function renderBriefing(m,D,g){
             window._briefD = D; window._briefG = g;   // 보고서(PDF) 내보내기용 보관
             const kpi=(v,u,l,c)=>`<div style="background:#ffffff;border:1px solid #d5dae2;border-top:3px solid ${c};border-radius:10px;padding:12px 14px"><div style="font-size:22px;font-weight:800;font-family:monospace;color:#0b1220">${v}<span style="font-size:11px;color:#4a5568">${u}</span></div><div style="font-size:12px;color:#3a4453;margin-top:3px">${l}</div></div>`;
@@ -3570,7 +3686,7 @@ ${snap?sect('7. 그래프 스냅샷 (현재 탐색 화면)')+`<img class="snap" 
                 <button onclick="closeBriefing()" style="background:#f4f6f9;border:1px solid #d5dae2;color:#3a4453;border-radius:8px;padding:5px 12px;cursor:pointer">닫기 ✕</button>
               </div>
               <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:18px">
-                ${kpi(D.n_case||0,'건','신고 사건','#f87171')}${kpi(_eok(D.damage_total||0),'억','신고 피해액','#fbbf24')}${kpi(_eok(D.fund_total||0),'억','자금흐름','#f97316')}${kpi(D.n_bacnt||0,'개','계좌','#c084fc')}${kpi((D.hubs||[]).length,'개','거점 IP','#f43f5e')}${kpi(D.n_realname||0,'명','실명 특정(대상IP)','#38bdf8')}
+                ${kpi(D.n_case||0,'건','신고 사건','#f87171')}${kpi(_eok(D.damage_total||0),'억','신고 피해액','#fbbf24')}${kpi(_eok(D.fund_total||0),'억','자금흐름','#f97316')}${kpi(D.n_bacnt||0,'개','계좌','#c084fc')}${kpi(D.n_hubs ?? (D.hubs||[]).length,'개','거점 IP','#f43f5e')}${kpi(D.n_realname||0,'명','실명 특정(대상IP)','#38bdf8')}
               </div>
               ${(D.suspects&&D.suspects.length)?`
               <div style="margin-bottom:18px">
@@ -3602,8 +3718,13 @@ ${snap?sect('7. 그래프 스냅샷 (현재 탐색 화면)')+`<img class="snap" 
                 <div style="font-size:12px;font-weight:700;color:#4a5568;text-transform:uppercase;margin-bottom:8px">영향력 Top (PageRank) — 자동 랭킹된 핵심 계좌·인물·조직</div>
                 ${inflGrid}
               </div>
+              <div style="margin-top:18px">
+                <div style="font-size:12px;font-weight:700;color:#4a5568;text-transform:uppercase;margin-bottom:8px">노드 관계도 <span style="font-weight:400">— 이 그래프에 실제로 있는 노드·관계와 건수 (배치: 온톨로지 V4.9 노드 관계도)</span></div>
+                <div id="briefing-schema-map" style="background:#ffffff;border:1px solid #d5dae2;border-radius:10px;padding:10px;overflow-x:auto"><div style="color:#4a5568;font-size:12px;padding:20px;text-align:center">관계도 불러오는 중…</div></div>
+              </div>
               <div style="font-size:11px;color:#4a5568;margin-top:16px;border-top:1px solid #d5dae2;padding-top:12px">결정론 적재(source_id 원본 대조) · 비식별 시나리오 · sameAs 미확정(수사관 검토) · PageRank는 graph_analytics.py 실행 시 갱신</div>
             </div>`;
+            loadBriefingSchemaMap(g);   // 관계도는 브리핑을 먼저 띄운 뒤 따로 불러온다(대형 그래프에서 브리핑이 늦어지지 않게)
         }
         function briefingSuspect(name){
             closeBriefing(); switchTab('graph');
@@ -3612,7 +3733,7 @@ ${snap?sect('7. 그래프 스냅샷 (현재 탐색 화면)')+`<img class="snap" 
         }
         function briefingFocus(ip){
             closeBriefing();
-            const g=(document.getElementById('targetGraphInfo')||{}).value||'';
+            const g=window._briefG||(document.getElementById('targetGraphInfo')||{}).value||'';   // 브리핑이 조회한 그래프
             switchTab('graph');
             fetch(`/api/graph/load?graph_path=${encodeURIComponent(g)}&ip=${encodeURIComponent(ip)}&limit=300`)
               .then(r=>r.json()).then(data=>{
@@ -3719,15 +3840,27 @@ ${snap?sect('7. 그래프 스냅샷 (현재 탐색 화면)')+`<img class="snap" 
         }
         function fundFocus(acct){
             closeBriefing();
-            const g=(document.getElementById('targetGraphInfo')||{}).value||'';
+            // 브리핑이 실제로 조회한 그래프 — 메인 선택값이 비어 서버 기본 그래프로 브리핑한 경우에도 같은 그래프를 연다
+            const g=window._briefG||(document.getElementById('targetGraphInfo')||{}).value||'';
             switchTab('graph');
             fetch(`/api/graph/load?graph_path=${encodeURIComponent(g)}&account=${encodeURIComponent(acct)}&limit=300`)
               .then(r=>r.json()).then(data=>{
                 if(typeof cy!=='undefined'&&data&&data.length){
                     cy.elements().remove(); const added=cy.add(data);
                     if(typeof afterElementsAdded==='function')afterElementsAdded(added);
-                    cy.layout({name:'dagre',rankDir:'LR',nodeSep:40,rankSep:90,animate:true}).run();  // 자금망은 흐름 방향
-                    if(typeof showToast==='function')showToast(`자금흐름 ${acct} 펼침 (${data.length}요소)`,'success');
+                    // 원형 배치: 가운데 = 선택 계좌, 안쪽 링 = 돈이 오간 상대 계좌, 바깥 링 = IP·위치·사건·명의자.
+                    // 송금 방향은 transferred_to 화살표로 읽는다. (종전: dagre 좌→우 흐름 배치)
+                    const center=cy.nodes().filter(n=>String((n.data('props')||{}).account_no||'')===acct);
+                    const peers=center.connectedEdges('[label = "transferred_to"]').connectedNodes().difference(center);
+                    // 탭 전환 직후라 캔버스 크기를 다시 잡고, 애니메이션 없이 배치·화면 맞춤을 한 번에 끝낸다.
+                    // (애니메이션 배치는 브라우저가 화면 갱신을 늦추면 끝나지 않아 원이 왼쪽 위로 치우친 채 남았다)
+                    cy.resize();
+                    cy.layout({name:'concentric',
+                               concentric:n=>center.contains(n)?3:(peers.contains(n)?2:1),
+                               levelWidth:()=>1, minNodeSpacing:18, spacingFactor:1.05,
+                               startAngle:3/2*Math.PI, fit:true, padding:40, animate:false}).run();
+                    if(center.length){cy.elements().unselect(); center.select();}
+                    if(typeof showToast==='function')showToast(`자금흐름 ${acct} 펼침 — 가운데 계좌 · 안쪽 링 이체 상대 ${peers.length}개 (${data.length}요소)`,'success');
                 }
               }).catch(e=>console.error('fundFocus:',e));
         }
