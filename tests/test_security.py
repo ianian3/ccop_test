@@ -542,6 +542,12 @@ class TestPartnerKeyScope:
                             json={"question": "주범의 전화번호", "schema": {"graph_path": "ccop_test_graph"}})
             assert r.status_code == 200
 
+    def test_non_json_body_is_400(self, client, scoped_key):
+        """JSON 이 아닌 본문은 500 이 아니라 400 (Content-Type: text/plain)."""
+        r = client.post("/api/v1/text-to-cypher", data="question=x",
+                        headers={**scoped_key, "Content-Type": "text/plain"})
+        assert r.status_code == 400
+
     def test_perm_name_strips_path_params(self, app):
         from app.middleware.api_auth import _endpoint_perm_name
         with app.test_request_context("/api/v1/evidence-completeness/CASE-1"):

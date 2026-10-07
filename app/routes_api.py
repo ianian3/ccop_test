@@ -43,7 +43,7 @@ def text_to_cypher():
     """
     try:
         start_time = time.time()
-        data = request.get_json()
+        data = request.get_json(silent=True)  # JSON 아닌 본문은 None → 아래 400 (종전 415 예외가 500 으로 새던 문제)
         
         if not data:
             return jsonify({"error": "Request body required"}), 400
@@ -117,7 +117,7 @@ def graph_query():
     """
     try:
         start_time = time.time()
-        data = request.get_json()
+        data = request.get_json(silent=True)  # JSON 아닌 본문은 None → 아래 400 (종전 415 예외가 500 으로 새던 문제)
 
         if not data:
             return jsonify({"error": "Request body required"}), 400
@@ -197,7 +197,7 @@ def validate_cypher():
         }
     """
     try:
-        data = request.get_json()
+        data = request.get_json(silent=True)  # JSON 아닌 본문은 None → 아래 400 (종전 415 예외가 500 으로 새던 문제)
         
         if not data:
             return jsonify({"error": "Request body required"}), 400
@@ -247,7 +247,7 @@ def agentic_query():
     """
     try:
         start_time = time.time()
-        data = request.get_json()
+        data = request.get_json(silent=True)  # JSON 아닌 본문은 None → 아래 400 (종전 415 예외가 500 으로 새던 문제)
         
         if not data:
             return jsonify({"error": "Request body required"}), 400
@@ -401,7 +401,7 @@ def analyze_pattern():
         }
     """
     try:
-        data = request.get_json()
+        data = request.get_json(silent=True)  # JSON 아닌 본문은 None → 아래 400 (종전 415 예외가 500 으로 새던 문제)
         
         if not data:
             return jsonify({"error": "Request body required"}), 400
@@ -876,7 +876,7 @@ def network_project_1mode():
         }
     """
     try:
-        data = request.get_json()
+        data = request.get_json(silent=True)  # JSON 아닌 본문은 None → 아래 400 (종전 415 예외가 500 으로 새던 문제)
         if not data:
             return jsonify({"error": "Request body required"}), 400
 
